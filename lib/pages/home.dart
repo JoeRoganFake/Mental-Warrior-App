@@ -12,7 +12,10 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   var function = Functions(); // Create an instance of Functions
   List<TasksModel> tasks = [];
-  TextEditingController _dataController = TextEditingController();
+  final _dateController = TextEditingController();
+  final _labelController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
@@ -94,42 +97,88 @@ class _HomePageState extends State<HomePage> {
                             context: context,
                             builder: (context) => SimpleDialog(
                               children: [
-                                Column(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
-                                  children: [
-                                    Text(
-                                      "New Task",
-                                    ),
-                                    TextField(
-                                      autofocus: true,
-                                      decoration: InputDecoration(
-                                        labelText: "Label",
-                                      ),
-                                    ),
-                                    TextField(
-                                      maxLines: null,
-                                      keyboardType: TextInputType.multiline,
-                                      decoration: InputDecoration(
-                                        labelText: "Description",
-                                      ),
-                                    ),
-                                    TextField(
-                                      controller: _dataController,
-                                      onTap: () {
-                                        // Call the static method from Functions class
-                                        Functions.datePicker(
-                                            context, _dataController);
-                                      },
-                                      readOnly: true,
-                                      decoration: InputDecoration(
-                                        labelText: "Due To",
-                                        prefixIcon:
-                                            const Icon(Icons.calendar_month),
-                                      ),
-                                    )
-                                  ],
-                                )
+                                Form(
+                                    key: _formKey,
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceEvenly,
+                                      children: [
+                                        Text(
+                                          "New Task",
+                                        ),
+                                        TextFormField(
+                                          controller: _labelController,
+                                          autofocus: true,
+                                          validator: (value) {
+                                            if (value!.isEmpty) {
+                                              return "* Field Is Required";
+                                            }
+                                            return null;
+                                          },
+                                          decoration: InputDecoration(
+                                              hintText: "Label",
+                                              prefixIcon:
+                                                  const Icon(Icons.label),
+                                              border: InputBorder.none),
+                                        ),
+                                        TextFormField(
+                                          controller: _descriptionController,
+                                          maxLines: null,
+                                          validator: (value) {
+                                            if (value!.isEmpty) {
+                                              return "* Field Is Required";
+                                            }
+                                            return null;
+                                          },
+                                          keyboardType: TextInputType.multiline,
+                                          decoration: InputDecoration(
+                                              hintText: "Description",
+                                              prefixIcon:
+                                                  const Icon(Icons.description),
+                                              border: InputBorder.none),
+                                        ),
+                                        TextFormField(
+                                          validator: (value) {
+                                            if (value!.isEmpty) {
+                                              return "* Field Is Required";
+                                            }
+                                            return null;
+                                          },
+                                          controller: _dateController,
+                                          onTap: () {
+                                            Functions.dateAndTimePicker(
+                                                context, _dateController);
+                                          },
+                                          readOnly: true,
+                                          decoration: InputDecoration(
+                                              hintText: "Due To",
+                                              prefixIcon: const Icon(
+                                                  Icons.calendar_month),
+                                              border: InputBorder.none),
+                                        ),
+                                        ElevatedButton(
+                                          onPressed: () {
+                                            _formKey.currentState!.validate();
+                                            print(_labelController.text);
+                                            print(_descriptionController.text);
+                                            print(_dateController.text);
+                                            _dateController.clear();
+                                          },
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              const Icon(Icons.create_outlined),
+                                              Text(
+                                                textAlign: TextAlign.center,
+                                                "Add Task",
+                                                style: TextStyle(),
+                                              )
+                                            ],
+                                          ),
+                                        )
+                                      ],
+                                    ))
                               ],
                             ),
                           );

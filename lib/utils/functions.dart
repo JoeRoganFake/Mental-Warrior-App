@@ -12,16 +12,29 @@ class Functions {
     }
   }
 
-  static Future<void> datePicker(
+  static Future<void> dateAndTimePicker(
       BuildContext context, TextEditingController controller) async {
-    DateTime? _picked = await showDatePicker(
+    controller.clear();
+    // Date Picker
+    DateTime? _pickedDate = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 5000)),
     );
-    if (_picked != null) {
-      controller.text = _picked.toString().split(" ")[0];
+
+    // Time Picker
+    TimeOfDay? _pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+
+    if (_pickedDate != null && _pickedTime != null) {
+      // Format the date and time and update the controller
+      String formattedDate = _pickedDate.toString().split(" ")[0];
+      String formattedTime = _pickedTime.toString().split("y")[1].trim();
+
+      controller.text = "$formattedDate $formattedTime";
     }
   }
 }
