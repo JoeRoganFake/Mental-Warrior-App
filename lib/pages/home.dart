@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/utils/functions.dart'; // Import your Functions class
 import 'package:mental_warior/models/tasks.dart';
+import 'package:sqflite/sqflite.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -10,22 +12,13 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  var function = Functions(); // Create an instance of Functions
-  List<TasksModel> tasks = [];
+  var function = Functions();
   final _dateController = TextEditingController();
   final _labelController = TextEditingController();
   final _descriptionController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-
-  @override
-  void initState() {
-    super.initState();
-    _getInitInfo();
-  }
-
-  void _getInitInfo() {
-    tasks = TasksModel.getTasks();
-  }
+  final DatabaseService _databaseService = DatabaseService.instace;
+  String? _task = null;
 
   @override
   Widget build(BuildContext context) {
@@ -49,147 +42,99 @@ class _HomePageState extends State<HomePage> {
               ),
               Stack(
                 children: [
-                  Container(
-                    color: Colors.lightBlueAccent,
-                    height: 105,
-                    width: 300,
-                    child: ListView.separated(
-                      scrollDirection: Axis.vertical,
-                      itemBuilder: (context, index) => Container(
-                        width: 50,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          color: const Color.fromARGB(255, 119, 119, 119),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  _taskList(),
+                  FloatingActionButton(
+                    splashColor: Colors.blue,
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => SimpleDialog(
                           children: [
-                            Text(tasks[index].name),
-                            Checkbox(
-                              value: tasks[index].isCompleted,
-                              onChanged: (bool? value) {
-                                setState(() {
-                                  tasks[index].isCompleted = value ?? false;
-                                });
-                              },
-                            ),
+                            Form(
+                                key: _formKey,
+                                child: Column(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
+                                  children: [
+                                    Text(
+                                      "New Task",
+                                    ),
+                                    TextFormField(
+                                      controller: _labelController,
+                                      autofocus: true,
+                                      validator: (value) {
+                                        if (value!.isEmpty) {
+                                          return "* Field Is Required";
+                                        }
+                                        return null;
+                                      },
+                                      decoration: InputDecoration(
+                                          hintText: "Label",
+                                          prefixIcon: const Icon(Icons.label),
+                                          border: InputBorder.none),
+                                    ),
+                                    TextFormField(
+                                      controller: _descriptionController,
+                                      maxLines: null,
+                                      keyboardType: TextInputType.multiline,
+                                      decoration: InputDecoration(
+                                          hintText: "Description",
+                                          prefixIcon:
+                                              const Icon(Icons.description),
+                                          border: InputBorder.none),
+                                    ),
+                                    TextFormField(
+                                      controller: _dateController,
+                                      onTap: () {
+                                        Functions.dateAndTimePicker(
+                                            context, _dateController);
+                                      },
+                                      readOnly: true,
+                                      decoration: InputDecoration(
+                                          hintText: "Due To",
+                                          prefixIcon:
+                                              const Icon(Icons.calendar_month),
+                                          border: InputBorder.none),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        _formKey.currentState!.validate();
+                                        setState(() {
+                                          _task = _labelController.text;
+                                        });
+                                        if (_task == null || _task == "") {
+                                          return;
+                                        }
+                                        _databaseService.addTask(_task!);
+                                        setState(() {
+                                          _task = null;
+                                        });
+                                        _dateController.clear();
+                                        Navigator.pop(context);
+                                      },
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(Icons.create_outlined),
+                                          Text(
+                                            textAlign: TextAlign.center,
+                                            "Add Task",
+                                            style: TextStyle(),
+                                          )
+                                        ],
+                                      ),
+                                    )
+                                  ],
+                                ))
                           ],
                         ),
-                      ),
-                      separatorBuilder: (context, index) => const SizedBox(
-                        width: 25,
-                        height: 5,
-                      ),
-                      itemCount: tasks.length,
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 10,
-                    right: 10,
-                    child: SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: FloatingActionButton(
-                        splashColor: Colors.blue,
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) => SimpleDialog(
-                              children: [
-                                Form(
-                                    key: _formKey,
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceEvenly,
-                                      children: [
-                                        Text(
-                                          "New Task",
-                                        ),
-                                        TextFormField(
-                                          controller: _labelController,
-                                          autofocus: true,
-                                          validator: (value) {
-                                            if (value!.isEmpty) {
-                                              return "* Field Is Required";
-                                            }
-                                            return null;
-                                          },
-                                          decoration: InputDecoration(
-                                              hintText: "Label",
-                                              prefixIcon:
-                                                  const Icon(Icons.label),
-                                              border: InputBorder.none),
-                                        ),
-                                        TextFormField(
-                                          controller: _descriptionController,
-                                          maxLines: null,
-                                          validator: (value) {
-                                            if (value!.isEmpty) {
-                                              return "* Field Is Required";
-                                            }
-                                            return null;
-                                          },
-                                          keyboardType: TextInputType.multiline,
-                                          decoration: InputDecoration(
-                                              hintText: "Description",
-                                              prefixIcon:
-                                                  const Icon(Icons.description),
-                                              border: InputBorder.none),
-                                        ),
-                                        TextFormField(
-                                          validator: (value) {
-                                            if (value!.isEmpty) {
-                                              return "* Field Is Required";
-                                            }
-                                            return null;
-                                          },
-                                          controller: _dateController,
-                                          onTap: () {
-                                            Functions.dateAndTimePicker(
-                                                context, _dateController);
-                                          },
-                                          readOnly: true,
-                                          decoration: InputDecoration(
-                                              hintText: "Due To",
-                                              prefixIcon: const Icon(
-                                                  Icons.calendar_month),
-                                              border: InputBorder.none),
-                                        ),
-                                        ElevatedButton(
-                                          onPressed: () {
-                                            _formKey.currentState!.validate();
-                                            print(_labelController.text);
-                                            print(_descriptionController.text);
-                                            print(_dateController.text);
-                                            _dateController.clear();
-                                          },
-                                          child: Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              const Icon(Icons.create_outlined),
-                                              Text(
-                                                textAlign: TextAlign.center,
-                                                "Add Task",
-                                                style: TextStyle(),
-                                              )
-                                            ],
-                                          ),
-                                        )
-                                      ],
-                                    ))
-                              ],
-                            ),
-                          );
-                        },
-                        backgroundColor:
-                            const Color.fromARGB(255, 103, 113, 121),
-                        child: const Icon(
-                          Icons.add,
-                          color: Colors.white,
-                        ),
-                      ),
+                      );
+                    },
+                    backgroundColor: const Color.fromARGB(255, 103, 113, 121),
+                    child: const Icon(
+                      Icons.add,
+                      color: Colors.white,
                     ),
                   ),
                 ],
@@ -199,5 +144,65 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+
+  Container _taskListOr() {
+    return Container(
+      color: Colors.lightBlueAccent,
+      height: 105,
+      width: 300,
+      child: ListView.separated(
+          scrollDirection: Axis.vertical,
+          itemBuilder: (context, index) => Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: const Color.fromARGB(255, 119, 119, 119),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Text("DUMMY"),
+                    Checkbox(value: true, onChanged: null),
+                  ],
+                ),
+              ),
+          separatorBuilder: (context, index) => const SizedBox(
+                width: 25,
+                height: 5,
+              ),
+          itemCount: 5),
+    );
+  }
+
+  Widget _taskList() {
+    return FutureBuilder(
+        future: _databaseService.getTasks(),
+        builder: (context, snapshot) {
+          return ListView.builder(
+            shrinkWrap: true,
+            scrollDirection: Axis.vertical,
+            itemCount: snapshot.data?.length ?? 0,
+            itemBuilder: (context, index) {
+              Task task = snapshot.data![index];
+              return Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: const Color.fromARGB(255, 119, 119, 119),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Text(task.content),
+                    Checkbox(value: true, onChanged: null),
+                  ],
+                ),
+              );
+            },
+          );
+        });
   }
 }

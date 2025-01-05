@@ -1,39 +1,26 @@
-class TasksModel {
-  String name;
-  bool isCompleted;
-  DateTime timeStamp;
-  DateTime deadline;
+// class TaskModel {
+//   int id;
+//   String label;
+//   int status;
+//   String description;
+//   String deadline;
 
-  TasksModel({
-    required this.name,
-    required this.isCompleted,
-    required this.timeStamp,
-    required this.deadline,
+//   TaskModel({
+//     required this.id,
+//     required this.label,
+//     required this.status,
+//     required this.description,
+//     required this.deadline,
+//   });
+// }
+
+class Task {
+  final int status, id;
+  final String content;
+
+  Task({
+    required this.id,
+    required this.status,
+    required this.content,
   });
-
-  static List<TasksModel> getTasks() {
-    List<TasksModel> tasks = [];
-
-    // tasks.add(
-    //   TasksModel(
-    //     name: 'Oprat Boty',
-    //     isCompleted: false,
-    //     timeStamp: DateTime.now(),
-    //     deadline: DateTime.now().add(Duration(days: 2)),
-    //   ),
-    // );
-
-    // tasks.add(
-    //   TasksModel(
-    //     name: 'Umyt sa',
-    //     isCompleted: true,
-    //     timeStamp: DateTime.now(),
-    //     deadline: DateTime.now().add(
-    //       Duration(days: 2),
-    //     ),
-    //   ),
-    // );
-
-    return tasks;
-  }
 }
