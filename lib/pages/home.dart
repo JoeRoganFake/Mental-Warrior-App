@@ -85,73 +85,77 @@ class _HomePageState extends State<HomePage> {
       builder: (context) => SimpleDialog(
         children: [
           Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Text(
+            key: _formKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
                     "New Task",
                   ),
-                  TextFormField(
-                    controller: _labelController,
-                    autofocus: true,
-                    validator: (value) {
-                      if (value!.isEmpty || value == "") {
-                        return "     *Field Is Required";
-                      }
-                      return null;
-                    },
-                    decoration: InputDecoration(
-                        hintText: "Label",
-                        prefixIcon: const Icon(Icons.label),
-                        border: InputBorder.none),
+                ),
+                TextFormField(
+                  controller: _labelController,
+                  autofocus: true,
+                  validator: (value) {
+                    if (value!.isEmpty || value == "") {
+                      return "     *Field Is Required";
+                    }
+                    return null;
+                  },
+                  decoration: InputDecoration(
+                      hintText: "Label",
+                      prefixIcon: const Icon(Icons.label),
+                      border: InputBorder.none),
+                ),
+                TextFormField(
+                  controller: _descriptionController,
+                  maxLines: null,
+                  keyboardType: TextInputType.multiline,
+                  decoration: InputDecoration(
+                      hintText: "Description",
+                      prefixIcon: const Icon(Icons.description),
+                      border: InputBorder.none),
+                ),
+                TextFormField(
+                  controller: _dateController,
+                  onTap: () {
+                    Functions.dateAndTimePicker(context, _dateController);
+                  },
+                  readOnly: true,
+                  decoration: InputDecoration(
+                      hintText: "Due To",
+                      prefixIcon: const Icon(Icons.calendar_month),
+                      border: InputBorder.none),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (_formKey.currentState!.validate()) {
+                      _databaseService.addTask(_labelController.text,
+                          _dateController.text, _descriptionController.text);
+                      _dateController.clear();
+                      _labelController.clear();
+                      _descriptionController.clear();
+                      Navigator.pop(context);
+                      setState(() {});
+                    }
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.create_outlined),
+                      Text(
+                        textAlign: TextAlign.center,
+                        "Add Task",
+                        style: TextStyle(),
+                      )
+                    ],
                   ),
-                  TextFormField(
-                    controller: _descriptionController,
-                    maxLines: null,
-                    keyboardType: TextInputType.multiline,
-                    decoration: InputDecoration(
-                        hintText: "Description",
-                        prefixIcon: const Icon(Icons.description),
-                        border: InputBorder.none),
-                  ),
-                  TextFormField(
-                    controller: _dateController,
-                    onTap: () {
-                      Functions.dateAndTimePicker(context, _dateController);
-                    },
-                    readOnly: true,
-                    decoration: InputDecoration(
-                        hintText: "Due To",
-                        prefixIcon: const Icon(Icons.calendar_month),
-                        border: InputBorder.none),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      if (_formKey.currentState!.validate()) {
-                        _databaseService.addTask(_labelController.text,
-                            _dateController.text, _descriptionController.text);
-                        _dateController.clear();
-                        _labelController.clear();
-                        _descriptionController.clear();
-                        Navigator.pop(context);
-                        setState(() {});
-                      }
-                    },
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.create_outlined),
-                        Text(
-                          textAlign: TextAlign.center,
-                          "Add Task",
-                          style: TextStyle(),
-                        )
-                      ],
-                    ),
-                  )
-                ],
-              ))
+                )
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -170,9 +174,56 @@ class _HomePageState extends State<HomePage> {
               itemBuilder: (context, index) {
                 Task task = snapshot.data![index];
                 return Padding(
-                  padding: const EdgeInsets.all(8.0),
+                  padding: const EdgeInsets.all(6.0),
                   child: GestureDetector(
-                    onTap: () {},
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => SimpleDialog(
+                          children: [
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Text(
+                                    "Details",
+                                  ),
+                                ),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceEvenly,
+                                  children: [
+                                    Text(
+                                      task.label,
+                                      style: TextStyle(
+                                        fontSize: 25,
+                                      ),
+                                    ),
+                                    Icon(Icons.edit_outlined)
+                                  ],
+                                ),
+                                //ended here
+                                ElevatedButton(
+                                  onPressed: () {},
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.create_outlined),
+                                      Text(
+                                        textAlign: TextAlign.center,
+                                        "OK",
+                                        style: TextStyle(),
+                                      )
+                                    ],
+                                  ),
+                                )
+                              ],
+                            )
+                          ],
+                        ),
+                      );
+                    },
                     onLongPress: () {
                       _databaseService.deleteTask(task.id);
                       setState(() {});
