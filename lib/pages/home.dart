@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/models/tasks.dart';
@@ -162,7 +163,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _taskList() {
-    return Container(
+    return SizedBox(
       height: 300,
       width: 200,
       child: FutureBuilder(
@@ -190,20 +191,72 @@ class _HomePageState extends State<HomePage> {
                                     "Details",
                                   ),
                                 ),
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceEvenly,
-                                  children: [
-                                    Text(
-                                      task.label,
-                                      style: TextStyle(
-                                        fontSize: 25,
+                                Padding(
+                                  padding: const EdgeInsets.all(15.0),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Flexible(
+                                        child: TextField(
+                                          controller: TextEditingController(
+                                              text: task.label),
+                                          onChanged: (value) {
+                                            _databaseService.updateTask(
+                                                task.id, "label", value);
+                                            setState(() {});
+                                          },
+                                          style: TextStyle(fontSize: 25),
+                                          decoration: InputDecoration(
+                                            border: InputBorder.none,
+                                          ),
+                                        ),
                                       ),
-                                    ),
-                                    Icon(Icons.edit_outlined)
-                                  ],
+                                      Icon(Icons.edit_outlined)
+                                    ],
+                                  ),
                                 ),
-                                //ended here
+                                Padding(
+                                  padding: const EdgeInsets.all(15.0),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Flexible(
+                                        child: TextField(
+                                          controller: TextEditingController(
+                                              text: task.description),
+                                          onChanged: (value) {
+                                            _databaseService.updateTask(
+                                                task.id, "description", value);
+                                            setState(() {});
+                                          },
+                                          style: TextStyle(fontSize: 25),
+                                          decoration: InputDecoration(
+                                            border: InputBorder.none,
+                                          ),
+                                        ),
+                                      ),
+                                      Icon(Icons.edit_outlined)
+                                    ],
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.all(15.0),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        "Due to: ${task.deadline}",
+                                        style: TextStyle(
+                                          fontSize: 22,
+                                        ),
+                                      ),
+                                      Icon(Icons.edit_outlined)
+                                    ],
+                                  ),
+                                ),
                                 ElevatedButton(
                                   onPressed: () {},
                                   child: Row(
