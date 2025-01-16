@@ -60,7 +60,16 @@ class DatabaseService {
 
   Future<List<Task>?> getTasks() async {
     final db = await database;
-    final data = await db.query(_taskTableName);
+    final data = await db.query(
+      _taskTableName,
+      orderBy: '''
+        CASE 
+      WHEN $_taskDeadlineColumnName IS NULL OR $_taskDeadlineColumnName = '' THEN 1 
+        ELSE 0 
+      END, 
+     $_taskDeadlineColumnName ASC
+      ''',
+    );
 
     List<Task> tasks = data
         .map(
@@ -93,20 +102,12 @@ class DatabaseService {
 
   void updateTask(int id, String fieldToUpdate, String key) async {
     final db = await database;
-    if (fieldToUpdate == "label") {
-      await db.update(
-        _taskTableName,
-        {_tasklabelColumnName: key},
-        where: "id = ?",
-        whereArgs: [id],
-      );
-    } else if (fieldToUpdate == "description") {
-      await db.update(
-        _taskTableName,
-        {_taskDescriptionColumnName: key},
-        where: "id = ?",
-        whereArgs: [id],
-      );
-    }
+
+    db.update(
+      _taskTableName,
+      {fieldToUpdate: key},
+      where: "id = ?",
+      whereArgs: [id],
+    );
   }
 }

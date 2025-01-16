@@ -4,11 +4,11 @@ class Functions {
   String getTimeOfDayDescription() {
     final hour = DateTime.now().hour;
     if (hour < 12) {
-      return "morning";
+      return "Morning";
     } else if (hour < 18) {
-      return "afternoon";
+      return "Afternoon";
     } else {
-      return "evening";
+      return "Evening";
     }
   }
 
@@ -29,8 +29,8 @@ class Functions {
     );
 
     if (_pickedDate != null && _pickedTime != null) {
-      String formattedDate = _pickedDate.toString().split(" ")[0];
-      String formattedTime = _pickedTime.toString().split("y")[1].trim();
+      String formattedDate = _pickedDate.toIso8601String().split("T")[0];
+      String formattedTime = _pickedTime.format(context);
 
       controller.text = "$formattedDate $formattedTime";
     }

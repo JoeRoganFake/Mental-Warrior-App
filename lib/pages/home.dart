@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/models/tasks.dart';
@@ -56,7 +55,7 @@ class _HomePageState extends State<HomePage> {
       body: ListView(
         children: [
           Text(
-            "Good ${function.getTimeOfDayDescription()}.",
+            "Good Productive ${function.getTimeOfDayDescription()}.",
           ),
           const SizedBox(
             width: 25,
@@ -133,11 +132,11 @@ class _HomePageState extends State<HomePage> {
                 ElevatedButton(
                   onPressed: () {
                     if (_formKey.currentState!.validate()) {
-                      _databaseService.addTask(_labelController.text,
-                          _dateController.text, _descriptionController.text);
-                      _dateController.clear();
-                      _labelController.clear();
-                      _descriptionController.clear();
+                      _databaseService.addTask(
+                        _labelController.text,
+                        _dateController.text,
+                        _descriptionController.text,
+                      );
                       Navigator.pop(context);
                       setState(() {});
                     }
@@ -145,7 +144,10 @@ class _HomePageState extends State<HomePage> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.create_outlined),
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: const Icon(Icons.add_task_outlined),
+                      ),
                       Text(
                         textAlign: TextAlign.center,
                         "Add Task",
@@ -159,7 +161,13 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-    );
+    ).then((_) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _labelController.clear();
+        _descriptionController.clear();
+        _dateController.clear();
+      });
+    });
   }
 
   Widget _taskList() {
@@ -178,6 +186,9 @@ class _HomePageState extends State<HomePage> {
                   padding: const EdgeInsets.all(6.0),
                   child: GestureDetector(
                     onTap: () {
+                      _labelController.text = task.label;
+                      _descriptionController.text = task.description;
+                      _dateController.text = task.deadline;
                       showDialog(
                         context: context,
                         builder: (context) => SimpleDialog(
@@ -185,97 +196,105 @@ class _HomePageState extends State<HomePage> {
                             Column(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
-                                Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Text(
-                                    "Details",
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(15.0),
-                                  child: Row(
+                                Form(
+                                  key: _formKey,
+                                  child: Column(
                                     mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                        MainAxisAlignment.spaceEvenly,
                                     children: [
-                                      Flexible(
-                                        child: TextField(
-                                          controller: TextEditingController(
-                                              text: task.label),
-                                          onChanged: (value) {
+                                      Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Text(
+                                          "Edit Task",
+                                        ),
+                                      ),
+                                      TextFormField(
+                                        controller: _labelController,
+                                        validator: (value) {
+                                          if (value!.isEmpty || value == "") {
+                                            return "     *Field Is Required";
+                                          }
+                                          return null;
+                                        },
+                                        decoration: InputDecoration(
+                                            hintText: "Label",
+                                            prefixIcon: const Icon(Icons.label),
+                                            border: InputBorder.none),
+                                      ),
+                                      TextFormField(
+                                        controller: _descriptionController,
+                                        maxLines: null,
+                                        keyboardType: TextInputType.multiline,
+                                        decoration: InputDecoration(
+                                            hintText: "Description",
+                                            prefixIcon:
+                                                const Icon(Icons.description),
+                                            border: InputBorder.none),
+                                      ),
+                                      TextFormField(
+                                        controller: _dateController,
+                                        onTap: () {
+                                          Functions.dateAndTimePicker(
+                                              context, _dateController);
+                                        },
+                                        readOnly: true,
+                                        decoration: InputDecoration(
+                                            hintText: "Due To",
+                                            prefixIcon: const Icon(
+                                                Icons.calendar_month),
+                                            border: InputBorder.none),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () {
+                                          if (_formKey.currentState!
+                                              .validate()) {
+                                            _databaseService.updateTask(task.id,
+                                                "label", _labelController.text);
                                             _databaseService.updateTask(
-                                                task.id, "label", value);
-                                            setState(() {});
-                                          },
-                                          style: TextStyle(fontSize: 25),
-                                          decoration: InputDecoration(
-                                            border: InputBorder.none,
-                                          ),
-                                        ),
-                                      ),
-                                      Icon(Icons.edit_outlined)
-                                    ],
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(15.0),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Flexible(
-                                        child: TextField(
-                                          controller: TextEditingController(
-                                              text: task.description),
-                                          onChanged: (value) {
+                                                task.id,
+                                                "description",
+                                                _descriptionController.text);
                                             _databaseService.updateTask(
-                                                task.id, "description", value);
+                                                task.id,
+                                                "deadline",
+                                                _dateController.text);
+
+                                            Navigator.pop(context);
                                             setState(() {});
-                                          },
-                                          style: TextStyle(fontSize: 25),
-                                          decoration: InputDecoration(
-                                            border: InputBorder.none,
-                                          ),
+                                          }
+                                        },
+                                        child: Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Padding(
+                                              padding:
+                                                  const EdgeInsets.all(8.0),
+                                              child: const Icon(
+                                                  Icons.add_task_outlined),
+                                            ),
+                                            Text(
+                                              textAlign: TextAlign.center,
+                                              "Edit Task",
+                                              style: TextStyle(),
+                                            )
+                                          ],
                                         ),
-                                      ),
-                                      Icon(Icons.edit_outlined)
-                                    ],
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(15.0),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        "Due to: ${task.deadline}",
-                                        style: TextStyle(
-                                          fontSize: 22,
-                                        ),
-                                      ),
-                                      Icon(Icons.edit_outlined)
-                                    ],
-                                  ),
-                                ),
-                                ElevatedButton(
-                                  onPressed: () {},
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const Icon(Icons.create_outlined),
-                                      Text(
-                                        textAlign: TextAlign.center,
-                                        "OK",
-                                        style: TextStyle(),
                                       )
                                     ],
                                   ),
-                                )
+                                ),
                               ],
                             )
                           ],
                         ),
-                      );
+                      ).then((_) {
+                        Future.delayed(const Duration(milliseconds: 100), () {
+                          _labelController.clear();
+                          _descriptionController.clear();
+                          _dateController.clear();
+                        });
+                      });
                     },
                     onLongPress: () {
                       _databaseService.deleteTask(task.id);
@@ -287,21 +306,30 @@ class _HomePageState extends State<HomePage> {
                         color: const Color.fromARGB(255, 119, 119, 119),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            task.label,
-                            style: TextStyle(
-                              color: Colors.white,
+                          Flexible(
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 30),
+                              child: Text(
+                                task.label,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
                             ),
                           ),
-                          Checkbox(
-                            value: task.status == 1,
-                            onChanged: (value) {
-                              _databaseService.updateTaskStatus(
-                                  task.id, value == true ? 1 : 0);
-                              setState(() {});
-                            },
+                          Padding(
+                            padding: const EdgeInsets.only(right: 30),
+                            child: Checkbox(
+                              value: task.status == 1,
+                              onChanged: (value) {
+                                _databaseService.updateTaskStatus(
+                                    task.id, value == true ? 1 : 0);
+                                setState(() {});
+                              },
+                            ),
                           ),
                         ],
                       ),
