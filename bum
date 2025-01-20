@@ -1,21 +1,37 @@
-String editableText = "Initial Text";
+Future addCompletedTask(Task task) async {
+    final db = await database;
+    await db.insert(
+      _completedTaskTableName,
+      {
+        _taskLabelColumnName: task.label,
+        _taskStatusColumnName: task.status,
+        _taskDeadlineColumnName: task.deadline,
+        _taskDescriptionColumnName: task.description,
+      },
+    );
+  }
 
-Row(
-  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-  children: [
-    Expanded(
-      child: TextField(
-        controller: TextEditingController(text: editableText),
-        onSubmitted: (value) {
-          setState(() {
-            editableText = value; // Update the value
-          });
-        },
-        style: TextStyle(fontSize: 25),
-        decoration: InputDecoration(
-          border: InputBorder.none,
-        ),
-      ),
-    ),
-    Icon(Icons.edit_outlined),
-  ],
+    Future<List<Task>?> getCompletedTasks() async {
+    final db = await database;
+    final data = await db.query(
+      _completedTaskTableName,
+    );
+
+    List<Task> tasks = data
+        .map(
+          (e) => Task(
+            id: e[_taskIdColumnName] as int,
+            status: e[_taskStatusColumnName] as int,
+            label: e[_taskLabelColumnName] as String,
+            description: e[_taskDescriptionColumnName] as String,
+            deadline: e[_taskDeadlineColumnName] as String,
+          ),
+        )
+        .toList();
+    return tasks;
+  }
+
+  void deleteCompTask(int id) async {
+    final db = await database;
+    await db.delete(_completedTaskTableName, where: "id = ?", whereArgs: [id]);
+  }

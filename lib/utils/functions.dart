@@ -29,10 +29,18 @@ class Functions {
     );
 
     if (_pickedDate != null && _pickedTime != null) {
-      String formattedDate = _pickedDate.toIso8601String().split("T")[0];
-      String formattedTime = _pickedTime.format(context);
+      final combinedDateTime = DateTime(
+        _pickedDate.year,
+        _pickedDate.month,
+        _pickedDate.day,
+        _pickedTime.hour,
+        _pickedTime.minute,
+      );
 
-      controller.text = "$formattedDate $formattedTime";
+      String formattedDateTime =
+          "${combinedDateTime.toIso8601String().split('T')[0]} ${_pickedTime.format(context)}";
+
+      controller.text = formattedDateTime;
     }
   }
 }

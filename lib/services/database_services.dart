@@ -8,9 +8,10 @@ class DatabaseService {
   static final DatabaseService instace = DatabaseService._constructor();
 
   final String _taskTableName = "tasks";
+  final String _completedTaskTableName = "completed_tasks";
 
   final String _taskIdColumnName = "id";
-  final String _tasklabelColumnName = "label";
+  final String _taskLabelColumnName = "label";
   final String _taskStatusColumnName = "status";
   final String _taskDescriptionColumnName = "description";
   final String _taskDeadlineColumnName = "deadline";
@@ -34,12 +35,21 @@ class DatabaseService {
         db.execute('''
         CREATE TABLE $_taskTableName (
           $_taskIdColumnName INTEGER PRIMARY KEY,
-          $_tasklabelColumnName TEXT NOT NULL,
+          $_taskLabelColumnName TEXT NOT NULL,
           $_taskStatusColumnName INTEGER NOT NULL,
           $_taskDeadlineColumnName TEXT,
           $_taskDescriptionColumnName TEXT
         ) 
           ''');
+        db.execute('''
+        CREATE TABLE $_completedTaskTableName (
+          $_taskIdColumnName INTEGER PRIMARY KEY,
+          $_taskLabelColumnName TEXT NOT NULL,
+          $_taskStatusColumnName INTEGER NOT NULL,
+          $_taskDeadlineColumnName TEXT,
+          $_taskDescriptionColumnName TEXT
+        )
+        ''');
       },
     );
     return database;
@@ -50,7 +60,7 @@ class DatabaseService {
     await db.insert(
       _taskTableName,
       {
-        _tasklabelColumnName: label,
+        _taskLabelColumnName: label,
         _taskStatusColumnName: 0,
         _taskDeadlineColumnName: deadline,
         _taskDescriptionColumnName: description,
@@ -76,7 +86,7 @@ class DatabaseService {
           (e) => Task(
             id: e[_taskIdColumnName] as int,
             status: e[_taskStatusColumnName] as int,
-            label: e[_tasklabelColumnName] as String,
+            label: e[_taskLabelColumnName] as String,
             description: e[_taskDescriptionColumnName] as String,
             deadline: e[_taskDeadlineColumnName] as String,
           ),
@@ -95,7 +105,7 @@ class DatabaseService {
     );
   }
 
-  void deleteTask(int id) async {
+  Future deleteTask(int id) async {
     final db = await database;
     await db.delete(_taskTableName, where: "id = ?", whereArgs: [id]);
   }
@@ -109,5 +119,45 @@ class DatabaseService {
       where: "id = ?",
       whereArgs: [id],
     );
+  }
+
+/////////////   COMPLETED TASKS    ///////////////////////////////////////////////
+
+  Future addCompletedTask(Task task) async {
+    final db = await database;
+    await db.insert(
+      _completedTaskTableName,
+      {
+        _taskLabelColumnName: task.label,
+        _taskStatusColumnName: task.status,
+        _taskDeadlineColumnName: task.deadline,
+        _taskDescriptionColumnName: task.description,
+      },
+    );
+  }
+
+  Future<List<Task>?> getCompletedTasks() async {
+    final db = await database;
+    final data = await db.query(
+      _completedTaskTableName,
+    );
+
+    List<Task> tasks = data
+        .map(
+          (e) => Task(
+            id: e[_taskIdColumnName] as int,
+            status: e[_taskStatusColumnName] as int,
+            label: e[_taskLabelColumnName] as String,
+            description: e[_taskDescriptionColumnName] as String,
+            deadline: e[_taskDeadlineColumnName] as String,
+          ),
+        )
+        .toList();
+    return tasks;
+  }
+
+  void deleteCompTask(int id) async {
+    final db = await database;
+    await db.delete(_completedTaskTableName, where: "id = ?", whereArgs: [id]);
   }
 }
