@@ -160,4 +160,14 @@ class DatabaseService {
     final db = await database;
     await db.delete(_completedTaskTableName, where: "id = ?", whereArgs: [id]);
   }
+
+  void updateCompTaskStatus(int id, int status) async {
+    final db = await database;
+    await db.update(
+      _completedTaskTableName,
+      {_taskStatusColumnName: status},
+      where: "id = ?",
+      whereArgs: [id],
+    );
+  }
 }

@@ -108,10 +108,19 @@ class _HomePageState extends State<HomePage> {
                                     trailing: Checkbox(
                                       value: task.status == 0,
                                       onChanged: (value) {
-                                        _databaseService.updateTaskStatus(
+                                        _databaseService.updateCompTaskStatus(
                                           task.id,
-                                          value == true ? 1 : 0,
+                                          value == true ? 0 : 1,
                                         );
+                                        Future.delayed(
+                                            const Duration(milliseconds: 250));
+
+                                        if (value == true) {
+                                          _databaseService.addTask(task.label,
+                                              task.deadline, task.description);
+                                          _databaseService
+                                              .deleteCompTask(task.id);
+                                        }
                                         setState(() {});
                                       },
                                     ),
