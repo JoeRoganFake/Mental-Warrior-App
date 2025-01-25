@@ -123,15 +123,16 @@ class DatabaseService {
 
 /////////////   COMPLETED TASKS    ///////////////////////////////////////////////
 
-  Future addCompletedTask(Task task) async {
+  Future addCompletedTask(
+      String label, String deadline, String description) async {
     final db = await database;
     await db.insert(
       _completedTaskTableName,
       {
-        _taskLabelColumnName: task.label,
-        _taskStatusColumnName: task.status,
-        _taskDeadlineColumnName: task.deadline,
-        _taskDescriptionColumnName: task.description,
+        _taskLabelColumnName: label,
+        _taskStatusColumnName: 0,
+        _taskDeadlineColumnName: deadline,
+        _taskDescriptionColumnName: description,
       },
     );
   }
