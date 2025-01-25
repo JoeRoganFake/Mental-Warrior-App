@@ -55,7 +55,7 @@ class DatabaseService {
     return database;
   }
 
-  void addTask(String label, String deadline, String description) async {
+  Future addTask(String label, String deadline, String description) async {
     final db = await database;
     await db.insert(
       _taskTableName,
@@ -156,12 +156,12 @@ class DatabaseService {
     return tasks;
   }
 
-  void deleteCompTask(int id) async {
+  Future deleteCompTask(int id) async {
     final db = await database;
     await db.delete(_completedTaskTableName, where: "id = ?", whereArgs: [id]);
   }
 
-  void updateCompTaskStatus(int id, int status) async {
+  Future updateCompTaskStatus(int id, int status) async {
     final db = await database;
     await db.update(
       _completedTaskTableName,

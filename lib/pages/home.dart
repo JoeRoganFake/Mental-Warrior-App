@@ -75,13 +75,10 @@ class _HomePageState extends State<HomePage> {
               _taskList(),
               Container(
                 decoration: BoxDecoration(border: Border.all()),
-                height: 300,
                 width: 200,
                 child: FutureBuilder(
                     future: _databaseService.getCompletedTasks(),
                     builder: (context, snapshot) {
-                      List<Task> tasks = snapshot.data!;
-
                       return SingleChildScrollView(
                         child: ExpansionPanelList(
                           expansionCallback: (int index, bool isExpanded) {
@@ -99,37 +96,81 @@ class _HomePageState extends State<HomePage> {
                                 );
                               },
                               body: Column(
-                                children: tasks.map((task) {
-                                  return ListTile(
-                                    title: Text(task.label,
-                                        style: TextStyle(color: Colors.white)),
-                                    tileColor: const Color.fromARGB(
-                                        255, 119, 119, 119),
-                                    trailing: Checkbox(
-                                      value: task.status == 0,
-                                      onChanged: (value) {
-                                        _databaseService.updateCompTaskStatus(
-                                          task.id,
-                                          value == true ? 0 : 1,
-                                        );
-                                        Future.delayed(
-                                            const Duration(milliseconds: 250));
+                                children: snapshot.data?.map<Widget>((task) {
+                                      return Padding(
+                                        padding: const EdgeInsets.all(6.0),
+                                        child: GestureDetector(
+                                          onLongPress: () {
+                                            _databaseService
+                                                .deleteCompTask(task.id);
+                                            setState(() {});
+                                          },
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                              color: const Color.fromARGB(
+                                                  255, 119, 119, 119),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Flexible(
+                                                  child: Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                            left: 30),
+                                                    child: Text(
+                                                      task.label,
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          right: 30),
+                                                  child: Checkbox(
+                                                    value: task.status == 0,
+                                                    onChanged: (value) async {
+                                                      setState(() {
+                                                        _databaseService
+                                                            .updateCompTaskStatus(
+                                                          task.id,
+                                                          value == true ? 0 : 1,
+                                                        );
+                                                      });
 
-                                        if (value == true) {
-                                          _databaseService.addTask(task.label,
-                                              task.deadline, task.description);
-                                          _databaseService
-                                              .deleteCompTask(task.id);
-                                        }
-                                        setState(() {});
-                                      },
-                                    ),
-                                    onLongPress: () {
-                                      _databaseService.deleteCompTask(task.id);
-                                      setState(() {});
-                                    },
-                                  );
-                                }).toList(),
+                                                      await Future.delayed(
+                                                          const Duration(
+                                                              milliseconds:
+                                                                  250));
+                                                      await _databaseService
+                                                          .addTask(
+                                                              task.label,
+                                                              task.deadline,
+                                                              task.description);
+                                                      await _databaseService
+                                                          .deleteCompTask(
+                                                              task.id);
+
+                                                      setState(() {});
+                                                    },
+                                                  ),
+                                                )
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList() ??
+                                    [],
                               ),
                               isExpanded: _isExpanded,
                             ),
