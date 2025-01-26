@@ -1,20 +1,12 @@
 import 'dart:async';
 import 'package:mental_warior/models/tasks.dart';
+import 'package:mental_warior/models/habits.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
 class DatabaseService {
   static Database? _db;
-  static final DatabaseService instace = DatabaseService._constructor();
-
-  final String _taskTableName = "tasks";
-  final String _completedTaskTableName = "completed_tasks";
-
-  final String _taskIdColumnName = "id";
-  final String _taskLabelColumnName = "label";
-  final String _taskStatusColumnName = "status";
-  final String _taskDescriptionColumnName = "description";
-  final String _taskDeadlineColumnName = "deadline";
+  static final DatabaseService instance = DatabaseService._constructor();
 
   DatabaseService._constructor();
 
@@ -28,35 +20,40 @@ class DatabaseService {
     final databaseDirPath = await getDatabasesPath();
     final databasePath = join(databaseDirPath, "maste_db.db");
 
-    final database = await openDatabase(
+    return openDatabase(
       databasePath,
       version: 2,
       onCreate: (db, version) {
-        db.execute('''
-        CREATE TABLE $_taskTableName (
-          $_taskIdColumnName INTEGER PRIMARY KEY,
-          $_taskLabelColumnName TEXT NOT NULL,
-          $_taskStatusColumnName INTEGER NOT NULL,
-          $_taskDeadlineColumnName TEXT,
-          $_taskDescriptionColumnName TEXT
-        ) 
-          ''');
-        db.execute('''
-        CREATE TABLE $_completedTaskTableName (
-          $_taskIdColumnName INTEGER PRIMARY KEY,
-          $_taskLabelColumnName TEXT NOT NULL,
-          $_taskStatusColumnName INTEGER NOT NULL,
-          $_taskDeadlineColumnName TEXT,
-          $_taskDescriptionColumnName TEXT
-        )
-        ''');
+        TaskService().createTaskTable(db);
+        CompletedTaskService().createCompletedTaskTable(db);
+        HabitService().createHabitTable(db);
       },
     );
-    return database;
+  }
+}
+
+class TaskService {
+  final String _taskTableName = "tasks";
+  final String _taskIdColumnName = "id";
+  final String _taskLabelColumnName = "label";
+  final String _taskStatusColumnName = "status";
+  final String _taskDescriptionColumnName = "description";
+  final String _taskDeadlineColumnName = "deadline";
+
+  void createTaskTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_taskTableName (
+        $_taskIdColumnName INTEGER PRIMARY KEY,
+        $_taskLabelColumnName TEXT NOT NULL,
+        $_taskStatusColumnName INTEGER NOT NULL,
+        $_taskDeadlineColumnName TEXT,
+        $_taskDescriptionColumnName TEXT
+      ) 
+    ''');
   }
 
   Future addTask(String label, String deadline, String description) async {
-    final db = await database;
+    final db = await DatabaseService.instance.database;
     await db.insert(
       _taskTableName,
       {
@@ -68,8 +65,8 @@ class DatabaseService {
     );
   }
 
-  Future<List<Task>?> getTasks() async {
-    final db = await database;
+  Future<List<Task>> getTasks() async {
+    final db = await DatabaseService.instance.database;
     final data = await db.query(
       _taskTableName,
       orderBy: '''
@@ -81,22 +78,21 @@ class DatabaseService {
       ''',
     );
 
-    List<Task> tasks = data
+    return data
         .map(
           (e) => Task(
             id: e[_taskIdColumnName] as int,
-            status: e[_taskStatusColumnName] as int,
             label: e[_taskLabelColumnName] as String,
+            status: e[_taskStatusColumnName] as int,
             description: e[_taskDescriptionColumnName] as String,
             deadline: e[_taskDeadlineColumnName] as String,
           ),
         )
         .toList();
-    return tasks;
   }
 
   void updateTaskStatus(int id, int status) async {
-    final db = await database;
+    final db = await DatabaseService.instance.database;
     await db.update(
       _taskTableName,
       {_taskStatusColumnName: status},
@@ -106,12 +102,12 @@ class DatabaseService {
   }
 
   Future deleteTask(int id) async {
-    final db = await database;
+    final db = await DatabaseService.instance.database;
     await db.delete(_taskTableName, where: "id = ?", whereArgs: [id]);
   }
 
   void updateTask(int id, String fieldToUpdate, String key) async {
-    final db = await database;
+    final db = await DatabaseService.instance.database;
 
     db.update(
       _taskTableName,
@@ -120,12 +116,31 @@ class DatabaseService {
       whereArgs: [id],
     );
   }
+}
 
-/////////////   COMPLETED TASKS    ///////////////////////////////////////////////
+class CompletedTaskService {
+  final String _completedTaskTableName = "completed_tasks";
+  final String _taskIdColumnName = "id";
+  final String _taskLabelColumnName = "label";
+  final String _taskStatusColumnName = "status";
+  final String _taskDescriptionColumnName = "description";
+  final String _taskDeadlineColumnName = "deadline";
+
+  void createCompletedTaskTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_completedTaskTableName (
+        $_taskIdColumnName INTEGER PRIMARY KEY,
+        $_taskLabelColumnName TEXT NOT NULL,
+        $_taskStatusColumnName INTEGER NOT NULL,
+        $_taskDeadlineColumnName TEXT,
+        $_taskDescriptionColumnName TEXT
+      )
+    ''');
+  }
 
   Future addCompletedTask(
       String label, String deadline, String description) async {
-    final db = await database;
+    final db = await DatabaseService.instance.database;
     await db.insert(
       _completedTaskTableName,
       {
@@ -137,33 +152,30 @@ class DatabaseService {
     );
   }
 
-  Future<List<Task>?> getCompletedTasks() async {
-    final db = await database;
-    final data = await db.query(
-      _completedTaskTableName,
-    );
+  Future<List<Task>> getCompletedTasks() async {
+    final db = await DatabaseService.instance.database;
+    final data = await db.query(_completedTaskTableName);
 
-    List<Task> tasks = data
+    return data
         .map(
           (e) => Task(
             id: e[_taskIdColumnName] as int,
-            status: e[_taskStatusColumnName] as int,
             label: e[_taskLabelColumnName] as String,
+            status: e[_taskStatusColumnName] as int,
             description: e[_taskDescriptionColumnName] as String,
             deadline: e[_taskDeadlineColumnName] as String,
           ),
         )
         .toList();
-    return tasks;
   }
 
   Future deleteCompTask(int id) async {
-    final db = await database;
+    final db = await DatabaseService.instance.database;
     await db.delete(_completedTaskTableName, where: "id = ?", whereArgs: [id]);
   }
 
   Future updateCompTaskStatus(int id, int status) async {
-    final db = await database;
+    final db = await DatabaseService.instance.database;
     await db.update(
       _completedTaskTableName,
       {_taskStatusColumnName: status},
@@ -172,11 +184,90 @@ class DatabaseService {
     );
   }
 
-  void updateCompTask(int id, String fieldToUpdate, String key) async {
-    final db = await database;
+  void updateCompletedTask(int id, String fieldToUpdate, String key) async {
+    final db = await DatabaseService.instance.database;
 
     db.update(
       _completedTaskTableName,
+      {fieldToUpdate: key},
+      where: "id = ?",
+      whereArgs: [id],
+    );
+  }
+}
+
+class HabitService {
+  final String _habitTableName = "habits";
+  final String _habitIdColumnName = "id";
+  final String _habitLabelColumnName = "label";
+  final String _habitStatusColumnName = "status";
+  final String _habitDescriptionColumnName = "description";
+
+  void createHabitTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_habitTableName (
+        $_habitIdColumnName INTEGER PRIMARY KEY,
+        $_habitLabelColumnName TEXT NOT NULL,
+        $_habitStatusColumnName INTEGER NOT NULL,
+        $_habitDescriptionColumnName TEXT
+      ) 
+    ''');
+  }
+
+  Future addHabitk(String label, String description) async {
+    final db = await DatabaseService.instance.database;
+    await db.insert(
+      _habitTableName,
+      {
+        _habitLabelColumnName: label,
+        _habitStatusColumnName: 0,
+        _habitDescriptionColumnName: description,
+      },
+    );
+  }
+
+  Future<List<Habit>> getHabits() async {
+    final db = await DatabaseService.instance.database;
+    final data = await db.query(
+      _habitTableName,
+    );
+
+    return data
+        .map(
+          (e) => Habit(
+            id: e[_habitIdColumnName] as int,
+            label: e[_habitLabelColumnName] as String,
+            status: e[_habitStatusColumnName] as int,
+            description: e[_habitDescriptionColumnName] as String,
+          ),
+        )
+        .toList();
+  }
+
+  void updateHabitStatus(int id, int status) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _habitTableName,
+      {_habitStatusColumnName: status},
+      where: "id = ?",
+      whereArgs: [id],
+    );
+  }
+
+  Future deleteHabit(int id) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete(
+      _habitTableName,
+      where: "id = ?",
+      whereArgs: [id],
+    );
+  }
+
+  void updateHabit(int id, String fieldToUpdate, String key) async {
+    final db = await DatabaseService.instance.database;
+
+    db.update(
+      _habitTableName,
       {fieldToUpdate: key},
       where: "id = ?",
       whereArgs: [id],

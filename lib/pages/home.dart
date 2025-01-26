@@ -16,7 +16,8 @@ class _HomePageState extends State<HomePage> {
   final _labelController = TextEditingController();
   final _descriptionController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final DatabaseService _databaseService = DatabaseService.instace;
+  final TaskService _taskService = TaskService();
+  final CompletedTaskService _completedTaskService = CompletedTaskService();
   bool _isExpanded = false;
   Map<int, bool> taskDeletedState = {};
 
@@ -54,30 +55,64 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       backgroundColor: Colors.white,
-      body: ListView(
-        children: [
-          Text(
-            "Good Productive ${function.getTimeOfDayDescription()}.",
-          ),
-          const SizedBox(
-            width: 25,
-            height: 25,
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                "Tasks Today",
-                textAlign: TextAlign.start,
+      body: MediaQuery.removePadding(
+        context: context,
+        removeTop: true,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 30),
+              child: Text(
+                "Good Productive ${function.getTimeOfDayDescription()}.",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              const SizedBox(
-                height: 10,
-              ),
-              _taskList(),
-              _completedTaskList()
-            ],
-          ),
-        ],
+            ),
+            const SizedBox(height: 25),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Flexible(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Tasks Today",
+                        textAlign: TextAlign.start,
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 10),
+                      _taskList(),
+                      _completedTaskList(),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Flexible(
+                  flex: 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Habits Today",
+                        textAlign: TextAlign.start,
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        "No habits added yet.",
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -87,7 +122,7 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(border: Border.all()),
       width: 200,
       child: FutureBuilder(
-          future: _databaseService.getCompletedTasks(),
+          future: _completedTaskService.getCompletedTasks(),
           builder: (context, snapshot) {
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
               _isExpanded = false;
@@ -150,7 +185,7 @@ class _HomePageState extends State<HomePage> {
                                             value: ctask.status == 0,
                                             onChanged: (value) async {
                                               setState(() {
-                                                _databaseService
+                                                _completedTaskService
                                                     .updateCompTaskStatus(
                                                   ctask.id,
                                                   value == true ? 0 : 1,
@@ -160,11 +195,11 @@ class _HomePageState extends State<HomePage> {
                                               await Future.delayed(
                                                   const Duration(
                                                       milliseconds: 250));
-                                              await _databaseService.addTask(
+                                              await _taskService.addTask(
                                                   ctask.label,
                                                   ctask.deadline,
                                                   ctask.description);
-                                              await _databaseService
+                                              await _completedTaskService
                                                   .deleteCompTask(ctask.id);
 
                                               setState(() {});
@@ -183,7 +218,7 @@ class _HomePageState extends State<HomePage> {
                                   Future.delayed(
                                       const Duration(milliseconds: 200),
                                       () async {
-                                    await _databaseService
+                                    await _completedTaskService
                                         .deleteCompTask(ctask.id);
 
                                     setState(() {
@@ -274,27 +309,25 @@ class _HomePageState extends State<HomePage> {
                   onPressed: () {
                     if (_formKey.currentState!.validate()) {
                       if (add) {
-                        print("ADDING NEW");
-                        _databaseService.addTask(
+                        _taskService.addTask(
                           _labelController.text,
                           _dateController.text,
                           _descriptionController.text,
                         );
                       } else if (changeCompletedTask && task != null) {
-                        print("EDITING COMPLETED");
-                        _databaseService.updateCompTask(
+                        _completedTaskService.updateCompletedTask(
                             task.id, "label", _labelController.text);
-                        _databaseService.updateCompTask(task.id, "description",
-                            _descriptionController.text);
-                        _databaseService.updateCompTask(
+                        _completedTaskService.updateCompletedTask(task.id,
+                            "description", _descriptionController.text);
+                        _completedTaskService.updateCompletedTask(
                             task.id, "deadline", _dateController.text);
                       } else if (!add && task != null) {
                         print("EDITING NOT COMPLETED");
-                        _databaseService.updateTask(
+                        _taskService.updateTask(
                             task.id, "label", _labelController.text);
-                        _databaseService.updateTask(task.id, "description",
+                        _taskService.updateTask(task.id, "description",
                             _descriptionController.text);
-                        _databaseService.updateTask(
+                        _taskService.updateTask(
                             task.id, "deadline", _dateController.text);
                       }
                     }
@@ -336,7 +369,7 @@ class _HomePageState extends State<HomePage> {
       height: 300,
       width: 200,
       child: FutureBuilder(
-          future: _databaseService.getTasks(),
+          future: _taskService.getTasks(),
           builder: (context, snapshot) {
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return Center(child: Text("No tasks yet"));
@@ -380,7 +413,7 @@ class _HomePageState extends State<HomePage> {
                                   value: task.status == 1,
                                   onChanged: (value) async {
                                     setState(() {
-                                      _databaseService.updateTaskStatus(
+                                      _taskService.updateTaskStatus(
                                           task.id, value == true ? 1 : 0);
                                     });
 
@@ -388,12 +421,10 @@ class _HomePageState extends State<HomePage> {
                                         const Duration(milliseconds: 250));
 
                                     if (value == true) {
-                                      await _databaseService.addCompletedTask(
-                                          task.label,
-                                          task.deadline,
-                                          task.description);
-                                      await _databaseService
-                                          .deleteTask(task.id);
+                                      await _completedTaskService
+                                          .addCompletedTask(task.label,
+                                              task.deadline, task.description);
+                                      await _taskService.deleteTask(task.id);
                                     }
                                     setState(() {});
                                   },
@@ -423,10 +454,8 @@ class _HomePageState extends State<HomePage> {
 
                       Future.delayed(const Duration(milliseconds: 200),
                           () async {
-                        // Delete the task from the database after the fade-out
-                        await _databaseService.deleteTask(task.id);
+                        await _taskService.deleteTask(task.id);
 
-                        // After deletion, update the UI to remove the task
                         setState(() {
                           taskDeletedState = {};
                         });
