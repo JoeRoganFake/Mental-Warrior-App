@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:mental_warior/models/tasks.dart';
+import 'package:intl/intl.dart';
 
 class Functions {
   String getTimeOfDayDescription() {
@@ -41,6 +43,23 @@ class Functions {
           "${combinedDateTime.toIso8601String().split('T')[0]} ${_pickedTime.format(context)}";
 
       controller.text = formattedDateTime;
+    }
+  }
+
+  static whenDue(Task task) {
+    String deadline = task.deadline;
+
+    DateTime deadlineDateTime = DateTime.parse(
+        DateFormat("yyyy-MM-dd h:mm a").parse(deadline).toString());
+
+    DateTime now = DateTime.now();
+
+    if (deadlineDateTime.year == now.year &&
+        deadlineDateTime.month == now.month &&
+        deadlineDateTime.day == now.day) {
+      return (Text("The task is due today!"));
+    } else {
+      return SizedBox.shrink();
     }
   }
 }

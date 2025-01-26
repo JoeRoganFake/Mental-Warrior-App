@@ -310,47 +310,52 @@ class _HomePageState extends State<HomePage> {
                         borderRadius: BorderRadius.circular(16),
                         color: const Color.fromARGB(255, 119, 119, 119),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 30),
-                              child: Text(
-                                task.label,
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  overflow: TextOverflow.ellipsis,
+                      child: Column(children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 30),
+                                child: Text(
+                                  task.label,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.only(right: 30),
-                            child: Checkbox(
-                              value: task.status == 1,
-                              onChanged: (value) async {
-                                setState(() {
-                                  _databaseService.updateTaskStatus(
-                                      task.id, value == true ? 1 : 0);
-                                });
+                            Padding(
+                              padding: const EdgeInsets.only(right: 30),
+                              child: Checkbox(
+                                value: task.status == 1,
+                                onChanged: (value) async {
+                                  setState(() {
+                                    _databaseService.updateTaskStatus(
+                                        task.id, value == true ? 1 : 0);
+                                  });
 
-                                await Future.delayed(
-                                    const Duration(milliseconds: 250));
+                                  await Future.delayed(
+                                      const Duration(milliseconds: 250));
 
-                                if (value == true) {
-                                  await _databaseService.addCompletedTask(
-                                      task.label,
-                                      task.deadline,
-                                      task.description);
-                                  await _databaseService.deleteTask(task.id);
-                                }
-                                setState(() {});
-                              },
-                            ),
-                          )
-                        ],
-                      ),
+                                  if (value == true) {
+                                    await _databaseService.addCompletedTask(
+                                        task.label,
+                                        task.deadline,
+                                        task.description);
+                                    await _databaseService.deleteTask(task.id);
+                                  }
+                                  setState(() {});
+                                },
+                              ),
+                            )
+                          ],
+                        ),
+                        Row(
+                          children: [Functions.whenDue(task)],
+                        )
+                      ]),
                     ),
                     onTap: () {
                       _labelController.text = task.label;
