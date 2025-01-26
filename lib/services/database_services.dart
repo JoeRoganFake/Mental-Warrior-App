@@ -171,4 +171,15 @@ class DatabaseService {
       whereArgs: [id],
     );
   }
+
+  void updateCompTask(int id, String fieldToUpdate, String key) async {
+    final db = await database;
+
+    db.update(
+      _completedTaskTableName,
+      {fieldToUpdate: key},
+      where: "id = ?",
+      whereArgs: [id],
+    );
+  }
 }

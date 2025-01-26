@@ -46,20 +46,41 @@ class Functions {
     }
   }
 
-  static whenDue(Task task) {
+  static Widget whenDue(Task task) {
     String deadline = task.deadline;
 
-    DateTime deadlineDateTime = DateTime.parse(
-        DateFormat("yyyy-MM-dd h:mm a").parse(deadline).toString());
+    if (deadline.isEmpty) {
+      return SizedBox.shrink();
+    }
+
+    DateTime deadlineDateTime = DateFormat("yyyy-MM-dd h:mm a").parse(deadline);
 
     DateTime now = DateTime.now();
+    DateTime today = DateTime(
+        now.year, now.month, now.day, now.hour, now.minute, now.second);
+    DateTime tomorrow = today.add(Duration(days: 1));
 
-    if (deadlineDateTime.year == now.year &&
-        deadlineDateTime.month == now.month &&
-        deadlineDateTime.day == now.day) {
-      return (Text("The task is due today!"));
+    // Check conditions
+    if (deadlineDateTime.year == today.year &&
+        deadlineDateTime.month == today.month &&
+        deadlineDateTime.day == today.day) {
+      return Text(
+        "Today",
+      );
+    } else if (deadlineDateTime.year == tomorrow.year &&
+        deadlineDateTime.month == tomorrow.month &&
+        deadlineDateTime.day == tomorrow.day) {
+      return Text(
+        "Tomorrow",
+      );
+    } else if (deadlineDateTime.isBefore(today)) {
+      return Text(
+        "Past Due",
+      );
     } else {
-      return SizedBox.shrink();
+      // Return the formatted date for other cases
+      String formattedDate = DateFormat("dd.M.").format(deadlineDateTime);
+      return Text(formattedDate);
     }
   }
 }
