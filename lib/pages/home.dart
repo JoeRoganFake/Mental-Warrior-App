@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/models/tasks.dart';
@@ -15,11 +16,14 @@ class _HomePageState extends State<HomePage> {
   final _dateController = TextEditingController();
   final _labelController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _taskFormKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _habitFormKey = GlobalKey<FormState>();
   final TaskService _taskService = TaskService();
   final CompletedTaskService _completedTaskService = CompletedTaskService();
+  final HabitService _habitService = HabitService();
   bool _isExpanded = false;
   Map<int, bool> taskDeletedState = {};
+  Set<int> crossedOutIndices = {};
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +48,7 @@ class _HomePageState extends State<HomePage> {
               PopupMenuItem<String>(
                 value: 'habit',
                 child: Text('Habit'),
+                onTap: () => habitFormDialog(),
               ),
             ],
           );
@@ -73,7 +78,7 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Flexible(
-                  flex: 2,
+                  flex: 0,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -91,7 +96,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 const SizedBox(width: 20),
                 Flexible(
-                  flex: 1,
+                  flex: 2,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -102,10 +107,7 @@ class _HomePageState extends State<HomePage> {
                             fontSize: 16, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 10),
-                      Text(
-                        "No habits added yet.",
-                        style: TextStyle(fontSize: 14, color: Colors.grey),
-                      ),
+                      _habitList()
                     ],
                   ),
                 ),
@@ -261,7 +263,7 @@ class _HomePageState extends State<HomePage> {
       builder: (context) => SimpleDialog(
         children: [
           Form(
-            key: _formKey,
+            key: _taskFormKey,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -307,7 +309,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    if (_formKey.currentState!.validate()) {
+                    if (_taskFormKey.currentState!.validate()) {
                       if (add) {
                         _taskService.addTask(
                           _labelController.text,
@@ -322,7 +324,6 @@ class _HomePageState extends State<HomePage> {
                         _completedTaskService.updateCompletedTask(
                             task.id, "deadline", _dateController.text);
                       } else if (!add && task != null) {
-                        print("EDITING NOT COMPLETED");
                         _taskService.updateTask(
                             task.id, "label", _labelController.text);
                         _taskService.updateTask(task.id, "description",
@@ -330,9 +331,9 @@ class _HomePageState extends State<HomePage> {
                         _taskService.updateTask(
                             task.id, "deadline", _dateController.text);
                       }
+                      Navigator.pop(context);
+                      setState(() {});
                     }
-                    Navigator.pop(context);
-                    setState(() {});
                   },
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -359,6 +360,84 @@ class _HomePageState extends State<HomePage> {
         _labelController.clear();
         _descriptionController.clear();
         _dateController.clear();
+      });
+    });
+  }
+
+  Future<dynamic> habitFormDialog() {
+    return showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        children: [
+          Form(
+            key: _habitFormKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    "New Habit",
+                  ),
+                ),
+                TextFormField(
+                  controller: _labelController,
+                  autofocus: true,
+                  validator: (value) {
+                    if (value!.isEmpty || value == "") {
+                      return "     *Field Is Required";
+                    }
+                    return null;
+                  },
+                  decoration: InputDecoration(
+                      hintText: "Label",
+                      prefixIcon: const Icon(Icons.label),
+                      border: InputBorder.none),
+                ),
+                TextFormField(
+                  controller: _descriptionController,
+                  maxLines: null,
+                  keyboardType: TextInputType.multiline,
+                  decoration: InputDecoration(
+                      hintText: "Description",
+                      prefixIcon: const Icon(Icons.description),
+                      border: InputBorder.none),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (_habitFormKey.currentState!.validate()) {
+                      _habitService.addHabit(
+                        _labelController.text,
+                        _descriptionController.text,
+                      );
+                      Navigator.pop(context);
+                      setState(() {});
+                    }
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: const Icon(Icons.add_task_outlined),
+                      ),
+                      Text(
+                        "Add Habit",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(),
+                      )
+                    ],
+                  ),
+                )
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).then((_) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _labelController.clear();
+        _descriptionController.clear();
       });
     });
   }
@@ -466,6 +545,76 @@ class _HomePageState extends State<HomePage> {
               },
             );
           }),
+    );
+  }
+
+  Container _habitList() {
+    return Container(
+      decoration: BoxDecoration(border: Border.all()),
+      height: 300,
+      child: FutureBuilder(
+        future: _habitService.getHabits(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return Center(child: Text("No habits yet"));
+          }
+          return ListView.builder(
+            itemCount: snapshot.data!.length,
+            itemBuilder: (context, index) {
+              Habit habit = snapshot.data![index];
+
+              return GestureDetector(
+                // Wrap the entire item
+                onTap: () {
+                  setState(() {
+                    if (crossedOutIndices.contains(index)) {
+                      crossedOutIndices.remove(index);
+                    } else {
+                      crossedOutIndices.add(index);
+                    }
+                  });
+                },
+                onLongPress: () {
+                  setState(() {
+                    _habitService.deleteHabit(habit.id);
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(15.0),
+                  child: Container(
+                    // Add a larger tappable area
+                    padding:
+                        EdgeInsets.all(15), // Increase padding inside container
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(10),
+                      color: Colors
+                          .grey.shade100, // Light background for visibility
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            habit.label,
+                            style: TextStyle(
+                              color: Color.fromARGB(255, 103, 113, 121),
+                              overflow: TextOverflow.ellipsis,
+                              decoration: crossedOutIndices.contains(index)
+                                  ? TextDecoration.lineThrough
+                                  : TextDecoration.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }

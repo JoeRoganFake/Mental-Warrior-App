@@ -214,7 +214,7 @@ class HabitService {
     ''');
   }
 
-  Future addHabitk(String label, String description) async {
+  Future addHabit(String label, String description) async {
     final db = await DatabaseService.instance.database;
     await db.insert(
       _habitTableName,

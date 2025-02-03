@@ -79,7 +79,7 @@ class Functions {
       );
     } else {
       // Return the formatted date for other cases
-      String formattedDate = DateFormat("dd.M.").format(deadlineDateTime);
+      String formattedDate = DateFormat("d.M.").format(deadlineDateTime);
       return Text(formattedDate);
     }
   }
