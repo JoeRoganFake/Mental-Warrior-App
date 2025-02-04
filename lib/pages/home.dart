@@ -3,6 +3,7 @@ import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/models/tasks.dart';
+import 'package:mental_warior/services/background_task.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -23,7 +24,20 @@ class _HomePageState extends State<HomePage> {
   final HabitService _habitService = HabitService();
   bool _isExpanded = false;
   Map<int, bool> taskDeletedState = {};
-  Set<int> crossedOutIndices = {};
+  late Future<List<Habit>> _habitFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _habitFuture = _habitService.getHabits();
+
+    // Listen for habit updates from the background task
+    habitsUpdatedNotifier.addListener(() {
+      setState(() {
+        _habitFuture = _habitService.getHabits();
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,11 +88,22 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             const SizedBox(height: 25),
+            Container(
+              decoration: BoxDecoration(border: Border.all()),
+              height: 100,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text("GOALS"),
+                ],
+              ),
+            ),
+            const SizedBox(height: 25),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Flexible(
-                  flex: 0,
+                  flex: 2,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -553,7 +578,7 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(border: Border.all()),
       height: 300,
       child: FutureBuilder(
-        future: _habitService.getHabits(),
+        future: _habitFuture,
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return Center(child: Text("No habits yet"));
@@ -564,14 +589,11 @@ class _HomePageState extends State<HomePage> {
               Habit habit = snapshot.data![index];
 
               return GestureDetector(
-                // Wrap the entire item
                 onTap: () {
                   setState(() {
-                    if (crossedOutIndices.contains(index)) {
-                      crossedOutIndices.remove(index);
-                    } else {
-                      crossedOutIndices.add(index);
-                    }
+                    _habitService.updateHabitStatus(
+                        habit.id, habit.status == 0 ? 1 : 0);
+                    habitsUpdatedNotifier.value = !habitsUpdatedNotifier.value;
                   });
                 },
                 onLongPress: () {
@@ -580,16 +602,13 @@ class _HomePageState extends State<HomePage> {
                   });
                 },
                 child: Padding(
-                  padding: const EdgeInsets.all(15.0),
+                  padding: const EdgeInsets.all(8),
                   child: Container(
-                    // Add a larger tappable area
-                    padding:
-                        EdgeInsets.all(15), // Increase padding inside container
+                    padding: EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey.shade300),
                       borderRadius: BorderRadius.circular(10),
-                      color: Colors
-                          .grey.shade100, // Light background for visibility
+                      color: Colors.grey.shade100,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -598,11 +617,16 @@ class _HomePageState extends State<HomePage> {
                           child: Text(
                             habit.label,
                             style: TextStyle(
-                              color: Color.fromARGB(255, 103, 113, 121),
-                              overflow: TextOverflow.ellipsis,
-                              decoration: crossedOutIndices.contains(index)
-                                  ? TextDecoration.lineThrough
-                                  : TextDecoration.none,
+                              fontWeight: FontWeight.w600,
+                              color: habit.status == 0
+                                  ? Color.fromARGB(255, 103, 113, 121)
+                                  : Colors.grey,
+                              decoration: habit.status == 0
+                                  ? TextDecoration.none
+                                  : TextDecoration.lineThrough,
+                              decorationThickness: 2,
+                              decorationColor:
+                                  const Color.fromARGB(255, 180, 89, 89),
                             ),
                           ),
                         ),

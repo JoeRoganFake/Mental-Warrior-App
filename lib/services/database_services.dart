@@ -273,4 +273,37 @@ class HabitService {
       whereArgs: [id],
     );
   }
+
+  Future<void> resetAllHabits() async {
+    try {
+      print("Fetching database instance...");
+      final db = await DatabaseService.instance.database;
+
+      print("Querying all habits...");
+      List<Map<String, dynamic>> habitList = await db.query(_habitTableName);
+
+      if (habitList.isEmpty) {
+        print("No habits found in database.");
+        return;
+      }
+
+      print("Found ${habitList.length} habits. Resetting...");
+
+      for (var habit in habitList) {
+        int habitId = habit[_habitIdColumnName];
+
+        print("Resetting habit ID: $habitId");
+        await db.update(
+          _habitTableName,
+          {_habitStatusColumnName: 0},
+          where: "id = ?",
+          whereArgs: [habitId],
+        );
+      }
+
+      print("✅ All habits successfully reset!");
+    } catch (e) {
+      print("❌ ERROR in resetAllHabits: $e");
+    }
+  }
 }
