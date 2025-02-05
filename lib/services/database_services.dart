@@ -3,10 +3,12 @@ import 'package:mental_warior/models/tasks.dart';
 import 'package:mental_warior/models/habits.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:flutter/material.dart';
 
 class DatabaseService {
   static Database? _db;
   static final DatabaseService instance = DatabaseService._constructor();
+  static final ValueNotifier<bool> habitsUpdatedNotifier = ValueNotifier(false);
 
   DatabaseService._constructor();
 
@@ -27,6 +29,7 @@ class DatabaseService {
         TaskService().createTaskTable(db);
         CompletedTaskService().createCompletedTaskTable(db);
         HabitService().createHabitTable(db);
+        GoalService().createGoalTable(db);
       },
     );
   }
@@ -244,7 +247,7 @@ class HabitService {
         .toList();
   }
 
-  void updateHabitStatus(int id, int status) async {
+  Future updateHabitStatus(int id, int status) async {
     final db = await DatabaseService.instance.database;
     await db.update(
       _habitTableName,
@@ -276,10 +279,10 @@ class HabitService {
 
   Future<void> resetAllHabits() async {
     try {
-      print("Fetching database instance...");
+      ;
       final db = await DatabaseService.instance.database;
 
-      print("Querying all habits...");
+      ;
       List<Map<String, dynamic>> habitList = await db.query(_habitTableName);
 
       if (habitList.isEmpty) {
@@ -287,12 +290,9 @@ class HabitService {
         return;
       }
 
-      print("Found ${habitList.length} habits. Resetting...");
-
       for (var habit in habitList) {
         int habitId = habit[_habitIdColumnName];
 
-        print("Resetting habit ID: $habitId");
         await db.update(
           _habitTableName,
           {_habitStatusColumnName: 0},
@@ -300,10 +300,87 @@ class HabitService {
           whereArgs: [habitId],
         );
       }
-
-      print("✅ All habits successfully reset!");
     } catch (e) {
       print("❌ ERROR in resetAllHabits: $e");
     }
+  }
+}
+
+class GoalService {
+  final String _goalTableName = "goals";
+  final String _goalIdColumnName = "id";
+  final String _goalLabelColumnName = "label";
+  final String _goalStatusColumnName = "status";
+  final String _goalDescriptionColumnName = "description";
+  final String _goalDeadlineColumnName = "deadline";
+
+  void createGoalTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_goalTableName (
+        $_goalIdColumnName INTEGER PRIMARY KEY,
+        $_goalLabelColumnName TEXT NOT NULL,
+        $_goalStatusColumnName INTEGER NOT NULL,
+        $_goalDeadlineColumnName TEXT,
+        $_goalDescriptionColumnName TEXT
+      ) 
+    ''');
+  }
+
+  Future addGoal(String label, String deadline, String description) async {
+    final db = await DatabaseService.instance.database;
+    await db.insert(
+      _goalTableName,
+      {
+        _goalLabelColumnName: label,
+        _goalStatusColumnName: 0,
+        _goalDeadlineColumnName: deadline,
+        _goalDescriptionColumnName: description,
+      },
+    );
+  }
+
+  Future<List<Task>> getGoals() async {
+    final db = await DatabaseService.instance.database;
+    final data = await db.query(
+      _goalTableName,
+    );
+
+    return data
+        .map(
+          (e) => Task(
+            id: e[_goalIdColumnName] as int,
+            label: e[_goalLabelColumnName] as String,
+            status: e[_goalStatusColumnName] as int,
+            description: e[_goalDescriptionColumnName] as String,
+            deadline: e[_goalDeadlineColumnName] as String,
+          ),
+        )
+        .toList();
+  }
+
+  void updateGoalStatus(int id, int status) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _goalTableName,
+      {_goalStatusColumnName: status},
+      where: "id = ?",
+      whereArgs: [id],
+    );
+  }
+
+  Future deleteGoal(int id) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete(_goalTableName, where: "id = ?", whereArgs: [id]);
+  }
+
+  void updateGoal(int id, String fieldToUpdate, String key) async {
+    final db = await DatabaseService.instance.database;
+
+    db.update(
+      _goalTableName,
+      {fieldToUpdate: key},
+      where: "id = ?",
+      whereArgs: [id],
+    );
   }
 }

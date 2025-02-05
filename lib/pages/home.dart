@@ -1,9 +1,11 @@
+import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/models/tasks.dart';
-import 'package:mental_warior/services/background_task.dart';
+import 'dart:isolate';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -19,24 +21,35 @@ class _HomePageState extends State<HomePage> {
   final _descriptionController = TextEditingController();
   final GlobalKey<FormState> _taskFormKey = GlobalKey<FormState>();
   final GlobalKey<FormState> _habitFormKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _goalFormKey = GlobalKey<FormState>();
   final TaskService _taskService = TaskService();
   final CompletedTaskService _completedTaskService = CompletedTaskService();
   final HabitService _habitService = HabitService();
+  final GoalService _goalService = GoalService();
   bool _isExpanded = false;
   Map<int, bool> taskDeletedState = {};
-  late Future<List<Habit>> _habitFuture;
+  static const String isolateName = 'background_task_port';
+  final ReceivePort _receivePort = ReceivePort();
+  String statusMessage = "Waiting for task...";
 
   @override
   void initState() {
     super.initState();
-    _habitFuture = _habitService.getHabits();
 
-    // Listen for habit updates from the background task
-    habitsUpdatedNotifier.addListener(() {
+    IsolateNameServer.registerPortWithName(_receivePort.sendPort, isolateName);
+
+    _receivePort.listen((message) {
       setState(() {
-        _habitFuture = _habitService.getHabits();
+        statusMessage = message;
+        print("Updated status: $statusMessage");
       });
     });
+  }
+
+  @override
+  void dispose() {
+    IsolateNameServer.removePortNameMapping(isolateName);
+    super.dispose();
   }
 
   @override
@@ -49,7 +62,7 @@ class _HomePageState extends State<HomePage> {
             context: context,
             position: RelativeRect.fromLTRB(
               MediaQuery.of(context).size.width - 5,
-              MediaQuery.of(context).size.height - 200,
+              MediaQuery.of(context).size.height - 250,
               20,
               0,
             ),
@@ -61,8 +74,19 @@ class _HomePageState extends State<HomePage> {
               ),
               PopupMenuItem<String>(
                 value: 'habit',
-                child: Text('Habit'),
+                child: Text('Habit',
+                    style: TextStyle(
+                        color: const Color.fromARGB(255, 107, 107, 107))),
                 onTap: () => habitFormDialog(),
+              ),
+              PopupMenuItem<String>(
+                value: 'goal',
+                child: Text(
+                  'Long Term Goal',
+                  style: TextStyle(
+                      color: const Color.fromARGB(255, 107, 107, 107)),
+                ),
+                onTap: () => goalFormDialog(),
               ),
             ],
           );
@@ -88,16 +112,7 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             const SizedBox(height: 25),
-            Container(
-              decoration: BoxDecoration(border: Border.all()),
-              height: 100,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text("GOALS"),
-                ],
-              ),
-            ),
+            _goalList(),
             const SizedBox(height: 25),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,6 +157,293 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+  }
+
+  Future<dynamic> taskFormDialog(
+    BuildContext context, {
+    Task? task,
+    bool add = true,
+    bool changeCompletedTask = false,
+  }) {
+    return showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        children: [
+          Form(
+            key: _taskFormKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    add ? "New Task" : "Edit Task",
+                  ),
+                ),
+                TextFormField(
+                  controller: _labelController,
+                  autofocus: add,
+                  validator: (value) {
+                    if (value!.isEmpty || value == "") {
+                      return "     *Field Is Required";
+                    }
+                    return null;
+                  },
+                  decoration: InputDecoration(
+                      hintText: "Label",
+                      prefixIcon: const Icon(Icons.label),
+                      border: InputBorder.none),
+                ),
+                TextFormField(
+                  controller: _descriptionController,
+                  maxLines: null,
+                  keyboardType: TextInputType.multiline,
+                  decoration: InputDecoration(
+                      hintText: "Description",
+                      prefixIcon: const Icon(Icons.description),
+                      border: InputBorder.none),
+                ),
+                TextFormField(
+                  controller: _dateController,
+                  onTap: () {
+                    Functions.dateAndTimePicker(context, _dateController);
+                  },
+                  readOnly: true,
+                  decoration: InputDecoration(
+                      hintText: "Due To",
+                      prefixIcon: const Icon(Icons.calendar_month),
+                      border: InputBorder.none),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (_taskFormKey.currentState!.validate()) {
+                      if (add) {
+                        _taskService.addTask(
+                          _labelController.text,
+                          _dateController.text,
+                          _descriptionController.text,
+                        );
+                      } else if (changeCompletedTask && task != null) {
+                        _completedTaskService.updateCompletedTask(
+                            task.id, "label", _labelController.text);
+                        _completedTaskService.updateCompletedTask(task.id,
+                            "description", _descriptionController.text);
+                        _completedTaskService.updateCompletedTask(
+                            task.id, "deadline", _dateController.text);
+                      } else if (!add && task != null) {
+                        _taskService.updateTask(
+                            task.id, "label", _labelController.text);
+                        _taskService.updateTask(task.id, "description",
+                            _descriptionController.text);
+                        _taskService.updateTask(
+                            task.id, "deadline", _dateController.text);
+                      }
+                      Navigator.pop(context);
+                      setState(() {});
+                    }
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: const Icon(Icons.add_task_outlined),
+                      ),
+                      Text(
+                        add ? "Add Task" : "Edit Task",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(),
+                      )
+                    ],
+                  ),
+                )
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).then((_) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _labelController.clear();
+        _descriptionController.clear();
+        _dateController.clear();
+      });
+    });
+  }
+
+  Future<dynamic> habitFormDialog({add = true}) {
+    return showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        children: [
+          Form(
+            key: _habitFormKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    "New Habit",
+                  ),
+                ),
+                TextFormField(
+                  controller: _labelController,
+                  autofocus: true,
+                  validator: (value) {
+                    if (value!.isEmpty || value == "") {
+                      return "     *Field Is Required";
+                    }
+                    return null;
+                  },
+                  decoration: InputDecoration(
+                      hintText: "Label",
+                      prefixIcon: const Icon(Icons.label),
+                      border: InputBorder.none),
+                ),
+                TextFormField(
+                  controller: _descriptionController,
+                  maxLines: null,
+                  keyboardType: TextInputType.multiline,
+                  decoration: InputDecoration(
+                      hintText: "Description",
+                      prefixIcon: const Icon(Icons.description),
+                      border: InputBorder.none),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (_habitFormKey.currentState!.validate()) {
+                      _habitService.addHabit(
+                        _labelController.text,
+                        _descriptionController.text,
+                      );
+                      Navigator.pop(context);
+                      setState(() {});
+                    }
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: const Icon(Icons.add_task_outlined),
+                      ),
+                      Text(
+                        "Add Habit",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(),
+                      )
+                    ],
+                  ),
+                )
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).then((_) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _labelController.clear();
+        _descriptionController.clear();
+      });
+    });
+  }
+
+  Future<dynamic> goalFormDialog() {
+    return showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        children: [
+          Form(
+            key: _goalFormKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    "New Long-Term Goal",
+                  ),
+                ),
+                TextFormField(
+                  controller: _labelController,
+                  autofocus: true,
+                  validator: (value) {
+                    if (value!.isEmpty || value == "") {
+                      return "     *Field Is Required";
+                    }
+                    return null;
+                  },
+                  decoration: InputDecoration(
+                      hintText: "Goal",
+                      prefixIcon: const Icon(Icons.label),
+                      border: InputBorder.none),
+                ),
+                TextFormField(
+                  controller: _descriptionController,
+                  maxLines: null,
+                  keyboardType: TextInputType.multiline,
+                  decoration: InputDecoration(
+                      hintText: "Description",
+                      prefixIcon: const Icon(Icons.description),
+                      border: InputBorder.none),
+                ),
+                TextFormField(
+                  controller: _dateController,
+                  validator: (value) {
+                    if (value!.isEmpty || value == "") {
+                      return "     *Field Is Required";
+                    }
+                    return null;
+                  },
+                  onTap: () {
+                    Functions.dateAndTimePicker(context, _dateController,
+                        onlyDate: true);
+                  },
+                  readOnly: true,
+                  decoration: InputDecoration(
+                      hintText: "Due To",
+                      prefixIcon: const Icon(Icons.calendar_month),
+                      border: InputBorder.none),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (_goalFormKey.currentState!.validate()) {
+                      _goalService.addGoal(
+                        _labelController.text,
+                        _descriptionController.text,
+                        _dateController.text,
+                      );
+                      Navigator.pop(context);
+                      setState(() {});
+                    }
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: const Icon(Icons.add_task_outlined),
+                      ),
+                      Text(
+                        "Add Habit",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(),
+                      )
+                    ],
+                  ),
+                )
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).then((_) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _labelController.clear();
+        _descriptionController.clear();
+      });
+    });
   }
 
   Container _completedTaskList() {
@@ -277,196 +579,6 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<dynamic> taskFormDialog(
-    BuildContext context, {
-    Task? task,
-    bool add = true,
-    bool changeCompletedTask = false,
-  }) {
-    return showDialog(
-      context: context,
-      builder: (context) => SimpleDialog(
-        children: [
-          Form(
-            key: _taskFormKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    add ? "New Task" : "Edit Task",
-                  ),
-                ),
-                TextFormField(
-                  controller: _labelController,
-                  autofocus: add,
-                  validator: (value) {
-                    if (value!.isEmpty || value == "") {
-                      return "     *Field Is Required";
-                    }
-                    return null;
-                  },
-                  decoration: InputDecoration(
-                      hintText: "Label",
-                      prefixIcon: const Icon(Icons.label),
-                      border: InputBorder.none),
-                ),
-                TextFormField(
-                  controller: _descriptionController,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  decoration: InputDecoration(
-                      hintText: "Description",
-                      prefixIcon: const Icon(Icons.description),
-                      border: InputBorder.none),
-                ),
-                TextFormField(
-                  controller: _dateController,
-                  onTap: () {
-                    Functions.dateAndTimePicker(context, _dateController);
-                  },
-                  readOnly: true,
-                  decoration: InputDecoration(
-                      hintText: "Due To",
-                      prefixIcon: const Icon(Icons.calendar_month),
-                      border: InputBorder.none),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (_taskFormKey.currentState!.validate()) {
-                      if (add) {
-                        _taskService.addTask(
-                          _labelController.text,
-                          _dateController.text,
-                          _descriptionController.text,
-                        );
-                      } else if (changeCompletedTask && task != null) {
-                        _completedTaskService.updateCompletedTask(
-                            task.id, "label", _labelController.text);
-                        _completedTaskService.updateCompletedTask(task.id,
-                            "description", _descriptionController.text);
-                        _completedTaskService.updateCompletedTask(
-                            task.id, "deadline", _dateController.text);
-                      } else if (!add && task != null) {
-                        _taskService.updateTask(
-                            task.id, "label", _labelController.text);
-                        _taskService.updateTask(task.id, "description",
-                            _descriptionController.text);
-                        _taskService.updateTask(
-                            task.id, "deadline", _dateController.text);
-                      }
-                      Navigator.pop(context);
-                      setState(() {});
-                    }
-                  },
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: const Icon(Icons.add_task_outlined),
-                      ),
-                      Text(
-                        add ? "Add Task" : "Edit Task",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(),
-                      )
-                    ],
-                  ),
-                )
-              ],
-            ),
-          ),
-        ],
-      ),
-    ).then((_) {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        _labelController.clear();
-        _descriptionController.clear();
-        _dateController.clear();
-      });
-    });
-  }
-
-  Future<dynamic> habitFormDialog() {
-    return showDialog(
-      context: context,
-      builder: (context) => SimpleDialog(
-        children: [
-          Form(
-            key: _habitFormKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    "New Habit",
-                  ),
-                ),
-                TextFormField(
-                  controller: _labelController,
-                  autofocus: true,
-                  validator: (value) {
-                    if (value!.isEmpty || value == "") {
-                      return "     *Field Is Required";
-                    }
-                    return null;
-                  },
-                  decoration: InputDecoration(
-                      hintText: "Label",
-                      prefixIcon: const Icon(Icons.label),
-                      border: InputBorder.none),
-                ),
-                TextFormField(
-                  controller: _descriptionController,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  decoration: InputDecoration(
-                      hintText: "Description",
-                      prefixIcon: const Icon(Icons.description),
-                      border: InputBorder.none),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (_habitFormKey.currentState!.validate()) {
-                      _habitService.addHabit(
-                        _labelController.text,
-                        _descriptionController.text,
-                      );
-                      Navigator.pop(context);
-                      setState(() {});
-                    }
-                  },
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: const Icon(Icons.add_task_outlined),
-                      ),
-                      Text(
-                        "Add Habit",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(),
-                      )
-                    ],
-                  ),
-                )
-              ],
-            ),
-          ),
-        ],
-      ),
-    ).then((_) {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        _labelController.clear();
-        _descriptionController.clear();
-      });
-    });
-  }
-
   Widget _taskList() {
     return Container(
       decoration: BoxDecoration(border: Border.all()),
@@ -573,12 +685,11 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Container _habitList() {
-    return Container(
-      decoration: BoxDecoration(border: Border.all()),
+  Widget _habitList() {
+    return SizedBox(
       height: 300,
       child: FutureBuilder(
-        future: _habitFuture,
+        future: _habitService.getHabits(),
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return Center(child: Text("No habits yet"));
@@ -589,17 +700,20 @@ class _HomePageState extends State<HomePage> {
               Habit habit = snapshot.data![index];
 
               return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _habitService.updateHabitStatus(
-                        habit.id, habit.status == 0 ? 1 : 0);
-                    habitsUpdatedNotifier.value = !habitsUpdatedNotifier.value;
-                  });
+                onHorizontalDragStart: (details) async {
+                  await _habitService.updateHabitStatus(
+                      habit.id, habit.status == 0 ? 1 : 0);
+                  setState(() {});
                 },
-                onLongPress: () {
-                  setState(() {
-                    _habitService.deleteHabit(habit.id);
-                  });
+                onVerticalDragEnd: (details) => setState(() {}),
+                onLongPress: () async {
+                  await _habitService.deleteHabit(habit.id);
+                  setState(() {});
+                },
+                onTap: () {
+                  _labelController.text = habit.label;
+                  _descriptionController.text = habit.description;
+                  habitFormDialog();
                 },
                 child: Padding(
                   padding: const EdgeInsets.all(8),
@@ -619,14 +733,14 @@ class _HomePageState extends State<HomePage> {
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               color: habit.status == 0
-                                  ? Color.fromARGB(255, 103, 113, 121)
+                                  ? Color.fromARGB(255, 0, 0, 0)
                                   : Colors.grey,
                               decoration: habit.status == 0
                                   ? TextDecoration.none
                                   : TextDecoration.lineThrough,
                               decorationThickness: 2,
                               decorationColor:
-                                  const Color.fromARGB(255, 180, 89, 89),
+                                  const Color.fromARGB(255, 255, 0, 0),
                             ),
                           ),
                         ),
@@ -640,5 +754,47 @@ class _HomePageState extends State<HomePage> {
         },
       ),
     );
+  }
+
+  Widget _goalList() {
+    return Container(
+        decoration: BoxDecoration(border: Border.all()),
+        height: 140,
+        child: FutureBuilder(
+          future: _goalService.getGoals(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData || snapshot.data!.isEmpty) {
+              return Center(child: Text("No goals yet"));
+            }
+
+            List<Task> goals = snapshot.data!;
+
+            return Container(
+              decoration: BoxDecoration(border: Border.all()),
+              height: 100, // Fixed height
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  Text("GOALS"),
+                  ...goals.map(
+                    (goal) => GestureDetector(
+                      child: Text(
+                        goal.label,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 30,
+                        ),
+                      ),
+                      onLongPress: () {
+                        _goalService.deleteGoal(goal.id);
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ));
   }
 }

@@ -4,8 +4,6 @@ import 'services/background_task.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize the background tasks
   initializeBackgroundTasks();
 
   runApp(MyApp());

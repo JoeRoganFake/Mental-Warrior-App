@@ -1,3 +1,4 @@
+//Used for Task and Goal
 class Task {
   final int status, id;
   final String label, description, deadline;

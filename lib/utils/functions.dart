@@ -3,7 +3,7 @@ import 'package:mental_warior/models/tasks.dart';
 import 'package:intl/intl.dart';
 
 class Functions {
-  String getTimeOfDayDescription() {
+  String getTimeOfDayDescription({onlyDate = false}) {
     final hour = DateTime.now().hour;
     if (hour < 12) {
       return "Morning";
@@ -15,34 +15,36 @@ class Functions {
   }
 
   static Future<void> dateAndTimePicker(
-      BuildContext context, TextEditingController controller) async {
+      BuildContext context, TextEditingController controller,
+      {bool onlyDate = false}) async {
     controller.clear();
 
     DateTime? _pickedDate = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 5000)),
+      initialDate:
+          onlyDate ? DateTime.now().add(Duration(days: 265)) : DateTime.now(),
+      firstDate:
+          onlyDate ? DateTime.now().add(Duration(days: 265)) : DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 5000000)),
     );
 
-    TimeOfDay? _pickedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.now(),
-    );
+    if (_pickedDate != null) {
+      if (onlyDate) {
+        String formattedDate = _pickedDate.toIso8601String().split('T')[0];
+        controller.text = formattedDate;
+      } else {
+        TimeOfDay? _pickedTime = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay.now(),
+        );
 
-    if (_pickedDate != null && _pickedTime != null) {
-      final combinedDateTime = DateTime(
-        _pickedDate.year,
-        _pickedDate.month,
-        _pickedDate.day,
-        _pickedTime.hour,
-        _pickedTime.minute,
-      );
+        if (_pickedTime != null) {
+          String formattedDateTime =
+              "${_pickedDate.toIso8601String().split('T')[0]} ${_pickedTime.format(context)}";
 
-      String formattedDateTime =
-          "${combinedDateTime.toIso8601String().split('T')[0]} ${_pickedTime.format(context)}";
-
-      controller.text = formattedDateTime;
+          controller.text = formattedDateTime;
+        }
+      }
     }
   }
 

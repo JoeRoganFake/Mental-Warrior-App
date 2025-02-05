@@ -1,50 +1,49 @@
+import 'dart:async';
 import 'package:workmanager/workmanager.dart';
 import 'database_services.dart';
-import 'package:flutter/material.dart';
+import 'dart:isolate';
+import 'dart:ui';
 
-// Global notifier to trigger UI updates when habits reset
-ValueNotifier<bool> habitsUpdatedNotifier = ValueNotifier(false);
+final StreamController<String> taskCompletionController =
+    StreamController<String>.broadcast();
 
 Duration getTimeUntilMidnight() {
   final now = DateTime.now();
-  final midnight = DateTime(now.year, now.month, now.day, 23, 59, 59);
+  final midnight = DateTime(now.year, now.month, now.day, 12, 33, 0);
   return midnight.difference(now);
 }
 
 void initializeBackgroundTasks() {
   print('Initializing WorkManager...');
+  Workmanager().cancelAll();
+  Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
 
-  // Initialize WorkManager
-  Workmanager().initialize(callbackDispatcher);
-
-  // Register periodic task to reset habits at midnight
   Workmanager().registerPeriodicTask(
-    'reset_habits_task', // Unique task ID
-    'reset_all_habits', // Task name
-    frequency: Duration(minutes: 15), // Minimum allowed interval (15 min)
+    'reset_habits_task',
+    'reset_all_habits',
+    frequency: Duration(minutes: 15),
+    // initialDelay: getTimeUntilMidnight(),
   );
 }
 
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
-    print('Task triggered: $task');
+    print("Background task triggered: $task");
 
-    if (task.trim() == 'reset_all_habits') {
+    if (task == 'reset_all_habits') {
       print("STARTING HABIT RESET...");
 
       try {
-        print("Initializing database...");
-        await DatabaseService.instance
-            .getDatabase(); // Ensure DB is initialized
-
+        await DatabaseService.instance.getDatabase();
         final habitService = HabitService();
-        print("Calling resetAllHabits...");
         await habitService.resetAllHabits();
 
         print("✅ RESET FUNCTION CALLED SUCCESSFULLY!");
 
-        // Notify UI that habits have been updated
-        habitsUpdatedNotifier.value = !habitsUpdatedNotifier.value;
+        // Send data to main isolate
+        final SendPort? sendPort =
+            IsolateNameServer.lookupPortByName('background_task_port');
+        sendPort?.send("Task Completed!");
       } catch (e) {
         print("❌ ERROR in resetAllHabits: $e");
       }
