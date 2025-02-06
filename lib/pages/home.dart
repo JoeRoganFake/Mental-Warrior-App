@@ -108,10 +108,16 @@ class _HomePageState extends State<HomePage> {
               padding: const EdgeInsets.only(top: 30),
               child: Text(
                 "Good Productive ${function.getTimeOfDayDescription()}.",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(height: 25),
+            Text(
+              "Goals",
+              textAlign: TextAlign.left,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
             _goalList(),
             const SizedBox(height: 25),
             Row(
@@ -271,7 +277,7 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<dynamic> habitFormDialog({add = true}) {
+  Future<dynamic> habitFormDialog({bool add = true, Habit? habit}) {
     return showDialog(
       context: context,
       builder: (context) => SimpleDialog(
@@ -284,7 +290,7 @@ class _HomePageState extends State<HomePage> {
                 Padding(
                   padding: const EdgeInsets.all(8.0),
                   child: Text(
-                    "New Habit",
+                    add ? "New Habit" : "Edit Habit",
                   ),
                 ),
                 TextFormField(
@@ -312,13 +318,24 @@ class _HomePageState extends State<HomePage> {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    if (_habitFormKey.currentState!.validate()) {
-                      _habitService.addHabit(
-                        _labelController.text,
-                        _descriptionController.text,
-                      );
-                      Navigator.pop(context);
-                      setState(() {});
+                    if (add) {
+                      if (_habitFormKey.currentState!.validate()) {
+                        _habitService.addHabit(
+                          _labelController.text,
+                          _descriptionController.text,
+                        );
+                        Navigator.pop(context);
+                        setState(() {});
+                      }
+                    } else {
+                      if (_habitFormKey.currentState!.validate()) {
+                        _habitService.updateHabit(
+                            habit!.id, "label", _labelController.text);
+                        _habitService.updateHabit(habit.id, "description",
+                            _descriptionController.text);
+                        Navigator.pop(context);
+                        setState(() {});
+                      }
                     }
                   },
                   child: Row(
@@ -329,7 +346,7 @@ class _HomePageState extends State<HomePage> {
                         child: const Icon(Icons.add_task_outlined),
                       ),
                       Text(
-                        "Add Habit",
+                        add ? "Add Habit" : "Edit Habit",
                         textAlign: TextAlign.center,
                         style: TextStyle(),
                       )
@@ -713,7 +730,8 @@ class _HomePageState extends State<HomePage> {
                 onTap: () {
                   _labelController.text = habit.label;
                   _descriptionController.text = habit.description;
-                  habitFormDialog();
+                  habitFormDialog(add: false, habit: habit);
+                  //END HERE CHANGE HABIT
                 },
                 child: Padding(
                   padding: const EdgeInsets.all(8),
@@ -769,13 +787,10 @@ class _HomePageState extends State<HomePage> {
 
             List<Task> goals = snapshot.data!;
 
-            return Container(
-              decoration: BoxDecoration(border: Border.all()),
-              height: 100, // Fixed height
-              child: Column(
+            return ListView(children: [
+              Column(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-                  Text("GOALS"),
                   ...goals.map(
                     (goal) => GestureDetector(
                       child: Text(
@@ -793,7 +808,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ],
               ),
-            );
+            ]);
           },
         ));
   }

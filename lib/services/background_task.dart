@@ -9,7 +9,7 @@ final StreamController<String> taskCompletionController =
 
 Duration getTimeUntilMidnight() {
   final now = DateTime.now();
-  final midnight = DateTime(now.year, now.month, now.day, 12, 33, 0);
+  final midnight = DateTime(now.year, now.month, now.day, 23, 59, 59);
   return midnight.difference(now);
 }
 
@@ -21,8 +21,8 @@ void initializeBackgroundTasks() {
   Workmanager().registerPeriodicTask(
     'reset_habits_task',
     'reset_all_habits',
-    frequency: Duration(minutes: 15),
-    // initialDelay: getTimeUntilMidnight(),
+    frequency: Duration(days: 1),
+    initialDelay: getTimeUntilMidnight(),
   );
 }
 

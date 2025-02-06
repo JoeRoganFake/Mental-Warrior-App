@@ -23,8 +23,7 @@ class Functions {
       context: context,
       initialDate:
           onlyDate ? DateTime.now().add(Duration(days: 265)) : DateTime.now(),
-      firstDate:
-          onlyDate ? DateTime.now().add(Duration(days: 265)) : DateTime.now(),
+      firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 5000000)),
     );
 
@@ -62,7 +61,6 @@ class Functions {
         now.year, now.month, now.day, now.hour, now.minute, now.second);
     DateTime tomorrow = today.add(Duration(days: 1));
 
-    // Check conditions
     if (deadlineDateTime.year == today.year &&
         deadlineDateTime.month == today.month &&
         deadlineDateTime.day == today.day) {
