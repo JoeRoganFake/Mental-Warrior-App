@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:mental_warior/models/books.dart';
 import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/services/database_services.dart';
+import 'package:mental_warior/services/quote_service.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/models/tasks.dart';
 import 'dart:isolate';
@@ -19,18 +22,22 @@ class _HomePageState extends State<HomePage> {
   final _dateController = TextEditingController();
   final _labelController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _totalPagesController = TextEditingController();
   final GlobalKey<FormState> _taskFormKey = GlobalKey<FormState>();
   final GlobalKey<FormState> _habitFormKey = GlobalKey<FormState>();
   final GlobalKey<FormState> _goalFormKey = GlobalKey<FormState>();
+  final GlobalKey<FormState> _bookFormKey = GlobalKey<FormState>();
   final TaskService _taskService = TaskService();
   final CompletedTaskService _completedTaskService = CompletedTaskService();
   final HabitService _habitService = HabitService();
   final GoalService _goalService = GoalService();
+  final BookService _bookService = BookService();
   bool _isExpanded = false;
   Map<int, bool> taskDeletedState = {};
   static const String isolateName = 'background_task_port';
   final ReceivePort _receivePort = ReceivePort();
   String statusMessage = "Waiting for task...";
+  final QuoteService _quoteService = QuoteService();
 
   @override
   void initState() {
@@ -88,6 +95,11 @@ class _HomePageState extends State<HomePage> {
                 ),
                 onTap: () => goalFormDialog(),
               ),
+              PopupMenuItem<String>(
+                value: 'book',
+                child: Text('Book'),
+                onTap: () => bookFormDialog(),
+              ),
             ],
           );
         },
@@ -102,7 +114,7 @@ class _HomePageState extends State<HomePage> {
         context: context,
         removeTop: true,
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 30),
@@ -111,13 +123,28 @@ class _HomePageState extends State<HomePage> {
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               ),
             ),
+            Text(
+              " Daily Quote",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 20),
+            Text(
+              '"${_quoteService.getDailyQuote().text}"',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+            ),
+            SizedBox(height: 20),
+            Text(
+              "- ${_quoteService.getDailyQuote().author}",
+              style: TextStyle(fontSize: 14, fontStyle: FontStyle.normal),
+            ),
             const SizedBox(height: 25),
             Text(
               "Goals",
               textAlign: TextAlign.left,
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 20),
             _goalList(),
             const SizedBox(height: 25),
             Row(
@@ -134,7 +161,7 @@ class _HomePageState extends State<HomePage> {
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w600),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 20),
                       _taskList(),
                       _completedTaskList(),
                     ],
@@ -152,13 +179,57 @@ class _HomePageState extends State<HomePage> {
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w600),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 20),
                       _habitList()
                     ],
                   ),
                 ),
               ],
             ),
+            //TODO: get it to display the books
+            FutureBuilder(
+                future: _bookService.getBooks(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return Center(child: CircularProgressIndicator());
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error: ${snapshot.error}'));
+                  }
+
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return Center(child: Text("No books yet"));
+                  }
+
+                  final bookList = snapshot.data!;
+
+                  return ListView.builder(
+                    itemCount: bookList.length,
+                    itemBuilder: (context, index) {
+                      final book = bookList[index];
+                      return ListTile(
+                        title: Text(book.label),
+                        subtitle: Text('Total Pages: ${book.totalPages}'),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                                "${(book.progress * 100).toStringAsFixed(1)}%"),
+                            SizedBox(height: 8),
+                            LinearProgressIndicator(
+                              value: book.progress,
+                              minHeight: 8,
+                              backgroundColor: Colors.grey.shade300,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.blue),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                })
           ],
         ),
       ),
@@ -426,10 +497,131 @@ class _HomePageState extends State<HomePage> {
                 ElevatedButton(
                   onPressed: () {
                     if (_goalFormKey.currentState!.validate()) {
-                      _goalService.addGoal(
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: Text("Confirm Goal"),
+                          content: Text(
+                            "Are you sure that "
+                            "goal ${_labelController.text} is a achievable until  ${_dateController.text}\n\n"
+                            "Long-Term goals are not easily updated.\n"
+                            "Think about it first!",
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context), // Cancel
+                              child: Text("Cancel"),
+                            ),
+                            ElevatedButton(
+                              onPressed: () {
+                                _goalService.addGoal(
+                                  _labelController.text,
+                                  _dateController.text,
+                                  _descriptionController.text,
+                                );
+                                Navigator.pop(
+                                    context); // Close confirmation dialog
+                                Navigator.pop(
+                                    context); // Close goal form dialog
+                                setState(() {});
+                              },
+                              child: Text("Confirm"),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                  },
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Icon(Icons.add_task_outlined),
+                      ),
+                      Text(
+                        "Add Goal",
+                        textAlign: TextAlign.center,
+                      )
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ).then((_) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _labelController.clear();
+        _descriptionController.clear();
+        _dateController.clear();
+      });
+    });
+  }
+
+  Future<dynamic> bookFormDialog({Book? book}) {
+    return showDialog(
+      context: context,
+      builder: (context) => SimpleDialog(
+        children: [
+          Form(
+            key: _bookFormKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    "New Book",
+                  ),
+                ),
+                TextFormField(
+                  controller: _labelController,
+                  autofocus: true,
+                  validator: (value) {
+                    if (value!.isEmpty || value == "") {
+                      return "     *Field Is Required";
+                    }
+                    return null;
+                  },
+                  decoration: InputDecoration(
+                      hintText: "Label",
+                      prefixIcon: const Icon(Icons.label),
+                      border: InputBorder.none),
+                ),
+                TextFormField(
+                  controller: _totalPagesController,
+                  maxLines: null,
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value!.isEmpty) {
+                      return "     *Field Is Required";
+                    }
+
+                    // Try parsing the value to an int and check if it's more than 2
+                    int? parsedValue = int.tryParse(value);
+                    if (parsedValue == null) {
+                      return "     *Enter a valid number"; // If it's not a valid integer
+                    }
+
+                    if (parsedValue <= 2) {
+                      return "     *Value must be greater than 2";
+                    }
+
+                    return null;
+                  },
+                  decoration: InputDecoration(
+                      hintText: "Total Pages",
+                      prefixIcon: const Icon(Icons.pages),
+                      border: InputBorder.none),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (_bookFormKey.currentState!.validate()) {
+                      _bookService.addBook(
                         _labelController.text,
-                        _descriptionController.text,
-                        _dateController.text,
+                        _totalPagesController.text,
                       );
                       Navigator.pop(context);
                       setState(() {});
@@ -443,7 +635,7 @@ class _HomePageState extends State<HomePage> {
                         child: const Icon(Icons.add_task_outlined),
                       ),
                       Text(
-                        "Add Habit",
+                        "Add Book",
                         textAlign: TextAlign.center,
                         style: TextStyle(),
                       )
@@ -458,7 +650,7 @@ class _HomePageState extends State<HomePage> {
     ).then((_) {
       Future.delayed(const Duration(milliseconds: 100), () {
         _labelController.clear();
-        _descriptionController.clear();
+        _totalPagesController.clear();
       });
     });
   }
@@ -703,113 +895,215 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _habitList() {
-    return SizedBox(
-      height: 300,
+    return FutureBuilder(
+      future: _habitService.getHabits(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return Center(child: Text("No habits yet"));
+        }
+
+        // Create a list of Habit widgets
+        List<Widget> habitWidgets = snapshot.data!
+            .map<Widget>((habit) => GestureDetector(
+                  onHorizontalDragStart: (details) async {
+                    await _habitService.updateHabitStatus(
+                        habit.id, habit.status == 0 ? 1 : 0);
+                    setState(() {});
+                  },
+                  onVerticalDragEnd: (details) => setState(() {}),
+                  onLongPress: () async {
+                    await _habitService.deleteHabit(habit.id);
+                    setState(() {});
+                  },
+                  onTap: () {
+                    _labelController.text = habit.label;
+                    _descriptionController.text = habit.description;
+                    habitFormDialog(add: false, habit: habit);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Container(
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(10),
+                        color: Colors.grey.shade100,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              habit.label,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: habit.status == 0
+                                    ? Color.fromARGB(255, 0, 0, 0)
+                                    : Colors.grey,
+                                decoration: habit.status == 0
+                                    ? TextDecoration.none
+                                    : TextDecoration.lineThrough,
+                                decorationThickness: 2,
+                                decorationColor:
+                                    const Color.fromARGB(255, 255, 0, 0),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ))
+            .toList();
+
+        return Column(
+          children: habitWidgets,
+        );
+      },
+    );
+  }
+
+  Widget _goalList() {
+    return Container(
+      decoration: BoxDecoration(border: Border.all()),
+      height: 140,
       child: FutureBuilder(
-        future: _habitService.getHabits(),
+        future: _goalService.getGoals(),
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(child: Text("No habits yet"));
+            return Center(child: Text("No goals yet"));
           }
-          return ListView.builder(
-            itemCount: snapshot.data!.length,
-            itemBuilder: (context, index) {
-              Habit habit = snapshot.data![index];
+
+          List<Task> goals = snapshot.data!;
+
+          return ListView(
+            children: goals.map((goal) {
+              DateTime deadline;
+
+              try {
+                deadline =
+                    DateTime.parse(goal.deadline.trim()); // Correct parsing
+              } catch (e) {
+                return Text("Raw deadline string: ${goal.deadline}");
+              }
 
               return GestureDetector(
-                onHorizontalDragStart: (details) async {
-                  await _habitService.updateHabitStatus(
-                      habit.id, habit.status == 0 ? 1 : 0);
-                  setState(() {});
-                },
-                onVerticalDragEnd: (details) => setState(() {}),
-                onLongPress: () async {
-                  await _habitService.deleteHabit(habit.id);
+                onLongPress: () {
+                  _goalService.deleteGoal(goal.id);
                   setState(() {});
                 },
                 onTap: () {
-                  _labelController.text = habit.label;
-                  _descriptionController.text = habit.description;
-                  habitFormDialog(add: false, habit: habit);
-                  //END HERE CHANGE HABIT
+                  _showAchievementDialog(context, goal);
                 },
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Container(
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade300),
-                      borderRadius: BorderRadius.circular(10),
-                      color: Colors.grey.shade100,
+                child: Column(
+                  children: [
+                    Text(
+                      goal.label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 24,
+                      ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            habit.label,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: habit.status == 0
-                                  ? Color.fromARGB(255, 0, 0, 0)
-                                  : Colors.grey,
-                              decoration: habit.status == 0
-                                  ? TextDecoration.none
-                                  : TextDecoration.lineThrough,
-                              decorationThickness: 2,
-                              decorationColor:
-                                  const Color.fromARGB(255, 255, 0, 0),
-                            ),
-                          ),
-                        ),
-                      ],
+                    StreamBuilder(
+                      stream: Stream.periodic(Duration(seconds: 1), (_) {
+                        return deadline.difference(DateTime.now());
+                      }),
+                      builder: (context, snapshot) {
+                        if (!snapshot.hasData) return Text("Loading...");
+
+                        Duration remaining = snapshot.data!;
+                        if (remaining.isNegative) {
+                          return Text(
+                            "Deadline Passed!",
+                            style: TextStyle(color: Colors.red),
+                          );
+                        }
+
+                        int days = remaining.inDays;
+                        int hours = remaining.inHours % 24;
+                        int minutes = remaining.inMinutes % 60;
+                        int seconds = remaining.inSeconds % 60;
+
+                        return Text(
+                          "$days days, $hours h, $minutes m, $seconds s",
+                          style: TextStyle(color: Colors.grey),
+                        );
+                      },
                     ),
-                  ),
+                    Divider(),
+                  ],
                 ),
               );
-            },
+            }).toList(),
           );
         },
       ),
     );
   }
 
-  Widget _goalList() {
-    return Container(
-        decoration: BoxDecoration(border: Border.all()),
-        height: 140,
-        child: FutureBuilder(
-          future: _goalService.getGoals(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return Center(child: Text("No goals yet"));
-            }
+  void _showAchievementDialog(BuildContext context, Task goal) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Goal Achieved?"),
+        content: Text("Have you completed '${goal.label}' ?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context), // Close dialog
+            child: Text("Not Yet"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close first dialog
+              _showCongratulationsDialog(context, goal); // Show Congrats
+            },
+            child: Text("Yes!"),
+          ),
+        ],
+      ),
+    );
+  }
 
-            List<Task> goals = snapshot.data!;
+  void _showCongratulationsDialog(BuildContext context, Task goal) {
+    _goalService.deleteGoal(goal.id);
+    setState(() {});
+    List<String> quotes = [
+      "Success is not final, failure is not fatal: It is the courage to continue that counts. – Winston Churchill",
+      "The only limit to our realization of tomorrow is our doubts of today. – Franklin D. Roosevelt",
+      "Dream big and dare to fail. – Norman Vaughan",
+      "Believe you can, and you're halfway there. – Theodore Roosevelt",
+      "What you get by achieving your goals is not as important as what you become by achieving them. – Zig Ziglar",
+      "Don’t watch the clock; do what it does. Keep going. – Sam Levenson",
+      "Act as if what you do makes a difference. It does. – William James"
+    ];
 
-            return ListView(children: [
-              Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                children: [
-                  ...goals.map(
-                    (goal) => GestureDetector(
-                      child: Text(
-                        goal.label,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 30,
-                        ),
-                      ),
-                      onLongPress: () {
-                        _goalService.deleteGoal(goal.id);
-                        setState(() {});
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ]);
-          },
-        ));
+    String randomQuote =
+        quotes[Random().nextInt(quotes.length)]; // Pick a random quote
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Congratulations!"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+                "You achieved your goal: '${goal.label}'! Keep up the great work!"),
+            SizedBox(height: 20),
+            Text(
+              randomQuote,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("OK"),
+          ),
+        ],
+      ),
+    );
   }
 }

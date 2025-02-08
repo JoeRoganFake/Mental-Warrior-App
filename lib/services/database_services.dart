@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:mental_warior/models/tasks.dart';
 import 'package:mental_warior/models/habits.dart';
+import 'package:mental_warior/models/books.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +31,7 @@ class DatabaseService {
         CompletedTaskService().createCompletedTaskTable(db);
         HabitService().createHabitTable(db);
         GoalService().createGoalTable(db);
+        BookService().createbookTable(db);
       },
     );
   }
@@ -379,6 +381,78 @@ class GoalService {
     db.update(
       _goalTableName,
       {fieldToUpdate: key},
+      where: "id = ?",
+      whereArgs: [id],
+    );
+  }
+}
+
+class BookService {
+  final String _bookTableName = "books";
+  final String _bookIdColumnName = "id";
+  final String _bookLabelColumnName = "label";
+  final String _bookTimeStampColumnName = "timeStamp";
+  final String _bookTotalPagesColumnName = "totalPages";
+  final String _bookCurrentPageColmunName = "currentPage";
+
+  void createbookTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_bookTableName (
+        $_bookIdColumnName INTEGER PRIMARY KEY,
+        $_bookLabelColumnName TEXT NOT NULL,
+        $_bookTimeStampColumnName TEXT,
+        $_bookTotalPagesColumnName INTEGER NOT NULL,
+        $_bookCurrentPageColmunName INTEGER
+      ) 
+    ''');
+  }
+
+  Future addBook(
+    String label,
+    String totalPages,
+  ) async {
+    final db = await DatabaseService.instance.database;
+    await db.insert(
+      _bookTableName,
+      {
+        _bookLabelColumnName: label,
+        _bookTimeStampColumnName: TimeOfDay.now(),
+        _bookTotalPagesColumnName: totalPages,
+        _bookCurrentPageColmunName: 0,
+      },
+    );
+  }
+
+  Future<List<Book>> getBooks() async {
+    final db = await DatabaseService.instance.database;
+    final data = await db.query(
+      _bookTableName,
+    );
+
+    return data
+        .map(
+          (e) => Book(
+            id: e[_bookIdColumnName] as int,
+            label: e[_bookLabelColumnName] as String,
+            timeStamp: e[_bookTimeStampColumnName] as String,
+            totalPages: e[_bookTotalPagesColumnName] as int,
+            currentPage: e[_bookCurrentPageColmunName] as int,
+          ),
+        )
+        .toList();
+  }
+
+  Future deleteBook(int id) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete(_bookTableName, where: "id = ?", whereArgs: [id]);
+  }
+
+  void updateBookCurrentPage(int id, String page) async {
+    final db = await DatabaseService.instance.database;
+
+    db.update(
+      _bookTableName,
+      {_bookCurrentPageColmunName: page},
       where: "id = ?",
       whereArgs: [id],
     );

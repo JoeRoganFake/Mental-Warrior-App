@@ -16,7 +16,7 @@ Duration getTimeUntilMidnight() {
 void initializeBackgroundTasks() {
   print('Initializing WorkManager...');
   Workmanager().cancelAll();
-  Workmanager().initialize(callbackDispatcher, isInDebugMode: true);
+  Workmanager().initialize(callbackDispatcher);
 
   Workmanager().registerPeriodicTask(
     'reset_habits_task',
