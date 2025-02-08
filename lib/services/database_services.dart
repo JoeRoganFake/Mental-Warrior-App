@@ -409,14 +409,14 @@ class BookService {
 
   Future addBook(
     String label,
-    String totalPages,
+    int totalPages,
   ) async {
     final db = await DatabaseService.instance.database;
     await db.insert(
       _bookTableName,
       {
         _bookLabelColumnName: label,
-        _bookTimeStampColumnName: TimeOfDay.now(),
+        _bookTimeStampColumnName: TimeOfDay.now().toString(),
         _bookTotalPagesColumnName: totalPages,
         _bookCurrentPageColmunName: 0,
       },

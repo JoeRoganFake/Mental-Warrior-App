@@ -12,8 +12,8 @@ class Book {
 
   double get progress {
     if (totalPages > 0) {
-      return currentPage / totalPages; // Parsing as double
+      return currentPage / totalPages;
     }
-    return 0.0; // In case of invalid totalPages
+    return 0.0;
   }
 }

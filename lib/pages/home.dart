@@ -36,7 +36,6 @@ class _HomePageState extends State<HomePage> {
   Map<int, bool> taskDeletedState = {};
   static const String isolateName = 'background_task_port';
   final ReceivePort _receivePort = ReceivePort();
-  String statusMessage = "Waiting for task...";
   final QuoteService _quoteService = QuoteService();
 
   @override
@@ -46,10 +45,7 @@ class _HomePageState extends State<HomePage> {
     IsolateNameServer.registerPortWithName(_receivePort.sendPort, isolateName);
 
     _receivePort.listen((message) {
-      setState(() {
-        statusMessage = message;
-        print("Updated status: $statusMessage");
-      });
+      setState(() {});
     });
   }
 
@@ -186,53 +182,67 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
-            //TODO: get it to display the books
-            FutureBuilder(
-                future: _bookService.getBooks(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Center(child: CircularProgressIndicator());
-                  }
-
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
-                  }
-
-                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return Center(child: Text("No books yet"));
-                  }
-
-                  final bookList = snapshot.data!;
-
-                  return ListView.builder(
-                    itemCount: bookList.length,
-                    itemBuilder: (context, index) {
-                      final book = bookList[index];
-                      return ListTile(
-                        title: Text(book.label),
-                        subtitle: Text('Total Pages: ${book.totalPages}'),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                                "${(book.progress * 100).toStringAsFixed(1)}%"),
-                            SizedBox(height: 8),
-                            LinearProgressIndicator(
-                              value: book.progress,
-                              minHeight: 8,
-                              backgroundColor: Colors.grey.shade300,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.blue),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                })
+            _bookProgress(),
           ],
         ),
       ),
+    );
+  }
+
+  FutureBuilder<List<Book>> _bookProgress() {
+    return FutureBuilder<List<Book>>(
+      future: _bookService.getBooks(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        final books = snapshot.data;
+
+        if (books == null || books.isEmpty) {
+          return const Center(child: Text("No books yet"));
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Books Progress",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Column(
+              children: books.map((book) {
+                return ListTile(
+                  title: Text(book.label),
+                  subtitle: Text('Total Pages: ${book.totalPages}'),
+                  trailing: SizedBox(
+                    width: 80,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text("${(book.progress * 100).toStringAsFixed(1)}%"),
+                        const SizedBox(height: 8),
+                        LinearProgressIndicator(
+                          value: book.progress,
+                          minHeight: 8,
+                          backgroundColor: Colors.grey.shade300,
+                          valueColor:
+                              const AlwaysStoppedAnimation<Color>(Colors.blue),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -621,7 +631,7 @@ class _HomePageState extends State<HomePage> {
                     if (_bookFormKey.currentState!.validate()) {
                       _bookService.addBook(
                         _labelController.text,
-                        _totalPagesController.text,
+                        int.tryParse(_totalPagesController.text) ?? 0,
                       );
                       Navigator.pop(context);
                       setState(() {});
