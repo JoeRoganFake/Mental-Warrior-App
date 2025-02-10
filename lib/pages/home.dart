@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mental_warior/models/books.dart';
 import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/services/database_services.dart';
@@ -22,16 +23,14 @@ class _HomePageState extends State<HomePage> {
   final _dateController = TextEditingController();
   final _labelController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final _totalPagesController = TextEditingController();
   final GlobalKey<FormState> _taskFormKey = GlobalKey<FormState>();
   final GlobalKey<FormState> _habitFormKey = GlobalKey<FormState>();
   final GlobalKey<FormState> _goalFormKey = GlobalKey<FormState>();
-  final GlobalKey<FormState> _bookFormKey = GlobalKey<FormState>();
   final TaskService _taskService = TaskService();
   final CompletedTaskService _completedTaskService = CompletedTaskService();
   final HabitService _habitService = HabitService();
   final GoalService _goalService = GoalService();
-  final BookService _bookService = BookService();
+  final BookService _bookServiceLib = BookService();
   bool _isExpanded = false;
   Map<int, bool> taskDeletedState = {};
   static const String isolateName = 'background_task_port';
@@ -94,7 +93,7 @@ class _HomePageState extends State<HomePage> {
               PopupMenuItem<String>(
                 value: 'book',
                 child: Text('Book'),
-                onTap: () => bookFormDialog(),
+                onTap: () => showBookSearchDialog(context),
               ),
             ],
           );
@@ -182,6 +181,9 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
+            const SizedBox(
+              height: 20,
+            ),
             _bookProgress(),
           ],
         ),
@@ -191,12 +193,8 @@ class _HomePageState extends State<HomePage> {
 
   FutureBuilder<List<Book>> _bookProgress() {
     return FutureBuilder<List<Book>>(
-      future: _bookService.getBooks(),
+      future: _bookServiceLib.getBooks(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
         if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
         }
@@ -217,24 +215,27 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 10),
             Column(
               children: books.map((book) {
-                return ListTile(
-                  title: Text(book.label),
-                  subtitle: Text('Total Pages: ${book.totalPages}'),
-                  trailing: SizedBox(
-                    width: 80,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text("${(book.progress * 100).toStringAsFixed(1)}%"),
-                        const SizedBox(height: 8),
-                        LinearProgressIndicator(
-                          value: book.progress,
-                          minHeight: 8,
-                          backgroundColor: Colors.grey.shade300,
-                          valueColor:
-                              const AlwaysStoppedAnimation<Color>(Colors.blue),
-                        ),
-                      ],
+                return GestureDetector(
+                  onTap: () => _showUpdateDialog(context, book),
+                  child: ListTile(
+                    title: Text(book.label),
+                    subtitle: Text('Total Pages: ${book.totalPages}'),
+                    trailing: SizedBox(
+                      width: 80,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text("${(book.progress * 100).toStringAsFixed(1)}%"),
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: book.progress,
+                            minHeight: 8,
+                            backgroundColor: Colors.grey.shade300,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                                Colors.blue),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -570,99 +571,70 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<dynamic> bookFormDialog({Book? book}) {
+  Future<void> showBookSearchDialog(BuildContext context) {
+    final TextEditingController titleController = TextEditingController();
+    final TextEditingController pagesController = TextEditingController();
+    final _formKey = GlobalKey<FormState>();
+
     return showDialog(
       context: context,
-      builder: (context) => SimpleDialog(
-        children: [
-          Form(
-            key: _bookFormKey,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Manual Book Entry"),
+          content: Form(
+            key: _formKey,
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    "New Book",
+                TextFormField(
+                  controller: titleController,
+                  decoration: const InputDecoration(
+                    hintText: "Book Title",
+                    prefixIcon: Icon(Icons.book),
+                    border: OutlineInputBorder(),
                   ),
+                  validator: (value) =>
+                      value!.isEmpty ? "Field is required" : null,
                 ),
+                const SizedBox(height: 10),
                 TextFormField(
-                  controller: _labelController,
-                  autofocus: true,
-                  validator: (value) {
-                    if (value!.isEmpty || value == "") {
-                      return "     *Field Is Required";
-                    }
-                    return null;
-                  },
-                  decoration: InputDecoration(
-                      hintText: "Label",
-                      prefixIcon: const Icon(Icons.label),
-                      border: InputBorder.none),
-                ),
-                TextFormField(
-                  controller: _totalPagesController,
-                  maxLines: null,
+                  controller: pagesController,
                   keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    hintText: "Total Pages",
+                    prefixIcon: Icon(Icons.pages),
+                    border: OutlineInputBorder(),
+                  ),
                   validator: (value) {
-                    if (value!.isEmpty) {
-                      return "     *Field Is Required";
+                    if (value!.isEmpty) return "Field is required";
+                    if (int.tryParse(value) == null || int.parse(value) <= 2) {
+                      return "Must be greater than 2";
                     }
-
-                    // Try parsing the value to an int and check if it's more than 2
-                    int? parsedValue = int.tryParse(value);
-                    if (parsedValue == null) {
-                      return "     *Enter a valid number"; // If it's not a valid integer
-                    }
-
-                    if (parsedValue <= 2) {
-                      return "     *Value must be greater than 2";
-                    }
-
                     return null;
                   },
-                  decoration: InputDecoration(
-                      hintText: "Total Pages",
-                      prefixIcon: const Icon(Icons.pages),
-                      border: InputBorder.none),
                 ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (_bookFormKey.currentState!.validate()) {
-                      _bookService.addBook(
-                        _labelController.text,
-                        int.tryParse(_totalPagesController.text) ?? 0,
-                      );
-                      Navigator.pop(context);
-                      setState(() {});
-                    }
-                  },
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: const Icon(Icons.add_task_outlined),
-                      ),
-                      Text(
-                        "Add Book",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(),
-                      )
-                    ],
-                  ),
-                )
               ],
             ),
           ),
-        ],
-      ),
-    ).then((_) {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        _labelController.clear();
-        _totalPagesController.clear();
-      });
-    });
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (_formKey.currentState!.validate()) {
+                  _bookServiceLib.addBook(
+                      titleController.text, int.parse(pagesController.text));
+                  Navigator.pop(context);
+                }
+              },
+              child: const Text("Confirm"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Container _completedTaskList() {
@@ -1051,8 +1023,8 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _showAchievementDialog(BuildContext context, Task goal) {
-    showDialog(
+  Future<dynamic> _showAchievementDialog(BuildContext context, Task goal) {
+    return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text("Goal Achieved?"),
@@ -1074,7 +1046,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  void _showCongratulationsDialog(BuildContext context, Task goal) {
+  Future<dynamic> _showCongratulationsDialog(BuildContext context, Task goal) {
     _goalService.deleteGoal(goal.id);
     setState(() {});
     List<String> quotes = [
@@ -1090,7 +1062,7 @@ class _HomePageState extends State<HomePage> {
     String randomQuote =
         quotes[Random().nextInt(quotes.length)]; // Pick a random quote
 
-    showDialog(
+    return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text("Congratulations!"),
@@ -1114,6 +1086,147 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<dynamic> _showUpdateDialog(BuildContext context, Book book) {
+    final TextEditingController _currentPageController =
+        TextEditingController(text: book.currentPage.toString());
+
+    String? errorMessage;
+
+    return showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          // Allows UI updates
+          builder: (context, setState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Text(
+                book.label,
+                textAlign: TextAlign.center,
+                style:
+                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const SizedBox(height: 10),
+                  Text(
+                    "Update your progress",
+                    style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 90,
+                        child: TextField(
+                          controller: _currentPageController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 18),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: InputDecoration(
+                            hintText: "Enter page",
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        "/ ${book.totalPages}",
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blueAccent,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (errorMessage != null) // Display error message below input
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        errorMessage!,
+                        style: const TextStyle(
+                          color: Colors.red,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                ],
+              ),
+              actions: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text("Cancel"),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        final int? currentPage =
+                            int.tryParse(_currentPageController.text);
+
+                        if (currentPage == null || currentPage < 0) {
+                          setState(() {
+                            errorMessage = "Enter a valid page number.";
+                          });
+                          return;
+                        } else if (currentPage > book.totalPages) {
+                          setState(() {
+                            errorMessage =
+                                "Page cannot exceed ${book.totalPages}.";
+                          });
+                          return;
+                        }
+
+                        setState(() {
+                          errorMessage = null;
+                        });
+
+                        _bookServiceLib.updateBookCurrentPage(
+                            book.id, currentPage);
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text("Update",
+                          style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

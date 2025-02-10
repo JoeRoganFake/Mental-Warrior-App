@@ -447,7 +447,7 @@ class BookService {
     await db.delete(_bookTableName, where: "id = ?", whereArgs: [id]);
   }
 
-  void updateBookCurrentPage(int id, String page) async {
+  void updateBookCurrentPage(int id, int page) async {
     final db = await DatabaseService.instance.database;
 
     db.update(
