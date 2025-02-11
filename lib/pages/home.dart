@@ -23,9 +23,6 @@ class _HomePageState extends State<HomePage> {
   final _dateController = TextEditingController();
   final _labelController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final GlobalKey<FormState> _taskFormKey = GlobalKey<FormState>();
-  final GlobalKey<FormState> _habitFormKey = GlobalKey<FormState>();
-  final GlobalKey<FormState> _goalFormKey = GlobalKey<FormState>();
   final TaskService _taskService = TaskService();
   final CompletedTaskService _completedTaskService = CompletedTaskService();
   final HabitService _habitService = HabitService();
@@ -93,7 +90,7 @@ class _HomePageState extends State<HomePage> {
               PopupMenuItem<String>(
                 value: 'book',
                 child: Text('Book'),
-                onTap: () => showBookSearchDialog(context),
+                onTap: () => bookFormDialog(context),
               ),
             ],
           );
@@ -216,7 +213,7 @@ class _HomePageState extends State<HomePage> {
             Column(
               children: books.map((book) {
                 return GestureDetector(
-                  onTap: () => _showUpdateDialog(context, book),
+                  onTap: () => _showUpdateBookDialog(context, book),
                   child: ListTile(
                     title: Text(book.label),
                     subtitle: Text('Total Pages: ${book.totalPages}'),
@@ -253,12 +250,13 @@ class _HomePageState extends State<HomePage> {
     bool add = true,
     bool changeCompletedTask = false,
   }) {
+    final GlobalKey<FormState> taskFormKey = GlobalKey<FormState>();
     return showDialog(
       context: context,
       builder: (context) => SimpleDialog(
         children: [
           Form(
-            key: _taskFormKey,
+            key: taskFormKey,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -304,7 +302,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    if (_taskFormKey.currentState!.validate()) {
+                    if (taskFormKey.currentState!.validate()) {
                       if (add) {
                         _taskService.addTask(
                           _labelController.text,
@@ -360,12 +358,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<dynamic> habitFormDialog({bool add = true, Habit? habit}) {
+    final GlobalKey<FormState> habitFormKey = GlobalKey<FormState>();
     return showDialog(
       context: context,
       builder: (context) => SimpleDialog(
         children: [
           Form(
-            key: _habitFormKey,
+            key: habitFormKey,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -401,7 +400,7 @@ class _HomePageState extends State<HomePage> {
                 ElevatedButton(
                   onPressed: () {
                     if (add) {
-                      if (_habitFormKey.currentState!.validate()) {
+                      if (habitFormKey.currentState!.validate()) {
                         _habitService.addHabit(
                           _labelController.text,
                           _descriptionController.text,
@@ -410,7 +409,7 @@ class _HomePageState extends State<HomePage> {
                         setState(() {});
                       }
                     } else {
-                      if (_habitFormKey.currentState!.validate()) {
+                      if (habitFormKey.currentState!.validate()) {
                         _habitService.updateHabit(
                             habit!.id, "label", _labelController.text);
                         _habitService.updateHabit(habit.id, "description",
@@ -449,12 +448,13 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<dynamic> goalFormDialog() {
+    final GlobalKey<FormState> goalFormKey = GlobalKey<FormState>();
     return showDialog(
       context: context,
       builder: (context) => SimpleDialog(
         children: [
           Form(
-            key: _goalFormKey,
+            key: goalFormKey,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -507,7 +507,7 @@ class _HomePageState extends State<HomePage> {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    if (_goalFormKey.currentState!.validate()) {
+                    if (goalFormKey.currentState!.validate()) {
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
@@ -571,10 +571,10 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<void> showBookSearchDialog(BuildContext context) {
+  Future<dynamic> bookFormDialog(BuildContext context) {
     final TextEditingController titleController = TextEditingController();
     final TextEditingController pagesController = TextEditingController();
-    final _formKey = GlobalKey<FormState>();
+    final formKey = GlobalKey<FormState>();
 
     return showDialog(
       context: context,
@@ -582,7 +582,7 @@ class _HomePageState extends State<HomePage> {
         return AlertDialog(
           title: const Text("Manual Book Entry"),
           content: Form(
-            key: _formKey,
+            key: formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -623,7 +623,7 @@ class _HomePageState extends State<HomePage> {
             ),
             ElevatedButton(
               onPressed: () {
-                if (_formKey.currentState!.validate()) {
+                if (formKey.currentState!.validate()) {
                   _bookServiceLib.addBook(
                       titleController.text, int.parse(pagesController.text));
                   Navigator.pop(context);
@@ -1089,142 +1089,125 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<dynamic> _showUpdateDialog(BuildContext context, Book book) {
+  Future<void> _showUpdateBookDialog(BuildContext context, Book book) {
     final TextEditingController _currentPageController =
         TextEditingController(text: book.currentPage.toString());
-
-    String? errorMessage;
+    final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
     return showDialog(
       context: context,
       builder: (context) {
-        return StatefulBuilder(
-          // Allows UI updates
-          builder: (context, setState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              title: Text(
-                book.label,
-                textAlign: TextAlign.center,
-                style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 10),
-                  Text(
-                    "Update your progress",
-                    style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 90,
-                        child: TextField(
-                          controller: _currentPageController,
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 18),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          decoration: InputDecoration(
-                            hintText: "Enter page",
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        "/ ${book.totalPages}",
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (errorMessage != null) // Display error message below input
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        errorMessage!,
-                        style: const TextStyle(
-                          color: Colors.red,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                ],
-              ),
-              actions: [
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text(
+            book.label,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          content: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 10),
+                Text(
+                  "Update your progress",
+                  style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                    SizedBox(
+                      width: 150,
+                      child: TextFormField(
+                        controller: _currentPageController,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 18),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly
+                        ],
+                        decoration: InputDecoration(
+                          hintText: "Enter page",
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          contentPadding:
+                              const EdgeInsets.symmetric(vertical: 10),
                         ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return "Enter a valid page number";
+                          }
+                          final int? currentPage = int.tryParse(value);
+                          if (currentPage == null || currentPage <= 0) {
+                            return "Page must be greater than 0";
+                          }
+                          if (currentPage > book.totalPages) {
+                            return "Page cannot exceed ${book.totalPages}";
+                          }
+                          return null;
+                        },
                       ),
-                      child: const Text("Cancel"),
                     ),
-                    ElevatedButton(
-                      onPressed: () {
-                        final int? currentPage =
-                            int.tryParse(_currentPageController.text);
-
-                        if (currentPage == null || currentPage < 0) {
-                          setState(() {
-                            errorMessage = "Enter a valid page number.";
-                          });
-                          return;
-                        } else if (currentPage > book.totalPages) {
-                          setState(() {
-                            errorMessage =
-                                "Page cannot exceed ${book.totalPages}.";
-                          });
-                          return;
-                        }
-
-                        setState(() {
-                          errorMessage = null;
-                        });
-
-                        _bookServiceLib.updateBookCurrentPage(
-                            book.id, currentPage);
-                        Navigator.pop(context);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                    const SizedBox(width: 10),
+                    Text(
+                      "/ ${book.totalPages}",
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueAccent,
                       ),
-                      child: const Text("Update",
-                          style: TextStyle(color: Colors.white)),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
               ],
-            );
-          },
+            ),
+          ),
+          actions: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (_formKey.currentState!.validate()) {
+                      final int currentPage =
+                          int.parse(_currentPageController.text);
+                      _bookServiceLib.updateBookCurrentPage(
+                          book.id, currentPage);
+
+                      setState(() {});
+                      Navigator.pop(context);
+                    }
+                    setState(() {});
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text("Update",
+                      style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+          ],
         );
       },
     );

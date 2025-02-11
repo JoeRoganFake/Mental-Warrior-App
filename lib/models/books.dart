@@ -16,4 +16,14 @@ class Book {
     }
     return 0.0;
   }
+
+  factory Book.fromMap(Map<String, dynamic> map) {
+    return Book(
+      id: map['id'],
+      label: map['label'],
+      currentPage: map['currentPage'],
+      totalPages: map['totalPages'],
+      timeStamp: map["timeStamp"],
+    );
+  }
 }
