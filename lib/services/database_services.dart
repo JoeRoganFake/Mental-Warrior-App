@@ -447,11 +447,10 @@ class BookService {
     await db.delete(_bookTableName, where: "id = ?", whereArgs: [id]);
   }
 
-  Future<Book?> updateBookCurrentPage(int id, int page) async {
+  Future<bool> updateBookCurrentPage(int id, int page) async {
     final db = await DatabaseService.instance.database;
-    Book book;
 
-    db.update(
+    await db.update(
       _bookTableName,
       {_bookCurrentPageColmunName: page},
       where: "id = ?",
@@ -464,12 +463,14 @@ class BookService {
       whereArgs: [id],
     );
 
-    book = Book.fromMap(result.first);
+    if (result.isEmpty) return false;
+
+    Book book = Book.fromMap(result.first);
 
     if (book.currentPage == book.totalPages) {
-      deleteBook(book.id);
+      return true;
     }
 
-    return null;
+    return false;
   }
 }

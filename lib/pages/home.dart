@@ -181,66 +181,10 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(
               height: 20,
             ),
-            _bookProgress(),
+            _bookList(),
           ],
         ),
       ),
-    );
-  }
-
-  FutureBuilder<List<Book>> _bookProgress() {
-    return FutureBuilder<List<Book>>(
-      future: _bookServiceLib.getBooks(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
-
-        final books = snapshot.data;
-
-        if (books == null || books.isEmpty) {
-          return const Center(child: Text("No books yet"));
-        }
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Books Progress",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Column(
-              children: books.map((book) {
-                return GestureDetector(
-                  onTap: () => _showUpdateBookDialog(context, book),
-                  child: ListTile(
-                    title: Text(book.label),
-                    subtitle: Text('Total Pages: ${book.totalPages}'),
-                    trailing: SizedBox(
-                      width: 80,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text("${(book.progress * 100).toStringAsFixed(1)}%"),
-                          const SizedBox(height: 8),
-                          LinearProgressIndicator(
-                            value: book.progress,
-                            minHeight: 8,
-                            backgroundColor: Colors.grey.shade300,
-                            valueColor: const AlwaysStoppedAnimation<Color>(
-                                Colors.blue),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        );
-      },
     );
   }
 
@@ -1023,6 +967,63 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _bookList() {
+    return FutureBuilder<List<Book>>(
+      future: _bookServiceLib.getBooks(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}'));
+        }
+
+        final books = snapshot.data;
+
+        if (books == null || books.isEmpty) {
+          return const Center(child: Text("No books yet"));
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Books Progress",
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Column(
+              children: books.map((book) {
+                return GestureDetector(
+                  onTap: () => _showUpdateBookDialog(context, book),
+                  child: ListTile(
+                    title: Text(book.label),
+                    subtitle: Text(
+                        'Current Page:${book.currentPage} out of ${book.totalPages}'),
+                    trailing: SizedBox(
+                      width: 80,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text("${(book.progress * 100).toStringAsFixed(1)}%"),
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: book.progress,
+                            minHeight: 8,
+                            backgroundColor: Colors.grey.shade300,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                                Colors.blue),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<dynamic> _showAchievementDialog(BuildContext context, Task goal) {
     return showDialog(
       context: context,
@@ -1089,7 +1090,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<void> _showUpdateBookDialog(BuildContext context, Book book) {
+  Future<dynamic> _showUpdateBookDialog(BuildContext context, Book book) {
     final TextEditingController _currentPageController =
         TextEditingController(text: book.currentPage.toString());
     final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -1183,17 +1184,22 @@ class _HomePageState extends State<HomePage> {
                   child: const Text("Cancel"),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (_formKey.currentState!.validate()) {
-                      final int currentPage =
-                          int.parse(_currentPageController.text);
-                      _bookServiceLib.updateBookCurrentPage(
-                          book.id, currentPage);
+                      Future<bool> isDeleting =
+                          _bookServiceLib.updateBookCurrentPage(
+                              book.id, int.parse(_currentPageController.text));
 
                       setState(() {});
                       Navigator.pop(context);
+
+                      if (await isDeleting) {
+                        _showBookFinishedDialog(
+                          context,
+                          book,
+                        );
+                      }
                     }
-                    setState(() {});
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
@@ -1210,6 +1216,34 @@ class _HomePageState extends State<HomePage> {
           ],
         );
       },
+    );
+  }
+
+  Future<dynamic> _showBookFinishedDialog(BuildContext context, Book book) {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Book Completed?"),
+        content: Text("Did you finish reading '${book.label}'?"),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _bookServiceLib.updateBookCurrentPage(book.id, book.currentPage);
+              setState(() {});
+            },
+            child: Text("Not Yet"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _bookServiceLib.deleteBook(book.id);
+              setState(() {});
+            },
+            child: Text("Yes!"),
+          ),
+        ],
+      ),
     );
   }
 }
