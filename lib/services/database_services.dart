@@ -57,7 +57,8 @@ class TaskService {
     ''');
   }
 
-  Future addTask(String label, String deadline, String description) async {
+  Future<void> addTask(
+      String label, String deadline, String description) async {
     final db = await DatabaseService.instance.database;
     await db.insert(
       _taskTableName,
@@ -96,7 +97,7 @@ class TaskService {
         .toList();
   }
 
-  void updateTaskStatus(int id, int status) async {
+  Future<void> updateTaskStatus(int id, int status) async {
     final db = await DatabaseService.instance.database;
     await db.update(
       _taskTableName,
@@ -106,15 +107,14 @@ class TaskService {
     );
   }
 
-  Future deleteTask(int id) async {
+  Future<void> deleteTask(int id) async {
     final db = await DatabaseService.instance.database;
     await db.delete(_taskTableName, where: "id = ?", whereArgs: [id]);
   }
 
-  void updateTask(int id, String fieldToUpdate, String key) async {
+  Future<void> updateTask(int id, String fieldToUpdate, String key) async {
     final db = await DatabaseService.instance.database;
-
-    db.update(
+    await db.update(
       _taskTableName,
       {fieldToUpdate: key},
       where: "id = ?",
@@ -189,7 +189,7 @@ class CompletedTaskService {
     );
   }
 
-  void updateCompletedTask(int id, String fieldToUpdate, String key) async {
+  Future updateCompletedTask(int id, String fieldToUpdate, String key) async {
     final db = await DatabaseService.instance.database;
 
     db.update(

@@ -10,6 +10,7 @@ import 'package:mental_warior/services/quote_service.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/models/tasks.dart';
 import 'dart:isolate';
+import 'package:mental_warior/pages/meditation.dart'; // Import the Meditation page
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -33,6 +34,7 @@ class _HomePageState extends State<HomePage> {
   static const String isolateName = 'background_task_port';
   final ReceivePort _receivePort = ReceivePort();
   final QuoteService _quoteService = QuoteService();
+  int _currentIndex = 0; // Add this line
 
   @override
   void initState() {
@@ -54,137 +56,163 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        splashColor: Colors.blue,
-        onPressed: () {
-          showMenu(
-            context: context,
-            position: RelativeRect.fromLTRB(
-              MediaQuery.of(context).size.width - 5,
-              MediaQuery.of(context).size.height - 250,
-              20,
-              0,
-            ),
-            items: [
-              PopupMenuItem<String>(
-                value: 'task',
-                child: Text('Task'),
-                onTap: () => taskFormDialog(context),
+      floatingActionButton: _currentIndex == 0
+          ? FloatingActionButton(
+              splashColor: Colors.blue,
+              onPressed: () {
+                showMenu(
+                  context: context,
+                  position: RelativeRect.fromLTRB(
+                    MediaQuery.of(context).size.width - 5,
+                    MediaQuery.of(context).size.height - 250,
+                    20,
+                    0,
+                  ),
+                  items: [
+                    PopupMenuItem<String>(
+                      value: 'task',
+                      child: Text('Task'),
+                      onTap: () => taskFormDialog(context),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'habit',
+                      child: Text('Habit',
+                          style: TextStyle(
+                              color: const Color.fromARGB(255, 107, 107, 107))),
+                      onTap: () => habitFormDialog(),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'goal',
+                      child: Text(
+                        'Long Term Goal',
+                        style: TextStyle(
+                            color: const Color.fromARGB(255, 107, 107, 107)),
+                      ),
+                      onTap: () => goalFormDialog(),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'book',
+                      child: Text('Book'),
+                      onTap: () => bookFormDialog(context),
+                    ),
+                  ],
+                );
+              },
+              backgroundColor: const Color.fromARGB(255, 103, 113, 121),
+              child: const Icon(
+                Icons.add,
+                color: Colors.white,
               ),
-              PopupMenuItem<String>(
-                value: 'habit',
-                child: Text('Habit',
-                    style: TextStyle(
-                        color: const Color.fromARGB(255, 107, 107, 107))),
-                onTap: () => habitFormDialog(),
-              ),
-              PopupMenuItem<String>(
-                value: 'goal',
-                child: Text(
-                  'Long Term Goal',
-                  style: TextStyle(
-                      color: const Color.fromARGB(255, 107, 107, 107)),
-                ),
-                onTap: () => goalFormDialog(),
-              ),
-              PopupMenuItem<String>(
-                value: 'book',
-                child: Text('Book'),
-                onTap: () => bookFormDialog(context),
-              ),
-            ],
-          );
-        },
-        backgroundColor: const Color.fromARGB(255, 103, 113, 121),
-        child: const Icon(
-          Icons.add,
-          color: Colors.white,
-        ),
-      ),
+            )
+          : null, // Add this line
       backgroundColor: Colors.white,
       body: MediaQuery.removePadding(
         context: context,
         removeTop: true,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
+        child: _currentIndex == 0
+            ? _buildHomePage()
+            : MeditationPage(), // Add this line
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        items: [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home,
+                color: _currentIndex == 0 ? Colors.blue : Colors.grey),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.self_improvement,
+                color: _currentIndex == 1 ? Colors.blue : Colors.grey),
+            label: 'Meditation',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHomePage() {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 30),
+          child: Text(
+            "Good Productive ${function.getTimeOfDayDescription()}.",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Text(
+          " Daily Quote",
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        SizedBox(height: 20),
+        Text(
+          '"${_quoteService.getDailyQuote().text}"',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+        ),
+        SizedBox(height: 20),
+        Text(
+          "- ${_quoteService.getDailyQuote().author}",
+          style: TextStyle(fontSize: 14, fontStyle: FontStyle.normal),
+        ),
+        const SizedBox(height: 25),
+        Text(
+          "Goals",
+          textAlign: TextAlign.left,
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 20),
+        _goalList(),
+        const SizedBox(height: 25),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 30),
-              child: Text(
-                "Good Productive ${function.getTimeOfDayDescription()}.",
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Flexible(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Tasks Today",
+                    textAlign: TextAlign.start,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 20),
+                  _taskList(),
+                  _completedTaskList(),
+                ],
               ),
             ),
-            Text(
-              " Daily Quote",
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            SizedBox(height: 20),
-            Text(
-              '"${_quoteService.getDailyQuote().text}"',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
-            ),
-            SizedBox(height: 20),
-            Text(
-              "- ${_quoteService.getDailyQuote().author}",
-              style: TextStyle(fontSize: 14, fontStyle: FontStyle.normal),
-            ),
-            const SizedBox(height: 25),
-            Text(
-              "Goals",
-              textAlign: TextAlign.left,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 20),
-            _goalList(),
-            const SizedBox(height: 25),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Flexible(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Tasks Today",
-                        textAlign: TextAlign.start,
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 20),
-                      _taskList(),
-                      _completedTaskList(),
-                    ],
+            const SizedBox(width: 20),
+            Flexible(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Habits Today",
+                    textAlign: TextAlign.start,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
-                ),
-                const SizedBox(width: 20),
-                Flexible(
-                  flex: 2,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Habits Today",
-                        textAlign: TextAlign.start,
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 20),
-                      _habitList()
-                    ],
-                  ),
-                ),
-              ],
+                  const SizedBox(height: 20),
+                  _habitList()
+                ],
+              ),
             ),
-            const SizedBox(
-              height: 20,
-            ),
-            _bookList(),
           ],
         ),
-      ),
+        const SizedBox(
+          height: 20,
+        ),
+        _bookList(),
+      ],
     );
   }
 
@@ -196,103 +224,183 @@ class _HomePageState extends State<HomePage> {
   }) {
     final GlobalKey<FormState> taskFormKey = GlobalKey<FormState>();
     return showDialog(
-      context: context,
-      builder: (context) => SimpleDialog(
-        children: [
-          Form(
-            key: taskFormKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        context: context,
+        builder: (context) => SimpleDialog(
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    add ? "New Task" : "Edit Task",
-                  ),
-                ),
-                TextFormField(
-                  controller: _labelController,
-                  autofocus: add,
-                  validator: (value) {
-                    if (value!.isEmpty || value == "") {
-                      return "     *Field Is Required";
-                    }
-                    return null;
-                  },
-                  decoration: InputDecoration(
-                      hintText: "Label",
-                      prefixIcon: const Icon(Icons.label),
-                      border: InputBorder.none),
-                ),
-                TextFormField(
-                  controller: _descriptionController,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  decoration: InputDecoration(
-                      hintText: "Description",
-                      prefixIcon: const Icon(Icons.description),
-                      border: InputBorder.none),
-                ),
-                TextFormField(
-                  controller: _dateController,
-                  onTap: () {
-                    Functions.dateAndTimePicker(context, _dateController);
-                  },
-                  readOnly: true,
-                  decoration: InputDecoration(
-                      hintText: "Due To",
-                      prefixIcon: const Icon(Icons.calendar_month),
-                      border: InputBorder.none),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (taskFormKey.currentState!.validate()) {
-                      if (add) {
-                        _taskService.addTask(
-                          _labelController.text,
-                          _dateController.text,
-                          _descriptionController.text,
-                        );
-                      } else if (changeCompletedTask && task != null) {
-                        _completedTaskService.updateCompletedTask(
-                            task.id, "label", _labelController.text);
-                        _completedTaskService.updateCompletedTask(task.id,
-                            "description", _descriptionController.text);
-                        _completedTaskService.updateCompletedTask(
-                            task.id, "deadline", _dateController.text);
-                      } else if (!add && task != null) {
-                        _taskService.updateTask(
-                            task.id, "label", _labelController.text);
-                        _taskService.updateTask(task.id, "description",
-                            _descriptionController.text);
-                        _taskService.updateTask(
-                            task.id, "deadline", _dateController.text);
-                      }
-                      Navigator.pop(context);
-                      setState(() {});
-                    }
-                  },
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                Form(
+                  key: taskFormKey,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       Padding(
                         padding: const EdgeInsets.all(8.0),
-                        child: const Icon(Icons.add_task_outlined),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                add ? "New Task" : "Edit Task",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            if (!add)
+                              IconButton(
+                                icon: Icon(Icons.delete, color: Colors.black),
+                                onPressed: () async {
+                                  if (task != null) {
+                                    if (changeCompletedTask) {
+                                      await _completedTaskService
+                                          .deleteCompTask(task.id);
+                                    } else {
+                                      await _taskService.deleteTask(task.id);
+                                    }
+                                    Navigator.pop(context);
+                                    setState(() {});
+                                  }
+                                },
+                              ),
+                          ],
+                        ),
                       ),
-                      Text(
-                        add ? "Add Task" : "Edit Task",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: TextFormField(
+                          controller: _labelController,
+                          autofocus: add,
+                          validator: (value) {
+                            if (value!.isEmpty || value == "") {
+                              return "     *Field Is Required";
+                            }
+                            return null;
+                          },
+                          decoration: InputDecoration(
+                            hintText: "Label",
+                            prefixIcon: const Icon(Icons.label),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8.0, vertical: 8.0),
+                        child: TextFormField(
+                          controller: _descriptionController,
+                          maxLines: null,
+                          keyboardType: TextInputType.multiline,
+                          decoration: InputDecoration(
+                            hintText: "Description",
+                            prefixIcon: const Icon(Icons.description),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Stack(
+                          alignment: Alignment.centerRight,
+                          children: [
+                            TextFormField(
+                              controller: _dateController,
+                              onTap: () async {
+                                await Functions.dateAndTimePicker(
+                                    context, _dateController);
+                                setState(() {});
+                              },
+                              readOnly: true,
+                              decoration: InputDecoration(
+                                hintText: "Due To",
+                                prefixIcon: const Icon(Icons.calendar_month),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                ),
+                              ),
+                            ),
+                            if (_dateController.text.isNotEmpty)
+                              IconButton(
+                                icon: Icon(Icons.clear),
+                                onPressed: () {
+                                  setState(() {
+                                    _dateController.clear();
+                                  });
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8.0),
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (taskFormKey.currentState!.validate()) {
+                              Future<void> operation;
+                              if (add) {
+                                operation = _taskService.addTask(
+                                  _labelController.text,
+                                  _dateController.text,
+                                  _descriptionController.text,
+                                );
+                              } else if (changeCompletedTask && task != null) {
+                                operation = Future.wait([
+                                  _completedTaskService.updateCompletedTask(
+                                      task.id, "label", _labelController.text),
+                                  _completedTaskService.updateCompletedTask(
+                                      task.id,
+                                      "description",
+                                      _descriptionController.text),
+                                  _completedTaskService.updateCompletedTask(
+                                      task.id,
+                                      "deadline",
+                                      _dateController.text),
+                                ]);
+                              } else if (!add && task != null) {
+                                operation = Future.wait([
+                                  _taskService.updateTask(
+                                      task.id, "label", _labelController.text),
+                                  _taskService.updateTask(
+                                      task.id,
+                                      "description",
+                                      _descriptionController.text),
+                                  _taskService.updateTask(task.id, "deadline",
+                                      _dateController.text),
+                                ]);
+                              } else {
+                                operation = Future.value();
+                              }
+
+                              await operation;
+                              Navigator.pop(context);
+                              setState(() {});
+                            }
+                          },
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: const Icon(Icons.add_task_outlined),
+                              ),
+                              Text(
+                                add ? "Add Task" : "Edit Task",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(),
+                              )
+                            ],
+                          ),
+                        ),
                       )
                     ],
                   ),
-                )
+                ),
               ],
-            ),
-          ),
-        ],
-      ),
-    ).then((_) {
+            )).then((_) {
       Future.delayed(const Duration(milliseconds: 100), () {
         _labelController.clear();
         _descriptionController.clear();
@@ -581,216 +689,193 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Container _completedTaskList() {
-    return Container(
-      decoration: BoxDecoration(border: Border.all()),
-      width: 200,
-      child: FutureBuilder(
-          future: _completedTaskService.getCompletedTasks(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              _isExpanded = false;
-              return SizedBox.shrink();
-            }
+  Widget _completedTaskList() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: Container(
+        width: 200,
+        child: FutureBuilder(
+            future: _completedTaskService.getCompletedTasks(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                _isExpanded = false;
+                return SizedBox.shrink();
+              }
 
-            return SingleChildScrollView(
-              child: ExpansionPanelList(
-                expansionCallback: (int index, bool isExpanded) {
-                  setState(() {
-                    _isExpanded = !_isExpanded;
-                  });
-                },
-                children: [
-                  ExpansionPanel(
-                    headerBuilder: (context, isExpanded) {
-                      return ListTile(
-                        title: Text(
-                          "Completed Tasks",
-                        ),
-                      );
-                    },
-                    body: Column(
-                      children: snapshot.data?.map<Widget>((ctask) {
-                            bool isTaskDeleted =
-                                taskDeletedState[ctask.id] ?? false;
-                            return Padding(
-                              padding: const EdgeInsets.all(6.0),
-                              child: GestureDetector(
-                                child: AnimatedOpacity(
-                                  duration: const Duration(milliseconds: 200),
-                                  opacity: isTaskDeleted ? 0.0 : 1.0,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(16),
-                                      color: const Color.fromARGB(
-                                          255, 119, 119, 119),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Flexible(
-                                          child: Padding(
-                                            padding:
-                                                const EdgeInsets.only(left: 30),
-                                            child: Text(
-                                              ctask.label,
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                overflow: TextOverflow.ellipsis,
+              return SingleChildScrollView(
+                child: ExpansionPanelList(
+                  expansionCallback: (int index, bool isExpanded) {
+                    setState(() {
+                      _isExpanded = !_isExpanded;
+                    });
+                  },
+                  children: [
+                    ExpansionPanel(
+                      headerBuilder: (context, isExpanded) {
+                        return ListTile(
+                          title: Text(
+                            "Completed Tasks",
+                          ),
+                        );
+                      },
+                      body: Column(
+                        children: snapshot.data?.map<Widget>((ctask) {
+                              bool isTaskDeleted =
+                                  taskDeletedState[ctask.id] ?? false;
+                              return Padding(
+                                padding: const EdgeInsets.all(6.0),
+                                child: GestureDetector(
+                                  child: AnimatedOpacity(
+                                    duration: const Duration(milliseconds: 200),
+                                    opacity: isTaskDeleted ? 0.0 : 1.0,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(16),
+                                        color: const Color.fromARGB(
+                                            255, 119, 119, 119),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Flexible(
+                                            child: Padding(
+                                              padding: const EdgeInsets.only(
+                                                  left: 30),
+                                              child: Text(
+                                                ctask.label,
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(right: 30),
-                                          child: Checkbox(
-                                            value: ctask.status == 0,
-                                            onChanged: (value) async {
-                                              setState(() {
-                                                _completedTaskService
-                                                    .updateCompTaskStatus(
-                                                  ctask.id,
-                                                  value == true ? 0 : 1,
-                                                );
-                                              });
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                                right: 30),
+                                            child: Checkbox(
+                                              value: ctask.status == 0,
+                                              onChanged: (value) async {
+                                                setState(() {
+                                                  _completedTaskService
+                                                      .updateCompTaskStatus(
+                                                    ctask.id,
+                                                    value == true ? 0 : 1,
+                                                  );
+                                                });
 
-                                              await Future.delayed(
-                                                  const Duration(
-                                                      milliseconds: 250));
-                                              await _taskService.addTask(
-                                                  ctask.label,
-                                                  ctask.deadline,
-                                                  ctask.description);
-                                              await _completedTaskService
-                                                  .deleteCompTask(ctask.id);
+                                                await Future.delayed(
+                                                    const Duration(
+                                                        milliseconds: 250));
+                                                await _taskService.addTask(
+                                                    ctask.label,
+                                                    ctask.deadline,
+                                                    ctask.description);
+                                                await _completedTaskService
+                                                    .deleteCompTask(ctask.id);
 
-                                              setState(() {});
-                                            },
-                                          ),
-                                        )
-                                      ],
+                                                setState(() {});
+                                              },
+                                            ),
+                                          )
+                                        ],
+                                      ),
                                     ),
                                   ),
+                                  onTap: () {
+                                    _labelController.text = ctask.label;
+                                    _dateController.text = ctask.deadline;
+                                    _descriptionController.text =
+                                        ctask.description;
+                                    taskFormDialog(context,
+                                        add: false,
+                                        changeCompletedTask: true,
+                                        task: ctask);
+                                  },
                                 ),
-                                onLongPress: () {
-                                  setState(() {
-                                    taskDeletedState[ctask.id] = true;
-                                  });
-
-                                  Future.delayed(
-                                      const Duration(milliseconds: 200),
-                                      () async {
-                                    await _completedTaskService
-                                        .deleteCompTask(ctask.id);
-
-                                    setState(() {
-                                      taskDeletedState = {};
-                                    });
-                                  });
-                                },
-                                onTap: () {
-                                  _labelController.text = ctask.label;
-                                  _dateController.text = ctask.deadline;
-                                  _descriptionController.text =
-                                      ctask.description;
-                                  taskFormDialog(context,
-                                      add: false,
-                                      changeCompletedTask: true,
-                                      task: ctask);
-                                },
-                              ),
-                            );
-                          }).toList() ??
-                          [],
+                              );
+                            }).toList() ??
+                            [],
+                      ),
+                      isExpanded: _isExpanded,
                     ),
-                    isExpanded: _isExpanded,
-                  ),
-                ],
-              ),
-            );
-          }),
+                  ],
+                ),
+              );
+            }),
+      ),
     );
   }
 
-  Widget _taskList() {
+  Container _taskList() {
     return Container(
-      decoration: BoxDecoration(border: Border.all()),
-      height: 300,
-      width: 200,
       child: FutureBuilder(
           future: _taskService.getTasks(),
           builder: (context, snapshot) {
             if (!snapshot.hasData || snapshot.data!.isEmpty) {
               return Center(child: Text("No tasks yet"));
             }
-            return ListView.builder(
-              scrollDirection: Axis.vertical,
-              itemCount: snapshot.data?.length ?? 0,
-              itemBuilder: (context, index) {
-                Task task = snapshot.data![index];
+            return Column(
+              children: snapshot.data!.map<Widget>((task) {
                 bool isTaskDeleted = taskDeletedState[task.id] ?? false;
                 return Padding(
                   padding: const EdgeInsets.all(6.0),
                   child: GestureDetector(
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 200),
-                      opacity: isTaskDeleted ? 0.0 : 1.0,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          color: const Color.fromARGB(255, 119, 119, 119),
-                        ),
-                        child: Column(children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Flexible(
-                                child: Padding(
-                                  padding: const EdgeInsets.only(left: 30),
-                                  child: Text(
-                                    task.label,
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        color: const Color.fromARGB(255, 119, 119, 119),
+                      ),
+                      child: Column(children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 30),
+                                child: Text(
+                                  task.label,
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ),
-                              Padding(
-                                padding: const EdgeInsets.only(right: 30),
-                                child: Checkbox(
-                                  value: task.status == 1,
-                                  onChanged: (value) async {
-                                    setState(() {
-                                      _taskService.updateTaskStatus(
-                                          task.id, value == true ? 1 : 0);
-                                    });
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(right: 30),
+                              child: Checkbox(
+                                value: task.status == 1,
+                                onChanged: (value) async {
+                                  setState(() {
+                                    _taskService.updateTaskStatus(
+                                        task.id, value == true ? 1 : 0);
+                                  });
 
-                                    await Future.delayed(
-                                        const Duration(milliseconds: 250));
+                                  await Future.delayed(
+                                      const Duration(milliseconds: 250));
 
-                                    if (value == true) {
-                                      await _completedTaskService
-                                          .addCompletedTask(task.label,
-                                              task.deadline, task.description);
-                                      await _taskService.deleteTask(task.id);
-                                    }
-                                    setState(() {});
-                                  },
-                                ),
-                              )
-                            ],
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              Functions.whenDue(task),
-                            ],
-                          )
-                        ]),
-                      ),
+                                  if (value == true) {
+                                    await _completedTaskService
+                                        .addCompletedTask(task.label,
+                                            task.deadline, task.description);
+                                    await _taskService.deleteTask(task.id);
+                                  }
+                                  setState(() {});
+                                },
+                              ),
+                            )
+                          ],
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            Functions.whenDue(task),
+                          ],
+                        )
+                      ]),
                     ),
                     onTap: () {
                       _labelController.text = task.label;
@@ -798,23 +883,9 @@ class _HomePageState extends State<HomePage> {
                       _dateController.text = task.deadline;
                       taskFormDialog(context, add: false, task: task);
                     },
-                    onLongPress: () {
-                      setState(() {
-                        taskDeletedState[task.id] = true;
-                      });
-
-                      Future.delayed(const Duration(milliseconds: 200),
-                          () async {
-                        await _taskService.deleteTask(task.id);
-
-                        setState(() {
-                          taskDeletedState = {};
-                        });
-                      });
-                    },
                   ),
                 );
-              },
+              }).toList(),
             );
           }),
     );
@@ -828,7 +899,6 @@ class _HomePageState extends State<HomePage> {
           return Center(child: Text("No habits yet"));
         }
 
-        // Create a list of Habit widgets
         List<Widget> habitWidgets = snapshot.data!
             .map<Widget>((habit) => GestureDetector(
                   onHorizontalDragStart: (details) async {
@@ -892,7 +962,6 @@ class _HomePageState extends State<HomePage> {
   Widget _goalList() {
     return Container(
       decoration: BoxDecoration(border: Border.all()),
-      height: 140,
       child: FutureBuilder(
         future: _goalService.getGoals(),
         builder: (context, snapshot) {
@@ -902,13 +971,12 @@ class _HomePageState extends State<HomePage> {
 
           List<Task> goals = snapshot.data!;
 
-          return ListView(
+          return Column(
             children: goals.map((goal) {
               DateTime deadline;
 
               try {
-                deadline =
-                    DateTime.parse(goal.deadline.trim()); // Correct parsing
+                deadline = DateTime.parse(goal.deadline.trim());
               } catch (e) {
                 return Text("Raw deadline string: ${goal.deadline}");
               }
@@ -968,59 +1036,63 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _bookList() {
-    return FutureBuilder<List<Book>>(
-      future: _bookServiceLib.getBooks(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(child: Text('Error: ${snapshot.error}'));
-        }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 50),
+      child: FutureBuilder<List<Book>>(
+        future: _bookServiceLib.getBooks(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
 
-        final books = snapshot.data;
+          final books = snapshot.data;
 
-        if (books == null || books.isEmpty) {
-          return const Center(child: Text("No books yet"));
-        }
+          if (books == null || books.isEmpty) {
+            return const Center(child: Text("No books yet"));
+          }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Books Progress",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            Column(
-              children: books.map((book) {
-                return GestureDetector(
-                  onTap: () => _showUpdateBookDialog(context, book),
-                  child: ListTile(
-                    title: Text(book.label),
-                    subtitle: Text(
-                        'Current Page:${book.currentPage} out of ${book.totalPages}'),
-                    trailing: SizedBox(
-                      width: 80,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text("${(book.progress * 100).toStringAsFixed(1)}%"),
-                          const SizedBox(height: 8),
-                          LinearProgressIndicator(
-                            value: book.progress,
-                            minHeight: 8,
-                            backgroundColor: Colors.grey.shade300,
-                            valueColor: const AlwaysStoppedAnimation<Color>(
-                                Colors.blue),
-                          ),
-                        ],
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Books Progress",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              Column(
+                children: books.map((book) {
+                  return GestureDetector(
+                    onTap: () => _showUpdateBookDialog(context, book),
+                    child: ListTile(
+                      title: Text(book.label),
+                      subtitle: Text(
+                          'Current Page:${book.currentPage} out of ${book.totalPages}'),
+                      trailing: SizedBox(
+                        width: 80,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                                "${(book.progress * 100).toStringAsFixed(1)}%"),
+                            const SizedBox(height: 8),
+                            LinearProgressIndicator(
+                              value: book.progress,
+                              minHeight: 8,
+                              backgroundColor: Colors.grey.shade300,
+                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                  Colors.blue),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ],
-        );
-      },
+                  );
+                }).toList(),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
