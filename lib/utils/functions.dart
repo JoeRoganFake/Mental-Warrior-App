@@ -19,7 +19,7 @@ class Functions {
       {bool onlyDate = false}) async {
     controller.clear();
 
-    DateTime? _pickedDate = await showDatePicker(
+    DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate:
           onlyDate ? DateTime.now().add(Duration(days: 265)) : DateTime.now(),
@@ -27,19 +27,19 @@ class Functions {
       lastDate: DateTime.now().add(const Duration(days: 5000000)),
     );
 
-    if (_pickedDate != null) {
+    if (pickedDate != null) {
       if (onlyDate) {
-        String formattedDate = _pickedDate.toIso8601String().split('T')[0];
+        String formattedDate = pickedDate.toIso8601String().split('T')[0];
         controller.text = formattedDate;
       } else {
-        TimeOfDay? _pickedTime = await showTimePicker(
+        TimeOfDay? pickedTime = await showTimePicker(
           context: context,
           initialTime: TimeOfDay.now(),
         );
 
-        if (_pickedTime != null) {
+        if (pickedTime != null) {
           String formattedDateTime =
-              "${_pickedDate.toIso8601String().split('T')[0]} ${_pickedTime.format(context)}";
+              "${pickedDate.toIso8601String().split('T')[0]} ${pickedTime.format(context)}";
 
           controller.text = formattedDateTime;
         }

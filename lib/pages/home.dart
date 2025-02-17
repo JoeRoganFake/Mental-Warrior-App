@@ -104,14 +104,12 @@ class _HomePageState extends State<HomePage> {
                 color: Colors.white,
               ),
             )
-          : null, // Add this line
+          : null,
       backgroundColor: Colors.white,
       body: MediaQuery.removePadding(
         context: context,
         removeTop: true,
-        child: _currentIndex == 0
-            ? _buildHomePage()
-            : MeditationPage(), // Add this line
+        child: _currentIndex == 0 ? _buildHomePage() : MeditationPage(),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
@@ -692,7 +690,7 @@ class _HomePageState extends State<HomePage> {
   Widget _completedTaskList() {
     return Padding(
       padding: const EdgeInsets.only(top: 20),
-      child: Container(
+      child: SizedBox(
         width: 200,
         child: FutureBuilder(
             future: _completedTaskService.getCompletedTasks(),
@@ -1163,9 +1161,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<dynamic> _showUpdateBookDialog(BuildContext context, Book book) {
-    final TextEditingController _currentPageController =
+    final TextEditingController currentPageController =
         TextEditingController(text: book.currentPage.toString());
-    final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+    final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
     return showDialog(
       context: context,
@@ -1180,7 +1178,7 @@ class _HomePageState extends State<HomePage> {
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           content: Form(
-            key: _formKey,
+            key: formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -1198,7 +1196,7 @@ class _HomePageState extends State<HomePage> {
                     SizedBox(
                       width: 150,
                       child: TextFormField(
-                        controller: _currentPageController,
+                        controller: currentPageController,
                         keyboardType: TextInputType.number,
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontSize: 18),
@@ -1257,10 +1255,10 @@ class _HomePageState extends State<HomePage> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    if (_formKey.currentState!.validate()) {
+                    if (formKey.currentState!.validate()) {
                       Future<bool> isDeleting =
                           _bookServiceLib.updateBookCurrentPage(
-                              book.id, int.parse(_currentPageController.text));
+                              book.id, int.parse(currentPageController.text));
 
                       setState(() {});
                       Navigator.pop(context);

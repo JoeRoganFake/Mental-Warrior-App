@@ -281,10 +281,8 @@ class HabitService {
 
   Future<void> resetAllHabits() async {
     try {
-      ;
       final db = await DatabaseService.instance.database;
 
-      ;
       List<Map<String, dynamic>> habitList = await db.query(_habitTableName);
 
       if (habitList.isEmpty) {
