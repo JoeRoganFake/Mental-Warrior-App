@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 class MeditationPage extends StatefulWidget {
@@ -7,6 +8,7 @@ class MeditationPage extends StatefulWidget {
 
 class _MeditationPageState extends State<MeditationPage> {
   String? selectedMode;
+  final List<int> durations = [5, 10, 15, 20, 25, 30, 45, 60];
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +47,7 @@ class _MeditationPageState extends State<MeditationPage> {
         setState(() {
           selectedMode = title;
         });
-        _selectDuration();
+        _showDurationSelection();
       },
       child: Container(
         width: 140,
@@ -75,152 +77,102 @@ class _MeditationPageState extends State<MeditationPage> {
     );
   }
 
-  Future _selectDuration() {
-    return showDialog(
+  void _showDurationSelection() {
+    showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Center(
-            child: Text(
-              "Select Duration",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-            ),
-          ),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          content: SizedBox(
-            height: 250,
-            width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: durations.length,
-                    itemBuilder: (context, index) {
-                      return _buildDurationButton(durations[index]);
+          title: Text("Select Duration"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ...durations.map((duration) => ListTile(
+                    title: Text("$duration minutes"),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _startMeditation(duration);
                     },
-                  ),
+                  )),
+              ListTile(
+                title: Text(
+                  "Custom",
+                  textAlign: TextAlign.center,
                 ),
-                SizedBox(height: 10),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _showCustomTimePicker();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orangeAccent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    textStyle:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  child: Text("Custom Time"),
-                ),
-              ],
-            ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showCustomTimePicker();
+                },
+              ),
+            ],
           ),
         );
       },
-    ).then((_) {
-      Future.delayed(const Duration(milliseconds: 1), () {
-        selectedMode = null;
-      });
-    });
-  }
-
-  final List<int> durations = [5, 10, 15, 20, 30, 45, 60];
-
-  Widget _buildDurationButton(int minutes) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 20),
-      child: ElevatedButton(
-        onPressed: () {
-          Navigator.pop(context);
-        },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.blueAccent,
-          foregroundColor: Colors.white,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          elevation: 3,
-          padding: EdgeInsets.symmetric(vertical: 14),
-          textStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        child: Text("$minutes min"),
-      ),
     );
   }
 
   void _showCustomTimePicker() {
     int customMinutes = 5;
-
+    Timer? timer;
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Center(
-                child: Text(
-                  "Set Custom Time",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-                ),
-              ),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
+              title: Text("Set Custom Time"),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      IconButton(
-                        icon: Icon(Icons.remove_circle_outline, size: 30),
-                        onPressed: () {
-                          if (customMinutes > 1) {
-                            setDialogState(() => customMinutes--);
-                          }
+                      GestureDetector(
+                        onLongPressStart: (_) {
+                          timer =
+                              Timer.periodic(Duration(milliseconds: 100), (t) {
+                            if (customMinutes > 1) {
+                              setDialogState(() => customMinutes--);
+                            }
+                          });
                         },
-                      ),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 15),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          color: Colors.grey[200],
-                        ),
-                        child: Text(
-                          "$customMinutes min",
-                          style: TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.add_circle_outline, size: 30),
-                        onPressed: () {
-                          setDialogState(() => customMinutes++);
+                        onLongPressEnd: (_) {
+                          timer?.cancel();
                         },
+                        child: IconButton(
+                          icon: Icon(Icons.remove_circle_outline),
+                          onPressed: () {
+                            if (customMinutes > 1) {
+                              setDialogState(() => customMinutes--);
+                            }
+                          },
+                        ),
+                      ),
+                      Text("$customMinutes min",
+                          style: TextStyle(fontSize: 24)),
+                      GestureDetector(
+                        onLongPressStart: (_) {
+                          timer =
+                              Timer.periodic(Duration(milliseconds: 50), (t) {
+                            setDialogState(() => customMinutes++);
+                          });
+                        },
+                        onLongPressEnd: (_) {
+                          timer?.cancel();
+                        },
+                        child: IconButton(
+                          icon: Icon(Icons.add_circle_outline),
+                          onPressed: () {
+                            setDialogState(() => customMinutes++);
+                          },
+                        ),
                       ),
                     ],
                   ),
-                  SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: () {
                       Navigator.pop(context);
+                      _startMeditation(customMinutes);
                     },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.greenAccent,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      textStyle:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
                     child: Text("Start"),
                   ),
                 ],
@@ -229,6 +181,61 @@ class _MeditationPageState extends State<MeditationPage> {
           },
         );
       },
+    );
+  }
+
+  void _startMeditation(int minutes) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MeditationCountdownScreen(duration: minutes),
+      ),
+    );
+  }
+}
+
+// Meditation Countdown Screen
+class MeditationCountdownScreen extends StatefulWidget {
+  final int duration;
+  MeditationCountdownScreen({required this.duration});
+
+  @override
+  _MeditationCountdownScreenState createState() =>
+      _MeditationCountdownScreenState();
+}
+
+class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
+  late int remainingSeconds;
+  Timer? countdownTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    remainingSeconds = widget.duration * 60;
+    countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+      if (remainingSeconds > 0) {
+        setState(() => remainingSeconds--);
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Text(
+          "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
+          style: TextStyle(fontSize: 80, fontWeight: FontWeight.bold),
+        ),
+      ),
     );
   }
 }
