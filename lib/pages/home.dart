@@ -10,7 +10,8 @@ import 'package:mental_warior/services/quote_service.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/models/tasks.dart';
 import 'dart:isolate';
-import 'package:mental_warior/pages/meditation.dart'; // Import the Meditation page
+import 'package:mental_warior/pages/meditation.dart';
+import 'package:mental_warior/services/background_task.dart'; // Import the background task
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -44,6 +45,16 @@ class _HomePageState extends State<HomePage> {
 
     _receivePort.listen((message) {
       setState(() {});
+    });
+
+    // Listen for messages from the background task
+    taskCompletionController.stream.listen((message) {
+      if (message == "Task Completed!") {
+        print("UAUAUAAU");
+        setState(() {
+          // Update the UI when the task completes
+        });
+      }
     });
   }
 
@@ -817,7 +828,6 @@ class _HomePageState extends State<HomePage> {
             }
             return Column(
               children: snapshot.data!.map<Widget>((task) {
-                bool isTaskDeleted = taskDeletedState[task.id] ?? false;
                 return Padding(
                   padding: const EdgeInsets.all(6.0),
                   child: GestureDetector(

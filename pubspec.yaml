@@ -38,7 +38,8 @@ dependencies:
   provider: ^6.1.0
   shared_preferences: ^2.5.1
   sqflite: ^2.4.1
-  workmanager: ^0.5.2
+  android_alarm_manager_plus: ^4.0.7
+  
 
 dev_dependencies:
   flutter_lints: ^5.0.0
