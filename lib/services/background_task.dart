@@ -29,7 +29,7 @@ void resetHabitsTask() async {
 
 Duration getTimeUntilMidnight() {
   final now = DateTime.now();
-  final midnight = DateTime(now.year, now.month, now.day, 18, 44, 59);
+  final midnight = DateTime(now.year, now.month, now.day, 23, 59, 59);
   return midnight.difference(now);
 }
 
@@ -37,18 +37,10 @@ Future<void> initializeBackgroundTasks() async {
   print("🛠 Initializing Background Tasks...");
 
   try {
-    // Cancel any existing alarms
     await AndroidAlarmManager.cancel(0);
 
-    // Get the next runtime
-    final duration = getTimeUntilMidnight();
-    final DateTime scheduledTime = DateTime.now().add(duration);
-
-    print("📅 Next scheduled run: ${scheduledTime.toString()}");
-
-    // Schedule the periodic task
     bool success = await AndroidAlarmManager.periodic(
-      const Duration(minutes: 1),
+      const Duration(days: 1),
       0, // Unique ID
       resetHabitsTask,
       exact: true,

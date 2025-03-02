@@ -50,10 +50,10 @@ class _HomePageState extends State<HomePage> {
     // Listen for messages from the background task
     taskCompletionController.stream.listen((message) {
       if (message == "Task Completed!") {
-        print("UAUAUAAU");
         setState(() {
           // Update the UI when the task completes
         });
+        print("Seted Astated");
       }
     });
   }

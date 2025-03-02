@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
 class MeditationPage extends StatefulWidget {
+  const MeditationPage({super.key});
+
   @override
   _MeditationPageState createState() => _MeditationPageState();
 }
@@ -197,7 +200,7 @@ class _MeditationPageState extends State<MeditationPage> {
 // Meditation Countdown Screen
 class MeditationCountdownScreen extends StatefulWidget {
   final int duration;
-  MeditationCountdownScreen({required this.duration});
+  const MeditationCountdownScreen({super.key, required this.duration});
 
   @override
   _MeditationCountdownScreenState createState() =>
@@ -207,6 +210,7 @@ class MeditationCountdownScreen extends StatefulWidget {
 class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
   late int remainingSeconds;
   Timer? countdownTimer;
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
@@ -217,8 +221,13 @@ class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
         setState(() => remainingSeconds--);
       } else {
         timer.cancel();
+        playAlarm();
       }
     });
+  }
+
+  Future<void> playAlarm() async {
+    await _audioPlayer.play(AssetSource('time_up_samsung.mp3')); // Play sound
   }
 
   @override
@@ -231,9 +240,30 @@ class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: Text(
-          "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
-          style: TextStyle(fontSize: 80, fontWeight: FontWeight.bold),
+        child: TweenAnimationBuilder(
+          tween:
+              Tween(begin: 1.0, end: remainingSeconds / (widget.duration * 60)),
+          duration: Duration(seconds: 1),
+          builder: (context, double value, child) {
+            return Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 400,
+                  height: 400,
+                  child: CircularProgressIndicator(
+                    backgroundColor: const Color.fromARGB(255, 197, 197, 197),
+                    value: value,
+                    strokeWidth: 10,
+                  ),
+                ),
+                Text(
+                  "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
+                  style: TextStyle(fontSize: 50, fontWeight: FontWeight.bold),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
