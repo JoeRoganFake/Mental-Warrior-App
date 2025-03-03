@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:mental_warior/pages/home.dart';
+import 'package:mental_warior/services/database_services.dart';
 
 class MeditationPage extends StatefulWidget {
   const MeditationPage({super.key});
@@ -211,12 +213,18 @@ class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
   late int remainingSeconds;
   Timer? countdownTimer;
   final AudioPlayer _audioPlayer = AudioPlayer();
+  bool isPaused = false;
+  final habits = HabitService();
 
   @override
   void initState() {
     super.initState();
     remainingSeconds = widget.duration * 60;
-    countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+    startTimer();
+  }
+
+  void startTimer() {
+    countdownTimer = Timer.periodic(Duration(milliseconds: 25), (timer) {
       if (remainingSeconds > 0) {
         setState(() => remainingSeconds--);
       } else {
@@ -226,46 +234,130 @@ class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
     });
   }
 
+  void pauseTimer() {
+    countdownTimer?.cancel();
+    setState(() {
+      isPaused = true;
+    });
+  }
+
+  void resumeTimer() {
+    startTimer();
+    setState(() {
+      isPaused = false;
+    });
+  }
+
+  void terminateMeditation() {
+    countdownTimer?.cancel();
+    Navigator.pop(context);
+  }
+
   Future<void> playAlarm() async {
-    await _audioPlayer.play(AssetSource('time_up_samsung.mp3')); // Play sound
+    await _audioPlayer.setAudioContext(
+      AudioContext(
+        android: AudioContextAndroid(
+          usageType: AndroidUsageType.notification, // Uses ring volume
+          contentType: AndroidContentType.sonification,
+          audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+        ),
+      ),
+    );
+    await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+    await _audioPlayer.play(
+      AssetSource('audio/time_up_samsung.mp3'),
+      volume: 1.0,
+    );
   }
 
   @override
   void dispose() {
     countdownTimer?.cancel();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: TweenAnimationBuilder(
-          tween:
-              Tween(begin: 1.0, end: remainingSeconds / (widget.duration * 60)),
-          duration: Duration(seconds: 1),
-          builder: (context, double value, child) {
-            return Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 400,
-                  height: 400,
-                  child: CircularProgressIndicator(
-                    backgroundColor: const Color.fromARGB(255, 197, 197, 197),
-                    value: value,
-                    strokeWidth: 10,
-                  ),
-                ),
-                Text(
-                  "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
-                  style: TextStyle(fontSize: 50, fontWeight: FontWeight.bold),
-                ),
-              ],
-            );
-          },
+        appBar: AppBar(
+          title: Text("Meditation Timer"),
+          centerTitle: true,
+          automaticallyImplyLeading: false,
         ),
-      ),
-    );
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TweenAnimationBuilder(
+                tween: Tween(
+                    begin: 1.0, end: remainingSeconds / (widget.duration * 60)),
+                duration: Duration(seconds: 1),
+                builder: (context, double value, child) {
+                  return Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 400,
+                        height: 400,
+                        child: CircularProgressIndicator(
+                          backgroundColor:
+                              const Color.fromARGB(255, 197, 197, 197),
+                          value: value,
+                          strokeWidth: 10,
+                        ),
+                      ),
+                      Text(
+                        "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
+                        style: TextStyle(
+                            fontSize: 50, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  );
+                },
+              ),
+              SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (remainingSeconds > 0) ...[
+                    IconButton(
+                      icon: Icon(
+                        isPaused ? Icons.play_arrow : Icons.pause,
+                        color: isPaused ? Colors.green : Colors.orange,
+                        size: 30,
+                      ),
+                      onPressed: isPaused ? resumeTimer : pauseTimer,
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.stop, color: Colors.red),
+                      onPressed: terminateMeditation,
+                      iconSize: 30,
+                    ),
+                  ] else ...[
+                    IconButton(
+                      highlightColor: Colors.yellow,
+                      iconSize: 40,
+                      icon: Icon(Icons.check, color: Colors.blue),
+                      onPressed: () async {
+                        final habit =
+                            await habits.getHabitByLabel("meditation");
+                        if (habit != null) {
+                          await habits.updateHabitStatusByLabel(
+                              "meditation", 1);
+                        }
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (context) => HomePage()),
+                          (Route<dynamic> route) => false,
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ));
   }
 }

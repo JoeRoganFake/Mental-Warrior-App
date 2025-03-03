@@ -304,6 +304,36 @@ class HabitService {
       print("❌ ERROR in resetAllHabits: $e");
     }
   }
+
+  Future<Habit?> getHabitByLabel(String label) async {
+    final db = await DatabaseService.instance.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      _habitTableName,
+      where: "$_habitLabelColumnName = ?",
+      whereArgs: [label],
+    );
+
+    if (maps.isNotEmpty) {
+      return Habit(
+        id: maps.first[_habitIdColumnName] as int,
+        label: maps.first[_habitLabelColumnName] as String,
+        status: maps.first[_habitStatusColumnName] as int,
+        description: maps.first[_habitDescriptionColumnName] as String,
+      );
+    } else {
+      return null;
+    }
+  }
+
+  Future<void> updateHabitStatusByLabel(String label, int status) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _habitTableName,
+      {_habitStatusColumnName: status},
+      where: "$_habitLabelColumnName = ?",
+      whereArgs: [label],
+    );
+  }
 }
 
 class GoalService {
