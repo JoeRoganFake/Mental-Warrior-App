@@ -1,68 +1,105 @@
-Widget _habitList() {
-    return FutureBuilder(
-      future: _habitService.getHabits(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(child: Text("No habits yet"));
-        }
+@override
+void initState() {
+  super.initState();
+  remainingSeconds = widget.duration * 60;
+  initializeNotifications();
+  requestNotificationPermission();
+  startTimer();
+}
 
-        // Create a list of Habit widgets
-        List<Widget> habitWidgets = snapshot.data!
-            .map<Widget>((habit) => GestureDetector(
-                  onHorizontalDragStart: (details) async {
-                    await _habitService.updateHabitStatus(
-                        habit.id, habit.status == 0 ? 1 : 0);
-                    setState(() {});
-                  },
-                  onVerticalDragEnd: (details) => setState(() {}),
-                  onLongPress: () async {
-                    await _habitService.deleteHabit(habit.id);
-                    setState(() {});
-                  },
-                  onTap: () {
-                    _labelController.text = habit.label;
-                    _descriptionController.text = habit.description;
-                    habitFormDialog(add: false, habit: habit);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Container(
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(10),
-                        color: Colors.grey.shade100,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              habit.label,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: habit.status == 0
-                                    ? Color.fromARGB(255, 0, 0, 0)
-                                    : Colors.grey,
-                                decoration: habit.status == 0
-                                    ? TextDecoration.none
-                                    : TextDecoration.lineThrough,
-                                decorationThickness: 2,
-                                decorationColor:
-                                    const Color.fromARGB(255, 255, 0, 0),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ))
-            .toList();
+/// 🔔 Initialize notifications with proper action handling
+void initializeNotifications() {
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+  final InitializationSettings initializationSettings =
+      InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
 
-        return Column(
-          children: habitWidgets,
-        );
-      },
-    );
+  flutterLocalNotificationsPlugin.initialize(
+    initializationSettings,
+    onDidReceiveNotificationResponse: (NotificationResponse response) async {
+      if (response.actionId == 'resume') {
+        resumeTimer();
+      } else if (response.actionId == 'terminate') {
+        terminateMeditation();
+      }
+    },
+  );
+}
+
+/// 🟢 Request notification permission (for Android 13+)
+void requestNotificationPermission() async {
+  if (await Permission.notification.isDenied) {
+    await Permission.notification.request();
   }
+}
+
+/// ⏳ Start timer & show notification if paused
+void startTimer() {
+  countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+    if (remainingSeconds > 0) {
+      setState(() => remainingSeconds--);
+
+      if (isPaused) {
+        showNotification(); // Only notify if paused
+      }
+    } else {
+      timer.cancel();
+      playAlarm();
+    }
+  });
+}
+
+/// 🏁 Pause & Resume Controls
+void pauseTimer() {
+  setState(() => isPaused = true);
+  showNotification(); // Show notification when paused
+}
+
+void resumeTimer() {
+  setState(() => isPaused = false);
+  startTimer(); // Resume timer
+  flutterLocalNotificationsPlugin.cancel(0); // Remove notification
+}
+
+void terminateMeditation() {
+  countdownTimer?.cancel();
+  Navigator.pop(context); // Exit meditation page
+  flutterLocalNotificationsPlugin.cancel(0); // Remove notification
+}
+
+/// 🔔 Show a notification with working actions
+void showNotification() async {
+  const AndroidNotificationDetails androidPlatformChannelSpecifics =
+      AndroidNotificationDetails(
+    'meditation_channel',
+    'Meditation Timer',
+    channelDescription: 'Shows the remaining time for meditation',
+    importance: Importance.max,
+    priority: Priority.high,
+    showWhen: false,
+    actions: <AndroidNotificationAction>[
+      AndroidNotificationAction(
+        'resume', // Must match `actionId` in the callback
+        'Resume',
+        showsUserInterface: true,
+      ),
+      AndroidNotificationAction(
+        'terminate',
+        'Terminate',
+        showsUserInterface: true,
+      ),
+    ],
+  );
+
+  const NotificationDetails platformChannelSpecifics =
+      NotificationDetails(android: androidPlatformChannelSpecifics);
+
+  await flutterLocalNotificationsPlugin.show(
+    0,
+    'Meditation Timer',
+    'Time remaining: ${remainingSeconds ~/ 60}:${(remainingSeconds % 60).toString().padLeft(2, '0')}',
+    platformChannelSpecifics,
+  );
+}

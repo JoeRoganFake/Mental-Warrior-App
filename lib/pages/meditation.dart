@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:mental_warior/pages/home.dart';
 import 'package:mental_warior/services/database_services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class MeditationPage extends StatefulWidget {
   const MeditationPage({super.key});
@@ -215,18 +217,51 @@ class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool isPaused = false;
   final habits = HabitService();
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
 
   @override
   void initState() {
     super.initState();
     remainingSeconds = widget.duration * 60;
+    initializeNotifications();
+    requestNotificationPermission();
     startTimer();
+  }
+
+  void initializeNotifications() {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    final InitializationSettings initializationSettings =
+        InitializationSettings(
+      android: initializationSettingsAndroid,
+    );
+    flutterLocalNotificationsPlugin.initialize(initializationSettings,
+        onDidReceiveNotificationResponse:
+            (NotificationResponse response) async {
+      if (response.payload != null) {
+        if (response.payload == 'resume') {
+          resumeTimer();
+        } else if (response.payload == 'terminate') {
+          terminateMeditation();
+        }
+      }
+    });
+  }
+
+  void requestNotificationPermission() async {
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
   }
 
   void startTimer() {
     countdownTimer = Timer.periodic(Duration(milliseconds: 25), (timer) {
       if (remainingSeconds > 0) {
         setState(() => remainingSeconds--);
+        if (isPaused) {
+          showNotification();
+        }
       } else {
         timer.cancel();
         playAlarm();
@@ -234,11 +269,43 @@ class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
     });
   }
 
+  void showNotification() async {
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'meditation_channel',
+      'Meditation Timer',
+      channelDescription: 'Shows the remaining time for meditation',
+      importance: Importance.max,
+      priority: Priority.high,
+      showWhen: false,
+      actions: <AndroidNotificationAction>[
+        AndroidNotificationAction(
+          'resume',
+          'Resume',
+        ),
+        AndroidNotificationAction(
+          'terminate',
+          'Terminate',
+        ),
+      ],
+    );
+    const NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      'Meditation Timer',
+      'Time remaining: ${remainingSeconds ~/ 60}:${(remainingSeconds % 60).toString().padLeft(2, '0')}',
+      platformChannelSpecifics,
+      payload: 'item x',
+    );
+  }
+
   void pauseTimer() {
     countdownTimer?.cancel();
     setState(() {
       isPaused = true;
     });
+    showNotification();
   }
 
   void resumeTimer() {
@@ -251,6 +318,34 @@ class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
   void terminateMeditation() {
     countdownTimer?.cancel();
     Navigator.pop(context);
+  }
+
+  void showTerminateConfirmationDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text("Confirm Termination"),
+          content: Text("Are you sure you want to terminate the meditation?"),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close the dialog
+                resumeTimer(); // Resume the meditation
+              },
+              child: Text("Cancel"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close the dialog
+                terminateMeditation(); // Terminate the meditation
+              },
+              child: Text("Terminate"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> playAlarm() async {
@@ -274,6 +369,7 @@ class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
   void dispose() {
     countdownTimer?.cancel();
     _audioPlayer.dispose();
+    flutterLocalNotificationsPlugin.cancelAll();
     super.dispose();
   }
 
@@ -331,18 +427,18 @@ class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
                     ),
                     IconButton(
                       icon: Icon(Icons.stop, color: Colors.red),
-                      onPressed: terminateMeditation,
+                      onPressed: showTerminateConfirmationDialog,
                       iconSize: 30,
                     ),
                   ] else ...[
                     IconButton(
-                      highlightColor: Colors.yellow,
                       iconSize: 40,
-                      icon: Icon(Icons.check, color: Colors.blue),
+                      icon: Icon(Icons.check,
+                          color: const Color.fromARGB(255, 33, 243, 86)),
                       onPressed: () async {
                         final habit =
                             await habits.getHabitByLabel("meditation");
-                        if (habit != null) {
+                        if (habit != null && habit.status == 0) {
                           await habits.updateHabitStatusByLabel(
                               "meditation", 1);
                         }
@@ -351,6 +447,17 @@ class _MeditationCountdownScreenState extends State<MeditationCountdownScreen> {
                           MaterialPageRoute(builder: (context) => HomePage()),
                           (Route<dynamic> route) => false,
                         );
+                        if (habit != null && habit.status == 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Habit meditation completed'),
+                              duration: Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                          );
+                        }
                       },
                     ),
                   ],
