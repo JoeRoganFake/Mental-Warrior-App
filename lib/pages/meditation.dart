@@ -195,7 +195,8 @@ class MeditationPageState extends State<MeditationPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => MeditationCountdownScreen(duration: minutes),
+        builder: (context) =>
+            MeditationCountdownScreen(duration: minutes, mode: selectedMode!),
       ),
     );
   }
