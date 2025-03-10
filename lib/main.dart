@@ -1,22 +1,41 @@
 import 'package:flutter/material.dart';
 import 'package:mental_warior/pages/home.dart';
+import 'package:mental_warior/pages/meditation.dart';
 import 'services/background_task.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+// Initialize FlutterLocalNotificationsPlugin
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize only once
+  // Background Task Initialization
   bool initialized = await AndroidAlarmManager.initialize();
   print(initialized
       ? "🛠 Alarm Manager Initialized Successfully!"
       : "⚠️ Alarm Manager was already initialized.");
 
-  // Register isolate before scheduling tasks
   registerIsolate();
   await initializeBackgroundTasks();
 
-  runApp(const MyApp());
+  // Notification Initialization
+
+  const AndroidInitializationSettings initializationSettingsAndroid =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
+
+  final InitializationSettings initializationSettings =
+      InitializationSettings(android: initializationSettingsAndroid);
+
+  await flutterLocalNotificationsPlugin.initialize(
+    initializationSettings,
+    onDidReceiveBackgroundNotificationResponse: handleBackgroundNotification,
+  );
+
+  runApp(MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -25,9 +44,24 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(fontFamily: "Poppins"),
-      home: HomePage(),
+      routes: {
+        '/': (context) => HomePage(),
+        '/meditation': (context) => MeditationPage(),
+      },
     );
+  }
+}
+
+@pragma('vm:entry-point')
+void handleBackgroundNotification(NotificationResponse response) {
+  if (response.actionId == 'resume') {
+    navigatorKey.currentState
+        ?.pushNamed('/meditation', arguments: {'resume': true});
+  } else if (response.actionId == 'terminate') {
+    navigatorKey.currentState
+        ?.pushNamed('/meditation', arguments: {'terminate': true});
   }
 }

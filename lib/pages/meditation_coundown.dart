@@ -1,10 +1,32 @@
- late int remainingSeconds;
+import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:mental_warior/pages/home.dart';
+import 'package:mental_warior/services/database_services.dart';
+
+class MeditationCountdownScreen extends StatefulWidget {
+  static MeditationCountdownScreenState? currentState;
+  final int duration;
+  const MeditationCountdownScreen({super.key, required this.duration});
+
+  @override
+  MeditationCountdownScreenState createState() =>
+      MeditationCountdownScreenState();
+}
+
+class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
+    with WidgetsBindingObserver {
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
+  late int remainingSeconds;
   Timer? countdownTimer;
   final AudioPlayer _audioPlayer = AudioPlayer();
-  bool isPaused = false;
   final habits = HabitService();
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
+  bool isPaused = false;
 
   @override
   void initState() {
@@ -24,9 +46,6 @@
     WidgetsBinding.instance.removeObserver(this);
     countdownTimer?.cancel();
     _audioPlayer.dispose();
-    if (!isPaused) {
-      flutterLocalNotificationsPlugin.cancelAll();
-    }
     super.dispose();
   }
 
@@ -78,7 +97,7 @@
           if (response.actionId == 'resume' && mounted) {
             resumeTimer();
           } else if (response.actionId == 'terminate' && mounted) {
-            terminateMeditation();
+            showTerminateConfirmationDialog();
           }
         }
       },
@@ -101,7 +120,7 @@
       actions: <AndroidNotificationAction>[
         AndroidNotificationAction(
           'resume',
-          'Resume',
+          'Show',
           showsUserInterface: true,
           cancelNotification: true,
         ),
@@ -119,8 +138,8 @@
 
     await flutterLocalNotificationsPlugin.show(
       0,
-      'Meditation Stopped',
-      'Time remaining: ${remainingSeconds ~/ 60}:${(remainingSeconds % 60).toString().padLeft(2, '0')}',
+      'Meditation In Progress',
+      'Active {}',
       platformChannelSpecifics,
       payload: '${widget.duration}|$remainingSeconds',
     );
@@ -130,7 +149,6 @@
     countdownTimer = Timer.periodic(Duration(milliseconds: 25), (timer) {
       if (remainingSeconds > 0) {
         setState(() => remainingSeconds--);
-        if (isPaused) {}
       } else {
         timer.cancel();
         playAlarm();
@@ -139,24 +157,22 @@
   }
 
   void pauseTimer() {
-    countdownTimer?.cancel();
     setState(() {
-      isPaused = true;
+      countdownTimer?.cancel();
     });
+    isPaused = true;
   }
 
   void resumeTimer() {
-    startTimer();
     setState(() {
-      isPaused = false;
+      startTimer();
     });
-    flutterLocalNotificationsPlugin.cancelAll();
+    isPaused = false;
   }
 
   void terminateMeditation() {
     if (!mounted) return;
-    countdownTimer?.cancel();
-    flutterLocalNotificationsPlugin.cancelAll();
+    pauseTimer();
     navigatorKey.currentState?.pushNamedAndRemoveUntil('/', (route) => false);
     Navigator.pushAndRemoveUntil(
       context,
@@ -166,16 +182,10 @@
     flutterLocalNotificationsPlugin.cancelAll();
   }
 
-  // Update showTerminateConfirmationDialog to check mounted
   void showTerminateConfirmationDialog() {
+    pauseTimer();
     flutterLocalNotificationsPlugin.cancelAll();
     if (!mounted) return;
-
-    // Just stop the timer without showing notification
-    countdownTimer?.cancel();
-    setState(() {
-      isPaused = true;
-    });
 
     showDialog(
       context: context,
@@ -187,11 +197,7 @@
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                // Resume timer without showing notification
-                startTimer();
-                setState(() {
-                  isPaused = false;
-                });
+                resumeTimer();
               },
               child: Text("Cancel"),
             ),
@@ -292,7 +298,7 @@
                     ),
                   ] else ...[
                     IconButton(
-                      iconSize: 40,
+                      iconSize: 30,
                       icon: Icon(Icons.check,
                           color: const Color.fromARGB(255, 33, 243, 86)),
                       onPressed: () async {

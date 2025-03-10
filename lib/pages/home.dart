@@ -11,7 +11,7 @@ import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/models/tasks.dart';
 import 'dart:isolate';
 import 'package:mental_warior/pages/meditation.dart';
-import 'package:mental_warior/services/background_task.dart'; // Import the background task
+import 'package:permission_handler/permission_handler.dart'; // Import the Meditation page
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -40,21 +40,11 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-
+    requestNotificationPermission();
     IsolateNameServer.registerPortWithName(_receivePort.sendPort, isolateName);
 
     _receivePort.listen((message) {
       setState(() {});
-    });
-
-    // Listen for messages from the background task
-    taskCompletionController.stream.listen((message) {
-      if (message == "Task Completed!") {
-        setState(() {
-          // Update the UI when the task completes
-        });
-        print("Seted Astated");
-      }
     });
   }
 
@@ -115,12 +105,14 @@ class _HomePageState extends State<HomePage> {
                 color: Colors.white,
               ),
             )
-          : null,
+          : null, // Add this line
       backgroundColor: Colors.white,
       body: MediaQuery.removePadding(
         context: context,
         removeTop: true,
-        child: _currentIndex == 0 ? _buildHomePage() : MeditationPage(),
+        child: _currentIndex == 0
+            ? _buildHomePage()
+            : MeditationPage(), // Add this line
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
@@ -701,7 +693,7 @@ class _HomePageState extends State<HomePage> {
   Widget _completedTaskList() {
     return Padding(
       padding: const EdgeInsets.only(top: 20),
-      child: SizedBox(
+      child: Container(
         width: 200,
         child: FutureBuilder(
             future: _completedTaskService.getCompletedTasks(),
@@ -773,6 +765,7 @@ class _HomePageState extends State<HomePage> {
                                                     ctask.id,
                                                     value == true ? 0 : 1,
                                                   );
+                                                  ;
                                                 });
 
                                                 await Future.delayed(
@@ -870,6 +863,28 @@ class _HomePageState extends State<HomePage> {
                                         .addCompletedTask(task.label,
                                             task.deadline, task.description);
                                     await _taskService.deleteTask(task.id);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text("Task Completed"),
+                                        action: SnackBarAction(
+                                          label: "UNDO",
+                                          onPressed: () {
+                                            ScaffoldMessenger.of(context)
+                                                .hideCurrentSnackBar();
+                                            _taskService.addTask(
+                                                task.label,
+                                                task.deadline,
+                                                task.description);
+                                            _completedTaskService
+                                                .deleteCompTask(task.id);
+                                            setState(() {});
+                                          },
+                                          textColor: Colors.white,
+                                        ),
+                                        duration: Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
                                   }
                                   setState(() {});
                                 },
@@ -1171,9 +1186,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<dynamic> _showUpdateBookDialog(BuildContext context, Book book) {
-    final TextEditingController currentPageController =
+    final TextEditingController _currentPageController =
         TextEditingController(text: book.currentPage.toString());
-    final GlobalKey<FormState> formKey = GlobalKey<FormState>();
+    final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
     return showDialog(
       context: context,
@@ -1188,7 +1203,7 @@ class _HomePageState extends State<HomePage> {
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
           ),
           content: Form(
-            key: formKey,
+            key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -1206,7 +1221,7 @@ class _HomePageState extends State<HomePage> {
                     SizedBox(
                       width: 150,
                       child: TextFormField(
-                        controller: currentPageController,
+                        controller: _currentPageController,
                         keyboardType: TextInputType.number,
                         textAlign: TextAlign.center,
                         style: const TextStyle(fontSize: 18),
@@ -1265,10 +1280,10 @@ class _HomePageState extends State<HomePage> {
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    if (formKey.currentState!.validate()) {
+                    if (_formKey.currentState!.validate()) {
                       Future<bool> isDeleting =
                           _bookServiceLib.updateBookCurrentPage(
-                              book.id, int.parse(currentPageController.text));
+                              book.id, int.parse(_currentPageController.text));
 
                       setState(() {});
                       Navigator.pop(context);
@@ -1325,5 +1340,11 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
     );
+  }
+
+  void requestNotificationPermission() async {
+    if (await Permission.notification.isDenied) {
+      await Permission.notification.request();
+    }
   }
 }
