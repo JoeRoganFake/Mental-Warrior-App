@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -51,7 +52,9 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
     }
     WidgetsBinding.instance.removeObserver(this);
     countdownTimer?.cancel();
-    _audioPlayer.dispose();
+    _audioPlayer.stop(); // Stop the audio playback
+    _audioPlayer.release(); // Release audio resources
+    _audioPlayer.dispose(); // Dispose of the AudioPlayer instance
     super.dispose();
   }
 
@@ -72,98 +75,110 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
     final InitializationSettings initializationSettings =
         InitializationSettings(android: initializationSettingsAndroid);
 
-    await flutterLocalNotificationsPlugin.initialize(
-      initializationSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) async {
-        if (MeditationCountdownScreen.currentState == null) {
-          if (response.payload != null) {
-            final parts = response.payload!.split('|');
-            final duration = int.parse(parts[0]);
-            final remaining = int.parse(parts[1]);
-            final mode = parts[2];
-            print(parts);
+    await flutterLocalNotificationsPlugin.initialize(initializationSettings,
+        onDidReceiveNotificationResponse:
+            (NotificationResponse response) async {
+      if (MeditationCountdownScreen.currentState == null) {
+        if (response.payload != null) {
+          final parts = response.payload!.split('|');
+          final duration = int.parse(parts[0]);
+          final remaining = int.parse(parts[1]);
+          final mode = parts[2];
+          print(parts);
 
-            navigatorKey.currentState?.pushAndRemoveUntil(
-              MaterialPageRoute(
-                builder: (context) => MeditationCountdownScreen(
-                  duration: duration,
-                  mode: mode,
-                ),
+          navigatorKey.currentState?.pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder: (context) => MeditationCountdownScreen(
+                duration: duration,
+                mode: mode,
               ),
-              (route) => false,
-            );
+            ),
+            (route) => false,
+          );
 
-            await Future.delayed(Duration(milliseconds: 200));
-            if (mounted && MeditationCountdownScreen.currentState != null) {
-              MeditationCountdownScreen.currentState?.remainingSeconds =
-                  remaining;
-              if (response.actionId == 'resume') {
-                isPaused
-                    ? MeditationCountdownScreen.currentState?.resumeTimer()
-                    : MeditationCountdownScreen.currentState?.pauseTimer();
-              } else if (response.actionId == 'terminate') {
-                MeditationCountdownScreen.currentState
-                    ?.showTerminateConfirmationDialog();
-                print("0");
-              }
+          await Future.delayed(Duration(milliseconds: 800));
+          if (mounted && MeditationCountdownScreen.currentState != null) {
+            MeditationCountdownScreen.currentState?.remainingSeconds =
+                remaining;
+            if (response.actionId == 'resume') {
+              isPaused
+                  ? MeditationCountdownScreen.currentState?.resumeTimer()
+                  : MeditationCountdownScreen.currentState?.pauseTimer();
+            } else if (response.actionId == 'terminate') {
+              MeditationCountdownScreen.currentState
+                  ?.showTerminateConfirmationDialog();
+            } else if (response.actionId == 'finish') {
+              Future.delayed(Duration(seconds: 10));
+              print("waiting");
+              MeditationCountdownScreen.currentState?.completeMeditation();
             }
           }
-        } else {
-          if (response.actionId == 'resume' && mounted) {
-            return isPaused ? resumeTimer() : pauseTimer();
-          } else if (response.actionId == 'terminate' && mounted) {
-            showTerminateConfirmationDialog();
-            print("1");
-          }
         }
-      },
-    );
+      } else {
+        if (response.actionId == 'resume' && mounted) {
+          return isPaused ? resumeTimer() : pauseTimer();
+        } else if (response.actionId == 'terminate' && mounted) {
+          showTerminateConfirmationDialog();
+          print("1");
+        } else if (response.actionId == 'finish' && mounted) {
+          completeMeditation();
+        }
+      }
+    });
   }
 
   void showPersistentNotification() async {
     if (remainingSeconds > 0) {
-      AndroidNotificationDetails androidPlatformChannelSpecifics =
-          AndroidNotificationDetails(
-        'meditation_channel',
-        'Meditation Timer',
-        channelDescription: 'Shows if meditation is in progress',
-        importance: Importance.defaultImportance,
-        priority: Priority.defaultPriority,
-        playSound: false,
-        enableVibration: false,
-        showWhen: false,
-        ongoing: false,
-        autoCancel: false,
-        actions: <AndroidNotificationAction>[
-          AndroidNotificationAction(
-            'resume',
-            isPaused ? 'Resume' : 'Pause',
-            showsUserInterface: true,
-            cancelNotification: false,
-          ),
-          const AndroidNotificationAction(
-            'terminate',
-            'Terminate',
-            showsUserInterface: true,
-            cancelNotification: false,
-          ),
-        ],
-      );
-
-      NotificationDetails platformChannelSpecifics =
-          NotificationDetails(android: androidPlatformChannelSpecifics);
-
-      await flutterLocalNotificationsPlugin.show(
-        0,
-        'Meditation In Progress',
-        'Active $mode meditation',
-        platformChannelSpecifics,
-        payload: '${widget.duration}|$remainingSeconds',
-      );
+      showInProgressNotification();
+    } else {
+      showFinishedNotification();
     }
   }
 
-  void showFinishedTimerNotification() async {
+  void showInProgressNotification() async {
+    flutterLocalNotificationsPlugin.cancel(1);
+    AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'meditation_channel',
+      'Meditation Timer',
+      channelDescription: 'Shows if meditation is in progress',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+      playSound: false,
+      enableVibration: false,
+      showWhen: false,
+      ongoing: true,
+      autoCancel: false,
+      actions: <AndroidNotificationAction>[
+        AndroidNotificationAction(
+          'resume',
+          isPaused ? 'Resume' : 'Pause',
+          showsUserInterface: true,
+          cancelNotification: false,
+        ),
+        const AndroidNotificationAction(
+          'terminate',
+          'Terminate',
+          showsUserInterface: true,
+          cancelNotification: false,
+        ),
+      ],
+    );
+
+    NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+
+    await flutterLocalNotificationsPlugin.show(
+      0, // Use ID 0 for "Meditation In Progress"
+      'Meditation In Progress',
+      'Active $mode meditation',
+      platformChannelSpecifics,
+      payload: '${widget.duration}|$remainingSeconds|$mode',
+    );
+  }
+
+  void showFinishedNotification() async {
+    flutterLocalNotificationsPlugin.cancel(0);
     AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
       'timer_channel',
@@ -190,23 +205,23 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
         NotificationDetails(android: androidPlatformChannelSpecifics);
 
     await flutterLocalNotificationsPlugin.show(
-      0,
+      1, // Use ID 1 for "Meditation Finished"
       'Meditation Finished',
       'You have completed $mode meditation',
       platformChannelSpecifics,
-      payload: '${widget.duration}|$remainingSeconds',
+      payload: '${widget.duration}|$remainingSeconds|$mode',
     );
   }
 
   void startTimer() {
-    countdownTimer = Timer.periodic(Duration(milliseconds: 25), (timer) {
+    countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
       if (remainingSeconds > 0) {
         setState(() => remainingSeconds--);
+        showInProgressNotification();
       } else {
         timer.cancel();
         playAlarm();
-        flutterLocalNotificationsPlugin.cancelAll();
-        showFinishedTimerNotification();
+        showFinishedNotification();
       }
     });
   }
@@ -238,6 +253,7 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
   }
 
   void showTerminateConfirmationDialog() {
+    print(isTerminateDialogOpen);
     if (isTerminateDialogOpen) return;
     isTerminateDialogOpen = true;
     pauseTimer();
@@ -254,6 +270,7 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
+                isTerminateDialogOpen = false;
               },
               child: Text("Cancel"),
             ),
@@ -261,13 +278,16 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
               onPressed: () {
                 Navigator.pop(context);
                 terminateMeditation();
+                isTerminateDialogOpen = false;
               },
               child: Text("Terminate"),
             ),
           ],
         );
       },
-    );
+    ).then((value) {
+      isTerminateDialogOpen = false;
+    });
   }
 
   Future<void> playAlarm() async {
@@ -285,10 +305,44 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
       AssetSource('audio/time_up_samsung.mp3'),
       volume: 1.0,
     );
+
+    Future.delayed(Duration(minutes: 1), () {
+      _audioPlayer.stop();
+      _audioPlayer.release();
+    });
+  }
+
+  void completeMeditation() async {
+    final habit = await habits.getHabitByLabel("meditation");
+    if (habit != null && habit.status == 0) {
+      await habits.updateHabitStatusByLabel("meditation", 1);
+    }
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => HomePage()),
+        (Route<dynamic> route) => false,
+      );
+
+      flutterLocalNotificationsPlugin.cancelAll();
+
+      if (habit != null && habit.status == 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Habit meditation completed'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // ignore: deprecated_member_use
     return WillPopScope(
       onWillPop: () async {
         if (remainingSeconds > 0) {
@@ -307,32 +361,35 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              TweenAnimationBuilder(
-                tween: Tween(
-                    begin: 1.0, end: remainingSeconds / (widget.duration * 60)),
-                duration: Duration(seconds: 1),
-                builder: (context, double value, child) {
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 400,
-                        height: 400,
-                        child: CircularProgressIndicator(
-                          backgroundColor:
-                              const Color.fromARGB(255, 197, 197, 197),
-                          value: value,
-                          strokeWidth: 10,
+              RepaintBoundary(
+                child: TweenAnimationBuilder(
+                  tween: Tween(
+                      begin: 1.0,
+                      end: remainingSeconds / (widget.duration * 60)),
+                  duration: Duration(seconds: 1),
+                  builder: (context, double value, child) {
+                    return Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 400,
+                          height: 400,
+                          child: CircularProgressIndicator(
+                            backgroundColor:
+                                const Color.fromARGB(255, 197, 197, 197),
+                            value: value,
+                            strokeWidth: 10,
+                          ),
                         ),
-                      ),
-                      Text(
-                        "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
-                        style: TextStyle(
-                            fontSize: 50, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  );
-                },
+                        Text(
+                          "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
+                          style: TextStyle(
+                              fontSize: 50, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
               SizedBox(height: 20),
               Row(
@@ -357,30 +414,7 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
                       iconSize: 30,
                       icon: Icon(Icons.check,
                           color: const Color.fromARGB(255, 33, 243, 86)),
-                      onPressed: () async {
-                        final habit =
-                            await habits.getHabitByLabel("meditation");
-                        if (habit != null && habit.status == 0) {
-                          await habits.updateHabitStatusByLabel(
-                              "meditation", 1);
-                        }
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(builder: (context) => HomePage()),
-                          (Route<dynamic> route) => false,
-                        );
-                        if (habit != null && habit.status == 0) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Habit meditation completed'),
-                              duration: Duration(seconds: 2),
-                              behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10)),
-                            ),
-                          );
-                        }
-                      },
+                      onPressed: completeMeditation,
                     ),
                   ],
                 ],
