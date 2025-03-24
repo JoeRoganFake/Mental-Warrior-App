@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -42,13 +41,9 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
     MeditationCountdownScreen.currentState = this;
     WidgetsBinding.instance.addObserver(this);
     remainingSeconds = widget.duration * 60;
-
-    // Delay initialization to allow UI rendering
-    Future.delayed(Duration(milliseconds: 100), () {
-      _initForegroundTask();
-      _startUITimer();
-      _initializeNotifications();
-    });
+    _initForegroundTask();
+    _startUITimer();
+    _initializeNotifications();
   }
 
   Future<void> _initForegroundTask() async {
@@ -61,28 +56,23 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
         priority: NotificationPriority.LOW,
       ),
       foregroundTaskOptions: ForegroundTaskOptions(
-          autoRunOnBoot: false,
-          allowWifiLock: false,
-          eventAction: ForegroundTaskEventAction.nothing()),
+        autoRunOnBoot: false,
+        allowWifiLock: false,
+        eventAction: ForegroundTaskEventAction.nothing(),
+      ),
       iosNotificationOptions: const IOSNotificationOptions(
         showNotification: true,
         playSound: false,
       ),
     );
-
-    // Start the foreground task asynchronously
-    _startForegroundTask();
+    await _startForegroundTask();
   }
 
   Future<void> _startForegroundTask() async {
-    // Save data asynchronously
-    await Future.wait([
-      FlutterForegroundTask.saveData(
-          key: 'remainingSeconds', value: remainingSeconds),
-      FlutterForegroundTask.saveData(key: 'isPaused', value: isPaused),
-    ]);
+    await FlutterForegroundTask.saveData(
+        key: 'remainingSeconds', value: remainingSeconds);
+    await FlutterForegroundTask.saveData(key: 'isPaused', value: isPaused);
 
-    // Start or restart the foreground service
     if (await FlutterForegroundTask.isRunningService) {
       await FlutterForegroundTask.restartService();
     } else {
@@ -109,18 +99,15 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
   Future<void> _updateUITimer() async {
     if (isPaused) return;
 
-    // Fetch the remaining time asynchronously
     final time =
         await FlutterForegroundTask.getData<int>(key: 'remainingSeconds') ??
             remainingSeconds;
-
     if (mounted) {
       setState(() {
         remainingSeconds = time;
       });
     }
 
-    // Handle timer completion
     if (remainingSeconds <= 0 && !_alarmPlayed) {
       _alarmPlayed = true;
       playAlarm();
