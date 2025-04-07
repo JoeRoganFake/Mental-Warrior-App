@@ -36,6 +36,8 @@ class _HomePageState extends State<HomePage> {
   final ReceivePort _receivePort = ReceivePort();
   final QuoteService _quoteService = QuoteService();
   int _currentIndex = 0; // Add this line
+  bool _showDescription = false;
+  bool _showDateTime = false;
 
   @override
   void initState() {
@@ -224,188 +226,337 @@ class _HomePageState extends State<HomePage> {
     bool changeCompletedTask = false,
   }) {
     final GlobalKey<FormState> taskFormKey = GlobalKey<FormState>();
-    return showDialog(
-        context: context,
-        builder: (context) => SimpleDialog(
-              children: [
-                Form(
-                  key: taskFormKey,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                add ? "New Task" : "Edit Task",
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            if (!add)
-                              IconButton(
-                                icon: Icon(Icons.delete, color: Colors.black),
-                                onPressed: () async {
-                                  if (task != null) {
-                                    if (changeCompletedTask) {
-                                      await _completedTaskService
-                                          .deleteCompTask(task.id);
-                                    } else {
-                                      await _taskService.deleteTask(task.id);
-                                    }
-                                    Navigator.pop(context);
-                                    setState(() {});
-                                  }
-                                },
-                              ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: TextFormField(
-                          controller: _labelController,
-                          autofocus: add,
-                          validator: (value) {
-                            if (value!.isEmpty || value == "") {
-                              return "     *Field Is Required";
-                            }
-                            return null;
-                          },
-                          decoration: InputDecoration(
-                            hintText: "Label",
-                            prefixIcon: const Icon(Icons.label),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8.0, vertical: 8.0),
-                        child: TextFormField(
-                          controller: _descriptionController,
-                          maxLines: null,
-                          keyboardType: TextInputType.multiline,
-                          decoration: InputDecoration(
-                            hintText: "Description",
-                            prefixIcon: const Icon(Icons.description),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                        child: Stack(
-                          alignment: Alignment.centerRight,
-                          children: [
-                            TextFormField(
-                              controller: _dateController,
-                              onTap: () async {
-                                await Functions.dateAndTimePicker(
-                                    context, _dateController);
-                                setState(() {});
-                              },
-                              readOnly: true,
-                              decoration: InputDecoration(
-                                hintText: "Due To",
-                                prefixIcon: const Icon(Icons.calendar_month),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                ),
-                              ),
-                            ),
-                            if (_dateController.text.isNotEmpty)
-                              IconButton(
-                                icon: Icon(Icons.clear),
-                                onPressed: () {
-                                  setState(() {
-                                    _dateController.clear();
-                                  });
-                                },
-                              ),
-                          ],
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8.0),
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            if (taskFormKey.currentState!.validate()) {
-                              Future<void> operation;
-                              if (add) {
-                                operation = _taskService.addTask(
-                                  _labelController.text,
-                                  _dateController.text,
-                                  _descriptionController.text,
-                                );
-                              } else if (changeCompletedTask && task != null) {
-                                operation = Future.wait([
-                                  _completedTaskService.updateCompletedTask(
-                                      task.id, "label", _labelController.text),
-                                  _completedTaskService.updateCompletedTask(
-                                      task.id,
-                                      "description",
-                                      _descriptionController.text),
-                                  _completedTaskService.updateCompletedTask(
-                                      task.id,
-                                      "deadline",
-                                      _dateController.text),
-                                ]);
-                              } else if (!add && task != null) {
-                                operation = Future.wait([
-                                  _taskService.updateTask(
-                                      task.id, "label", _labelController.text),
-                                  _taskService.updateTask(
-                                      task.id,
-                                      "description",
-                                      _descriptionController.text),
-                                  _taskService.updateTask(task.id, "deadline",
-                                      _dateController.text),
-                                ]);
-                              } else {
-                                operation = Future.value();
-                              }
 
-                              await operation;
-                              Navigator.pop(context);
-                              setState(() {});
-                            }
-                          },
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(8.0),
-                                child: const Icon(Icons.add_task_outlined),
+    // Set initial states based on whether we're editing
+    if (task != null) {
+      _labelController.text = task.label;
+      _descriptionController.text = task.description;
+      _dateController.text = task.deadline;
+
+      // Show fields if they have content
+      _showDescription = task.description.isNotEmpty;
+      _showDateTime = task.deadline.isNotEmpty;
+    } else {
+      // Reset states for new task
+      _showDescription = false;
+      _showDateTime = false;
+    }
+
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+            builder: (BuildContext context, StateSetter modalSetState) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: SingleChildScrollView(
+              child: Form(
+                key: taskFormKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              add ? "New Task" : "Edit Task",
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
                               ),
-                              Text(
-                                add ? "Add Task" : "Edit Task",
-                                textAlign: TextAlign.center,
-                                style: TextStyle(),
-                              )
-                            ],
+                            ),
+                          ),
+                          if (!add)
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () async {
+                                if (task != null) {
+                                  if (changeCompletedTask) {
+                                    await _completedTaskService
+                                        .deleteCompTask(task.id);
+                                  } else {
+                                    await _taskService.deleteTask(task.id);
+                                  }
+                                  Navigator.pop(context);
+                                  setState(() {});
+                                }
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    // Label Field
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8.0, vertical: 4.0),
+                      child: TextFormField(
+                        controller: _labelController,
+                        autofocus: add,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 14),
+                        validator: (value) =>
+                            value?.isEmpty ?? true ? "*Required" : null,
+                        decoration: InputDecoration(
+                          hintText: "Label",
+                          hintStyle:
+                              TextStyle(color: Colors.grey[400], fontSize: 14),
+                          prefixIcon: const Icon(Icons.label,
+                              color: Colors.white, size: 20),
+                          contentPadding: EdgeInsets.symmetric(
+                              vertical: 8.0, horizontal: 12.0),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                            borderSide: BorderSide(color: Colors.grey[700]!),
                           ),
                         ),
-                      )
-                    ],
-                  ),
+                      ),
+                    ),
+
+                    // Add Description Button (when field is hidden)
+                    if (!_showDescription)
+                      TextButton.icon(
+                        icon: Icon(
+                          Icons.add,
+                          color: Colors.grey[400],
+                        ),
+                        label: Text(
+                          "Add Description",
+                          style: TextStyle(color: Colors.grey[400]),
+                        ),
+                        onPressed: () {
+                          modalSetState(() {
+                            _showDescription = true;
+                          });
+                        },
+                      ),
+
+                    // Description Field with side button (when field is visible)
+                    if (_showDescription)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8.0, vertical: 4.0),
+                              child: TextFormField(
+                                controller: _descriptionController,
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 14),
+                                maxLines: 2,
+                                minLines: 1,
+                                keyboardType: TextInputType.multiline,
+                                decoration: InputDecoration(
+                                  hintText: "Description",
+                                  hintStyle: TextStyle(
+                                      color: Colors.grey[400], fontSize: 14),
+                                  prefixIcon: const Icon(Icons.description,
+                                      color: Colors.white, size: 20),
+                                  contentPadding: EdgeInsets.symmetric(
+                                      vertical: 8.0, horizontal: 12.0),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey[700]!),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.remove_circle_outline,
+                              color: Colors.grey[400],
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              modalSetState(() {
+                                _showDescription = false;
+                                _descriptionController.clear();
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+
+                    // Add DateTime Button (when field is hidden)
+                    if (!_showDateTime)
+                      TextButton.icon(
+                        icon: Icon(
+                          Icons.add,
+                          color: Colors.grey[400],
+                        ),
+                        label: Text(
+                          "Add Due Date",
+                          style: TextStyle(color: Colors.grey[400]),
+                        ),
+                        onPressed: () {
+                          modalSetState(() {
+                            _showDateTime = true;
+                          });
+                        },
+                      ),
+
+                    // DateTime Field with side button (when field is visible)
+                    if (_showDateTime)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8.0, vertical: 4.0),
+                              child: TextFormField(
+                                controller: _dateController,
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 14),
+                                readOnly: true,
+                                onTap: () async {
+                                  await Functions.dateAndTimePicker(
+                                      context, _dateController);
+                                  modalSetState(() {});
+                                },
+                                decoration: InputDecoration(
+                                  hintText: "Due Date",
+                                  hintStyle: TextStyle(
+                                      color: Colors.grey[400], fontSize: 14),
+                                  prefixIcon: const Icon(Icons.calendar_today,
+                                      color: Colors.white, size: 20),
+                                  suffixIcon: _dateController.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.clear,
+                                              color: Colors.white, size: 18),
+                                          onPressed: () => modalSetState(
+                                              () => _dateController.clear()),
+                                        )
+                                      : null,
+                                  contentPadding: EdgeInsets.symmetric(
+                                      vertical: 8.0, horizontal: 12.0),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey[700]!),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.remove_circle_outline,
+                              color: Colors.grey[400],
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              modalSetState(() {
+                                _showDateTime = false;
+                                _dateController.clear();
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+
+                    // Save Button
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          if (taskFormKey.currentState!.validate()) {
+                            Future<void> operation;
+                            if (add) {
+                              // Clean up the date string before saving
+                              final String deadline =
+                                  _dateController.text.trim();
+                              operation = _taskService.addTask(
+                                _labelController.text,
+                                deadline,
+                                _descriptionController.text,
+                              );
+                            } else if (changeCompletedTask && task != null) {
+                              operation = Future.wait([
+                                _completedTaskService.updateCompletedTask(
+                                    task.id, "label", _labelController.text),
+                                _completedTaskService.updateCompletedTask(
+                                    task.id,
+                                    "description",
+                                    _descriptionController.text),
+                                _completedTaskService.updateCompletedTask(
+                                    task.id, "deadline", _dateController.text),
+                              ]);
+                            } else if (!add && task != null) {
+                              // Clean up the date string before saving
+                              final String deadline =
+                                  _dateController.text.trim();
+                              operation = Future.wait([
+                                _taskService.updateTask(
+                                    task.id, "label", _labelController.text),
+                                _taskService.updateTask(task.id, "description",
+                                    _descriptionController.text),
+                                _taskService.updateTask(
+                                    task.id, "deadline", deadline),
+                              ]);
+                            } else {
+                              operation = Future.value();
+                            }
+
+                            await operation;
+                            Navigator.pop(context);
+                            setState(() {});
+                          }
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: Icon(Icons.add_task_outlined),
+                            ),
+                            Text(
+                              add ? "Add Task" : "Edit Task",
+                              style: const TextStyle(fontSize: 16),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            )).then((_) {
+              ),
+            ),
+          );
+        });
+      },
+    ).whenComplete(() {
       Future.delayed(const Duration(milliseconds: 100), () {
         _labelController.clear();
         _descriptionController.clear();
         _dateController.clear();
+        setState(() {
+          _showDescription = false;
+          _showDateTime = false;
+        });
       });
     });
   }
@@ -811,107 +962,114 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Container _taskList() {
-    return Container(
-      child: FutureBuilder(
-          future: _taskService.getTasks(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData || snapshot.data!.isEmpty) {
-              return Center(child: Text("No tasks yet"));
-            }
-            return Column(
-              children: snapshot.data!.map<Widget>((task) {
-                return Padding(
-                  padding: const EdgeInsets.all(6.0),
-                  child: GestureDetector(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        color: const Color.fromARGB(255, 119, 119, 119),
-                      ),
-                      child: Column(children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Flexible(
-                              child: Padding(
-                                padding: const EdgeInsets.only(left: 30),
-                                child: Text(
-                                  task.label,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(right: 30),
-                              child: Checkbox(
-                                value: task.status == 1,
-                                onChanged: (value) async {
-                                  setState(() {
-                                    _taskService.updateTaskStatus(
-                                        task.id, value == true ? 1 : 0);
-                                  });
-
-                                  await Future.delayed(
-                                      const Duration(milliseconds: 250));
-
-                                  if (value == true) {
-                                    await _completedTaskService
-                                        .addCompletedTask(task.label,
-                                            task.deadline, task.description);
-                                    await _taskService.deleteTask(task.id);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text("Task Completed"),
-                                        action: SnackBarAction(
-                                          label: "UNDO",
-                                          onPressed: () {
-                                            ScaffoldMessenger.of(context)
-                                                .hideCurrentSnackBar();
-                                            _taskService.addTask(
-                                                task.label,
-                                                task.deadline,
-                                                task.description);
-                                            _completedTaskService
-                                                .deleteCompTask(task.id);
-                                            setState(() {});
-                                          },
-                                          textColor: Colors.white,
-                                        ),
-                                        duration: Duration(seconds: 2),
-                                        behavior: SnackBarBehavior.floating,
-                                      ),
-                                    );
-                                  }
-                                  setState(() {});
-                                },
-                              ),
-                            )
-                          ],
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            Functions.whenDue(task),
-                          ],
-                        )
-                      ]),
+  Widget _taskList() {
+    return FutureBuilder(
+        future: _taskService.getTasks(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return Center(child: Text("No tasks yet"));
+          }
+          return Column(
+            children: snapshot.data!.map<Widget>((task) {
+              return Padding(
+                padding: const EdgeInsets.all(6.0),
+                child: GestureDetector(
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: const Color.fromARGB(255, 119, 119, 119),
                     ),
-                    onTap: () {
-                      _labelController.text = task.label;
-                      _descriptionController.text = task.description;
-                      _dateController.text = task.deadline;
-                      taskFormDialog(context, add: false, task: task);
-                    },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center, // Add this
+                      children: [
+                        Expanded(
+                          flex: 4,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12, horizontal: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min, // Add this
+                              children: [
+                                Text(
+                                  task.label,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                  ),
+                                  softWrap: false,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                                if (task.deadline.isNotEmpty)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Functions.whenDue(task),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: Checkbox(
+                            value: task.status == 1,
+                            onChanged: (value) async {
+                              setState(() {
+                                _taskService.updateTaskStatus(
+                                    task.id, value == true ? 1 : 0);
+                              });
+
+                              await Future.delayed(
+                                  const Duration(milliseconds: 250));
+
+                              if (value == true) {
+                                await _completedTaskService.addCompletedTask(
+                                    task.label,
+                                    task.deadline,
+                                    task.description);
+                                await _taskService.deleteTask(task.id);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text("Task Completed"),
+                                    action: SnackBarAction(
+                                      label: "UNDO",
+                                      onPressed: () {
+                                        ScaffoldMessenger.of(context)
+                                            .hideCurrentSnackBar();
+                                        _taskService.addTask(task.label,
+                                            task.deadline, task.description);
+                                        _completedTaskService
+                                            .deleteCompTask(task.id);
+                                        setState(() {});
+                                      },
+                                      textColor: Colors.white,
+                                    ),
+                                    duration: Duration(seconds: 2),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                              setState(() {});
+                            },
+                          ),
+                        )
+                      ],
+                    ),
                   ),
-                );
-              }).toList(),
-            );
-          }),
-    );
+                  onTap: () {
+                    _labelController.text = task.label;
+                    _descriptionController.text = task.description;
+                    _dateController.text = task.deadline;
+                    taskFormDialog(context, add: false, task: task);
+                  },
+                ),
+              );
+            }).toList(),
+          );
+        });
   }
 
   Widget _habitList() {

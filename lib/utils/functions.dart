@@ -48,39 +48,59 @@ class Functions {
   }
 
   static Widget whenDue(Task task) {
-    String deadline = task.deadline;
+    try {
+      if (task.deadline.trim().isEmpty) {
+        return const SizedBox();
+      }
 
-    if (deadline.isEmpty) {
-      return SizedBox.shrink();
-    }
+      final parts = task.deadline.split(' ');
+      final dateStr = parts[0];
 
-    DateTime deadlineDateTime = DateFormat("yyyy-MM-dd h:mm a").parse(deadline);
+      final DateTime deadline = DateTime.parse(dateStr);
 
-    DateTime now = DateTime.now();
-    DateTime today = DateTime(
-        now.year, now.month, now.day, now.hour, now.minute, now.second);
-    DateTime tomorrow = today.add(Duration(days: 1));
+      final DateTime now = DateTime.now();
+      final DateTime today = DateTime(now.year, now.month, now.day);
+      final DateTime tomorrow = today.add(const Duration(days: 1));
 
-    if (deadlineDateTime.year == today.year &&
-        deadlineDateTime.month == today.month &&
-        deadlineDateTime.day == today.day) {
-      return Text(
-        "Today",
-      );
-    } else if (deadlineDateTime.year == tomorrow.year &&
-        deadlineDateTime.month == tomorrow.month &&
-        deadlineDateTime.day == tomorrow.day) {
-      return Text(
-        "Tomorrow",
-      );
-    } else if (deadlineDateTime.isBefore(today)) {
-      return Text(
-        "Past Due",
-      );
-    } else {
-      // Return the formatted date for other cases
-      String formattedDate = DateFormat("d.M.").format(deadlineDateTime);
-      return Text(formattedDate);
+      if (deadline.isBefore(today)) {
+        return const Text(
+          "Overdue",
+          style: TextStyle(
+            color: Colors.red,
+            fontSize: 12,
+          ),
+        );
+      } else if (deadline.isAtSameMomentAs(today)) {
+        return const Text(
+          "Today",
+          style: TextStyle(
+            color: Colors.blue,
+            fontSize: 10,
+          ),
+        );
+      } else if (deadline.isAtSameMomentAs(tomorrow)) {
+        return const Text(
+          "Tomorrow",
+          style: TextStyle(
+            color: Colors.orange,
+            fontSize: 10,
+          ),
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
+        );
+      } else {
+        String formattedDate = DateFormat('MMM d').format(deadline);
+        return Text(
+          formattedDate,
+          style: const TextStyle(
+            color: Colors.white70,
+            fontSize: 10,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error parsing date: $e');
+      return const SizedBox();
     }
   }
 }
