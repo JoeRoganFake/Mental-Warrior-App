@@ -270,7 +270,11 @@ class _HomePageState extends State<HomePage> {
                         children: [
                           Expanded(
                             child: Text(
-                              add ? "New Task" : "Edit Task",
+                              add
+                                  ? "New Task"
+                                  : changeCompletedTask
+                                      ? "Completed Task"
+                                      : "Edit Task",
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                 fontSize: 18,
@@ -279,6 +283,33 @@ class _HomePageState extends State<HomePage> {
                               ),
                             ),
                           ),
+                          if (!add && changeCompletedTask)
+                            IconButton(
+                              icon: const Icon(Icons.undo, color: Colors.blue),
+                              onPressed: () async {
+                                if (task != null) {
+                                  setState(() {
+                                    _completedTaskService.updateCompTaskStatus(
+                                      task.id,
+                                      0,
+                                    );
+                                  });
+
+                                  await Future.delayed(
+                                      const Duration(milliseconds: 250));
+                                  await _taskService.addTask(
+                                    task.label,
+                                    task.deadline,
+                                    task.description,
+                                  );
+                                  await _completedTaskService
+                                      .deleteCompTask(task.id);
+
+                                  Navigator.pop(context);
+                                  setState(() {});
+                                }
+                              },
+                            ),
                           if (!add)
                             IconButton(
                               icon: const Icon(Icons.delete, color: Colors.red),
@@ -306,16 +337,26 @@ class _HomePageState extends State<HomePage> {
                       child: TextFormField(
                         controller: _labelController,
                         autofocus: add,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: 14),
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          decoration: changeCompletedTask
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                          decorationColor: Colors.white,
+                          decorationThickness: 2,
+                        ),
                         validator: (value) =>
                             value?.isEmpty ?? true ? "*Required" : null,
                         decoration: InputDecoration(
                           hintText: "Label",
                           hintStyle:
                               TextStyle(color: Colors.grey[400], fontSize: 14),
-                          prefixIcon: const Icon(Icons.label,
-                              color: Colors.white, size: 20),
+                          prefixIcon: const Icon(
+                            Icons.label,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                           contentPadding: EdgeInsets.symmetric(
                               vertical: 8.0, horizontal: 12.0),
                           border: OutlineInputBorder(
@@ -844,7 +885,7 @@ class _HomePageState extends State<HomePage> {
   Widget _completedTaskList() {
     return Padding(
       padding: const EdgeInsets.only(top: 20),
-      child: Container(
+      child: SizedBox(
         width: 200,
         child: FutureBuilder(
             future: _completedTaskService.getCompletedTasks(),
@@ -900,6 +941,9 @@ class _HomePageState extends State<HomePage> {
                                                   color: Colors.white,
                                                   overflow:
                                                       TextOverflow.ellipsis,
+                                                  decoration: TextDecoration
+                                                      .lineThrough,
+                                                  decorationColor: Colors.white,
                                                 ),
                                               ),
                                             ),

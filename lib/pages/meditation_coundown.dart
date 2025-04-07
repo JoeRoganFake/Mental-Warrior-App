@@ -284,7 +284,6 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
     return WillPopScope(
       onWillPop: () async {
         if (remainingSeconds > 0) {
-          terminateMeditation();
           return false;
         }
         return true;

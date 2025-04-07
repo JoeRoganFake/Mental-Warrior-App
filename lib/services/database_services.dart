@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:mental_warior/models/tasks.dart';
 import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/models/books.dart';
+import 'package:mental_warior/models/categories.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter/material.dart';
@@ -25,13 +26,14 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 2,
+      version: 3,
       onCreate: (db, version) {
         TaskService().createTaskTable(db);
         CompletedTaskService().createCompletedTaskTable(db);
         HabitService().createHabitTable(db);
         GoalService().createGoalTable(db);
         BookService().createbookTable(db);
+        CategoryService().createCategoryTable(db);
       },
     );
   }
@@ -500,5 +502,51 @@ class BookService {
     }
 
     return false;
+  }
+}
+
+class CategoryService {
+  final String _categoryTableName = "categories";
+  final String _categoryIdColumnName = "id";
+  final String _categoryLabelColumnName = "label";
+
+  void createCategoryTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_categoryTableName (
+        $_categoryIdColumnName INTEGER PRIMARY KEY,
+        $_categoryLabelColumnName TEXT NOT NULL
+      ) 
+    ''');
+  }
+
+  Future addCategory(String label) async {
+    final db = await DatabaseService.instance.database;
+    await db.insert(
+      _categoryTableName,
+      {
+        _categoryLabelColumnName: label,
+      },
+    );
+  }
+
+  Future<List<Category>> getCategories() async {
+    final db = await DatabaseService.instance.database;
+    final data = await db.query(
+      _categoryTableName,
+    );
+
+    return data
+        .map(
+          (e) => Category(
+            id: e[_categoryIdColumnName] as int,
+            label: e[_categoryLabelColumnName] as String,
+          ),
+        )
+        .toList();
+  }
+
+  Future deleteCategory(int id) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete(_categoryTableName, where: "id = ?", whereArgs: [id]);
   }
 }
