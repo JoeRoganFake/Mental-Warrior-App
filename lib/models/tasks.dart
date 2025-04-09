@@ -1,8 +1,7 @@
 //Used for Task and Goal
 class Task {
   final int status, id;
-  final String label, description, deadline;
-  // Add this field
+  final String label, description, deadline, category;
 
   Task({
     required this.description,
@@ -10,6 +9,6 @@ class Task {
     required this.id,
     required this.status,
     required this.label,
-    // Default value
+    required this.category,
   });
 }

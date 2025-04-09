@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:mental_warior/models/goals.dart';
 import 'package:mental_warior/models/tasks.dart';
 import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/models/books.dart';
@@ -46,6 +47,7 @@ class TaskService {
   final String _taskStatusColumnName = "status";
   final String _taskDescriptionColumnName = "description";
   final String _taskDeadlineColumnName = "deadline";
+  final String _taskCategoryColumnName = "category";
 
   void createTaskTable(Database db) async {
     await db.execute('''
@@ -54,13 +56,14 @@ class TaskService {
         $_taskLabelColumnName TEXT NOT NULL,
         $_taskStatusColumnName INTEGER NOT NULL,
         $_taskDeadlineColumnName TEXT,
-        $_taskDescriptionColumnName TEXT
+        $_taskDescriptionColumnName TEXT,
+        $_taskCategoryColumnName TEXT
       ) 
     ''');
   }
 
-  Future<void> addTask(
-      String label, String deadline, String description) async {
+  Future<void> addTask(String label, String deadline, String description,
+      String category) async {
     final db = await DatabaseService.instance.database;
     await db.insert(
       _taskTableName,
@@ -69,6 +72,7 @@ class TaskService {
         _taskStatusColumnName: 0,
         _taskDeadlineColumnName: deadline,
         _taskDescriptionColumnName: description,
+        _taskCategoryColumnName: category,
       },
     );
   }
@@ -94,6 +98,7 @@ class TaskService {
             status: e[_taskStatusColumnName] as int,
             description: e[_taskDescriptionColumnName] as String,
             deadline: e[_taskDeadlineColumnName] as String,
+            category: e[_taskCategoryColumnName] as String,
           ),
         )
         .toList();
@@ -132,6 +137,7 @@ class CompletedTaskService {
   final String _taskStatusColumnName = "status";
   final String _taskDescriptionColumnName = "description";
   final String _taskDeadlineColumnName = "deadline";
+  final String _taskCategoryColumnName = "category";
 
   void createCompletedTaskTable(Database db) async {
     await db.execute('''
@@ -140,13 +146,14 @@ class CompletedTaskService {
         $_taskLabelColumnName TEXT NOT NULL,
         $_taskStatusColumnName INTEGER NOT NULL,
         $_taskDeadlineColumnName TEXT,
-        $_taskDescriptionColumnName TEXT
+        $_taskDescriptionColumnName TEXT,
+        $_taskCategoryColumnName TEXT
       )
     ''');
   }
 
-  Future addCompletedTask(
-      String label, String deadline, String description) async {
+  Future addCompletedTask(String label, String deadline, String description,
+      String category) async {
     final db = await DatabaseService.instance.database;
     await db.insert(
       _completedTaskTableName,
@@ -155,6 +162,7 @@ class CompletedTaskService {
         _taskStatusColumnName: 0,
         _taskDeadlineColumnName: deadline,
         _taskDescriptionColumnName: description,
+        _taskCategoryColumnName: category,
       },
     );
   }
@@ -171,6 +179,7 @@ class CompletedTaskService {
             status: e[_taskStatusColumnName] as int,
             description: e[_taskDescriptionColumnName] as String,
             deadline: e[_taskDeadlineColumnName] as String,
+            category: e[_taskCategoryColumnName] as String,
           ),
         )
         .toList();
@@ -371,7 +380,7 @@ class GoalService {
     );
   }
 
-  Future<List<Task>> getGoals() async {
+  Future<List<Goal>> getGoals() async {
     final db = await DatabaseService.instance.database;
     final data = await db.query(
       _goalTableName,
@@ -379,7 +388,7 @@ class GoalService {
 
     return data
         .map(
-          (e) => Task(
+          (e) => Goal(
             id: e[_goalIdColumnName] as int,
             label: e[_goalLabelColumnName] as String,
             status: e[_goalStatusColumnName] as int,
@@ -509,14 +518,26 @@ class CategoryService {
   final String _categoryTableName = "categories";
   final String _categoryIdColumnName = "id";
   final String _categoryLabelColumnName = "label";
+  final String _categoryIsDefaultColumnName = "isDefault";
 
   void createCategoryTable(Database db) async {
     await db.execute('''
       CREATE TABLE $_categoryTableName (
         $_categoryIdColumnName INTEGER PRIMARY KEY,
-        $_categoryLabelColumnName TEXT NOT NULL
+        $_categoryLabelColumnName TEXT NOT NULL UNIQUE,
+        $_categoryIsDefaultColumnName INTEGER NOT NULL
       ) 
     ''');
+
+    // Insert the default category if it doesn't already exist
+    await db.insert(
+      _categoryTableName,
+      {
+        _categoryLabelColumnName: "Default",
+        _categoryIsDefaultColumnName: 1,
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore, // Prevent duplicate entries
+    );
   }
 
   Future addCategory(String label) async {
@@ -525,6 +546,7 @@ class CategoryService {
       _categoryTableName,
       {
         _categoryLabelColumnName: label,
+        _categoryIsDefaultColumnName: 0,
       },
     );
   }
@@ -540,13 +562,53 @@ class CategoryService {
           (e) => Category(
             id: e[_categoryIdColumnName] as int,
             label: e[_categoryLabelColumnName] as String,
+            isDefault: e[_categoryIsDefaultColumnName] as int,
           ),
         )
         .toList();
   }
 
-  Future deleteCategory(int id) async {
+  Future<bool> deleteCategory(int id) async {
     final db = await DatabaseService.instance.database;
+
+    // Check if the category is the default category
+    final category = await db.query(
+      _categoryTableName,
+      where: "$_categoryIdColumnName = ?",
+      whereArgs: [id],
+    );
+
+    if (category.isNotEmpty &&
+        category.first[_categoryIsDefaultColumnName] == 1) {
+      // Prevent deletion of the default category
+      return false;
+    }
+
+    // Proceed with deletion for non-default categories
     await db.delete(_categoryTableName, where: "id = ?", whereArgs: [id]);
+    return true;
+  }
+
+  Future<Category> getDefaultCategory() async {
+    final db = await DatabaseService.instance.database;
+
+    // Query the database for the default category
+    final List<Map<String, dynamic>> result = await db.query(
+      _categoryTableName,
+      where: "$_categoryIsDefaultColumnName = ?",
+      whereArgs: [1],
+    );
+
+    // Return the default category if it exists
+    if (result.isNotEmpty) {
+      return Category(
+        id: result.first[_categoryIdColumnName] as int,
+        label: result.first[_categoryLabelColumnName] as String,
+        isDefault: result.first[_categoryIsDefaultColumnName] as int,
+      );
+    }
+
+    // Throw an exception if no default category is found
+    throw Exception("Default category not found");
   }
 }
