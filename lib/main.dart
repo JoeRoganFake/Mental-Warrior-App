@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mental_warior/pages/home.dart';
 import 'package:mental_warior/pages/meditation.dart';
-// import 'package:mental_warior/pages/tasks_p.dart';
+import 'package:mental_warior/pages/categories_page.dart';
 import 'services/background_restet_habits.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -17,7 +17,7 @@ void main() async {
   // Background Task Initialization
   bool initialized = await AndroidAlarmManager.initialize();
   print(initialized
-      ? "🛠 Alarm Manager Initialized Successfully!"
+      ? "🛠 Alarm Manager Initialized Successfully !"
       : "⚠️ Alarm Manager was already initialized.");
 
   registerIsolate();
@@ -51,7 +51,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/': (context) => HomePage(),
         '/meditation': (context) => MeditationPage(),
-        // '/tasks': (context) => TasksPage(),
+        '/categories': (context) => CategoriesPage(), // Add this route
       },
     );
   }

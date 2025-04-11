@@ -7,13 +7,15 @@ import 'package:mental_warior/models/books.dart';
 import 'package:mental_warior/models/categories.dart';
 import 'package:mental_warior/models/goals.dart';
 import 'package:mental_warior/models/habits.dart';
+import 'package:mental_warior/pages/categories_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/quote_service.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/models/tasks.dart';
 import 'dart:isolate';
 import 'package:mental_warior/pages/meditation.dart';
-import 'package:permission_handler/permission_handler.dart'; // Import the Meditation page
+
+import 'package:permission_handler/permission_handler.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -37,7 +39,7 @@ class _HomePageState extends State<HomePage> {
   static const String isolateName = 'background_task_port';
   final ReceivePort _receivePort = ReceivePort();
   final QuoteService _quoteService = QuoteService();
-  int _currentIndex = 0; // Add this line
+  int _currentIndex = 0;
   bool _showDescription = false;
   bool _showDateTime = false;
   final CategoryService _categoryService = CategoryService();
@@ -58,6 +60,19 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     IsolateNameServer.removePortNameMapping(isolateName);
     super.dispose();
+  }
+
+  Widget _getCurrentPage() {
+    switch (_currentIndex) {
+      case 0:
+        return _HomePageContent(); // Remove const to allow rebuilding
+      case 1:
+        return const MeditationPage();
+      case 2:
+        return const CategoriesPage();
+      default:
+        return _HomePageContent();
+    }
   }
 
   @override
@@ -111,21 +126,31 @@ class _HomePageState extends State<HomePage> {
                 color: Colors.white,
               ),
             )
-          : null, // Add this line
+          : null,
       backgroundColor: Colors.white,
       body: MediaQuery.removePadding(
         context: context,
         removeTop: true,
-        child: _currentIndex == 0
-            ? _buildHomePage()
-            : MeditationPage(), // Add this line
+        child:
+            _getCurrentPage(), // Use the method instead of _pages[_currentIndex]
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
+          // If we're returning to Home tab from another tab, force refresh data
+          if (_currentIndex != 0 && index == 0) {
+            // First update the index
+            setState(() {
+              _currentIndex = index;
+            });
+            // Then force a rebuild of the home content
+            setState(() {});
+          } else {
+            // Normal tab change
+            setState(() {
+              _currentIndex = index;
+            });
+          }
         },
         items: [
           BottomNavigationBarItem(
@@ -138,195 +163,13 @@ class _HomePageState extends State<HomePage> {
                 color: _currentIndex == 1 ? Colors.blue : Colors.grey),
             label: 'Meditation',
           ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.category,
+                color: _currentIndex == 2 ? Colors.blue : Colors.grey),
+            label: 'Tasks',
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildHomePage() {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 30),
-          child: Text(
-            "Good Productive ${function.getTimeOfDayDescription()}.",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-        ),
-        Text(
-          " Daily Quote",
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        SizedBox(height: 20),
-        Text(
-          '"${_quoteService.getDailyQuote().text}"',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
-        ),
-        SizedBox(height: 20),
-        Text(
-          "- ${_quoteService.getDailyQuote().author}",
-          style: TextStyle(fontSize: 14, fontStyle: FontStyle.normal),
-        ),
-        const SizedBox(height: 25),
-        Text(
-          "Goals",
-          textAlign: TextAlign.left,
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 20),
-        _goalList(),
-        const SizedBox(height: 25),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Flexible(
-              flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Tasks Today",
-                    textAlign: TextAlign.start,
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 20),
-                  _taskList(),
-                  _completedTaskList(),
-                ],
-              ),
-            ),
-            const SizedBox(width: 20),
-            Flexible(
-              flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Habits Today",
-                    textAlign: TextAlign.start,
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 20),
-                  _habitList()
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(
-          height: 20,
-        ),
-        _bookList(),
-        const SizedBox(height: 25),
-        const Text(
-          "All Tasks Details",
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 10),
-        _allTaskDetailsList(),
-      ],
-    );
-  }
-
-  Widget _allTaskDetailsList() {
-    return FutureBuilder<List<Task>>(
-      future: _taskService.getTasks(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text("No tasks available"));
-        }
-
-        final List<Task> tasks = snapshot.data!;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: tasks.map((task) {
-            return Card(
-              margin: const EdgeInsets.symmetric(vertical: 8.0),
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            task.label,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade100,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            task.category,
-                            style: TextStyle(color: Colors.blue.shade800),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(),
-                    if (task.description.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4.0, bottom: 8.0),
-                        child: Text(
-                          "Description: ${task.description}",
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ),
-                    if (task.deadline.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.calendar_today, size: 16),
-                            const SizedBox(width: 8),
-                            Text(
-                              "Deadline: ${task.deadline}",
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                          ],
-                        ),
-                      ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          "Status: ${task.status == 1 ? 'Completed' : 'Pending'}",
-                          style: TextStyle(
-                            color:
-                                task.status == 1 ? Colors.green : Colors.orange,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.edit, size: 20),
-                          onPressed: () {
-                            _labelController.text = task.label;
-                            _descriptionController.text = task.description;
-                            _dateController.text = task.deadline;
-                            taskFormDialog(context, add: false, task: task);
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
-        );
-      },
     );
   }
 
@@ -1891,6 +1734,84 @@ class _HomePageState extends State<HomePage> {
       await Permission.notification.request();
     }
   }
+
+  Widget _buildHomePage() {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 30),
+          child: Text(
+            "Good Productive ${function.getTimeOfDayDescription()}.",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+        ),
+        Text(
+          " Daily Quote",
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        SizedBox(height: 20),
+        Text(
+          '"${_quoteService.getDailyQuote().text}"',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+        ),
+        SizedBox(height: 20),
+        Text(
+          "- ${_quoteService.getDailyQuote().author}",
+          style: TextStyle(fontSize: 14, fontStyle: FontStyle.normal),
+        ),
+        const SizedBox(height: 25),
+        Text(
+          "Goals",
+          textAlign: TextAlign.left,
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 20),
+        _goalList(),
+        const SizedBox(height: 25),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Flexible(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Tasks Today",
+                    textAlign: TextAlign.start,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 20),
+                  _taskList(),
+                  _completedTaskList(),
+                ],
+              ),
+            ),
+            const SizedBox(width: 20),
+            Flexible(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Habits Today",
+                    textAlign: TextAlign.start,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 20),
+                  _habitList()
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        _bookList(),
+      ],
+    );
+  }
 }
 
 class TaskDetailsWidget extends StatelessWidget {
@@ -1927,5 +1848,15 @@ class TaskDetailsWidget extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _HomePageContent extends StatelessWidget {
+  const _HomePageContent({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final homePageState = context.findAncestorStateOfType<_HomePageState>();
+    return homePageState!._buildHomePage();
   }
 }

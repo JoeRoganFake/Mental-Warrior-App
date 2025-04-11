@@ -41,6 +41,7 @@ class DatabaseService {
 }
 
 class TaskService {
+  static final ValueNotifier<bool> tasksUpdatedNotifier = ValueNotifier(false);
   final String _taskTableName = "tasks";
   final String _taskIdColumnName = "id";
   final String _taskLabelColumnName = "label";
@@ -75,6 +76,7 @@ class TaskService {
         _taskCategoryColumnName: category,
       },
     );
+    tasksUpdatedNotifier.value = !tasksUpdatedNotifier.value;
   }
 
   Future<List<Task>> getTasks() async {
