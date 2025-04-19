@@ -41,6 +41,7 @@ class DatabaseService {
 }
 
 class TaskService {
+  static final ValueNotifier<bool> tasksUpdatedNotifier = ValueNotifier(false);
   final String _taskTableName = "tasks";
   final String _taskIdColumnName = "id";
   final String _taskLabelColumnName = "label";
@@ -48,6 +49,11 @@ class TaskService {
   final String _taskDescriptionColumnName = "description";
   final String _taskDeadlineColumnName = "deadline";
   final String _taskCategoryColumnName = "category";
+  final String _taskRepeatFrequencyColumnName = "repeatFrequency";
+  final String _taskRepeatIntervalColumnName = "repeatInterval";
+  final String _taskRepeatEndTypeColumnName = "repeatEndType";
+  final String _taskRepeatEndDateColumnName = "repeatEndDate";
+  final String _taskRepeatOccurrencesColumnName = "repeatOccurrences";
 
   void createTaskTable(Database db) async {
     await db.execute('''
@@ -57,13 +63,27 @@ class TaskService {
         $_taskStatusColumnName INTEGER NOT NULL,
         $_taskDeadlineColumnName TEXT,
         $_taskDescriptionColumnName TEXT,
-        $_taskCategoryColumnName TEXT
+        $_taskCategoryColumnName TEXT,
+        $_taskRepeatFrequencyColumnName TEXT,
+        $_taskRepeatIntervalColumnName INTEGER,
+        $_taskRepeatEndTypeColumnName TEXT,
+        $_taskRepeatEndDateColumnName TEXT,
+        $_taskRepeatOccurrencesColumnName INTEGER
       ) 
     ''');
   }
 
-  Future<void> addTask(String label, String deadline, String description,
-      String category) async {
+  Future<void> addTask(
+    String label,
+    String deadline,
+    String description,
+    String category, {
+    String? repeatFrequency,
+    int? repeatInterval,
+    String? repeatEndType,
+    String? repeatEndDate,
+    int? repeatOccurrences,
+  }) async {
     final db = await DatabaseService.instance.database;
     await db.insert(
       _taskTableName,
@@ -73,8 +93,14 @@ class TaskService {
         _taskDeadlineColumnName: deadline,
         _taskDescriptionColumnName: description,
         _taskCategoryColumnName: category,
+        _taskRepeatFrequencyColumnName: repeatFrequency,
+        _taskRepeatIntervalColumnName: repeatInterval,
+        _taskRepeatEndTypeColumnName: repeatEndType,
+        _taskRepeatEndDateColumnName: repeatEndDate,
+        _taskRepeatOccurrencesColumnName: repeatOccurrences,
       },
     );
+    tasksUpdatedNotifier.value = !tasksUpdatedNotifier.value;
   }
 
   Future<List<Task>> getTasks() async {
@@ -99,6 +125,11 @@ class TaskService {
             description: e[_taskDescriptionColumnName] as String,
             deadline: e[_taskDeadlineColumnName] as String,
             category: e[_taskCategoryColumnName] as String,
+            repeatFrequency: e[_taskRepeatFrequencyColumnName] as String?,
+            repeatInterval: e[_taskRepeatIntervalColumnName] as int?,
+            repeatEndType: e[_taskRepeatEndTypeColumnName] as String?,
+            repeatEndDate: e[_taskRepeatEndDateColumnName] as String?,
+            repeatOccurrences: e[_taskRepeatOccurrencesColumnName] as int?,
           ),
         )
         .toList();
