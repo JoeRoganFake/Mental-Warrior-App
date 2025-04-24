@@ -12,7 +12,6 @@ class CategoriesPage extends StatefulWidget {
 
 class _CategoriesPageState extends State<CategoriesPage>
     with TickerProviderStateMixin {
-  final TaskService _taskService = TaskService();
   final CategoryService _categoryService = CategoryService();
   TabController? _tabController;
   List<Category> _categories = [];
@@ -233,40 +232,6 @@ class _CategoriesPageState extends State<CategoriesPage>
           },
           backgroundColor: Colors.blue,
           child: const Icon(Icons.add),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCategoryTab(Category category, int index) {
-    final bool isSelected = _tabController?.index == index;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _tabController?.animateTo(index);
-        });
-      },
-      onLongPress: () async {
-        await _deleteCategory(category);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: isSelected ? Colors.blue : Colors.transparent,
-              width: 3.0,
-            ),
-          ),
-        ),
-        child: Text(
-          category.label,
-          style: TextStyle(
-            color: isSelected ? Colors.blue : Colors.grey,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-            fontSize: 15,
-          ),
         ),
       ),
     );

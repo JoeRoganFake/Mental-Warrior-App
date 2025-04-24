@@ -24,6 +24,16 @@ class _CategoriesPageState extends State<CategoriesPage>
   bool _showDescription = false;
   bool _showDateTime = false;
 
+  // Add new fields for repeat functionality
+  bool _showRepeat = false;
+  String _repeatFrequency = 'day';
+  int _repeatInterval = 1;
+  String _repeatEndType = 'never';
+  final TextEditingController _repeatEndDateController =
+      TextEditingController();
+  final TextEditingController _repeatOccurrencesController =
+      TextEditingController();
+
   // Add this field to track the currently selected category
   Category? _currentCategory;
 
@@ -186,15 +196,17 @@ class _CategoriesPageState extends State<CategoriesPage>
             ],
           ),
         ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => _showAddCategoryDialog(context),
-          backgroundColor: Colors.blue,
-          child: const Icon(Icons.add),
-        ),
       );
     }
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          _showAddTaskDialog(context, _currentCategory!);
+        },
+        backgroundColor: Colors.blue,
+        child: const Icon(Icons.add),
+      ),
       appBar: AppBar(
         title: Padding(
           padding: const EdgeInsets.only(right: 16.0, top: 55.0),
@@ -262,57 +274,6 @@ class _CategoriesPageState extends State<CategoriesPage>
           ),
         ),
       ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 16.0, right: 16.0),
-        child: FloatingActionButton(
-          onPressed: () {
-            if (_categories.isEmpty || _tabController == null) {
-              _showAddCategoryDialog(context);
-            } else {
-              // Use the tracked current category instead of looking it up by index
-              _showAddTaskDialog(context,
-                  _currentCategory ?? _categories[_tabController!.index]);
-            }
-          },
-          backgroundColor: Colors.blue,
-          child: const Icon(Icons.add),
-        ),
-      ),
-    );
-  }
-
-  void _showAddCategoryDialog(BuildContext context) {
-    final TextEditingController controller = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add New Category'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Category name',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (controller.text.trim().isNotEmpty) {
-                await _categoryService.addCategory(controller.text.trim());
-                Navigator.pop(context);
-                _loadCategories();
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -323,6 +284,14 @@ class _CategoriesPageState extends State<CategoriesPage>
     _dateController.clear();
     _showDescription = false;
     _showDateTime = false;
+
+    // Reset repeat functionality variables
+    _showRepeat = false;
+    _repeatFrequency = 'day';
+    _repeatInterval = 1;
+    _repeatEndType = 'never';
+    _repeatEndDateController.clear();
+    _repeatOccurrencesController.text = '30';
 
     final GlobalKey<FormState> taskFormKey = GlobalKey<FormState>();
 
@@ -506,12 +475,72 @@ class _CategoriesPageState extends State<CategoriesPage>
                                   modalSetState(() {
                                     _showDateTime = false;
                                     _dateController.clear();
+                                    // Reset repeat options if date is removed
+                                    _showRepeat = false;
                                   });
                                 },
                               ),
                             ],
                           ),
                         ),
+
+                      // Add Repeat button (only shows if a date is selected and has a valid time)
+                      if (_showDateTime &&
+                          _dateController.text.isNotEmpty &&
+                          _dateController.text.contains(":"))
+                        TextButton.icon(
+                          icon: Icon(Icons.repeat, color: Colors.grey[400]),
+                          label: Text(
+                            _showRepeat
+                                ? "Repeats every $_repeatInterval ${_repeatFrequency}${_repeatInterval > 1 ? 's' : ''}"
+                                : "Add Repeat",
+                            style: TextStyle(
+                                color: _showRepeat
+                                    ? Colors.blue
+                                    : Colors.grey[400]),
+                          ),
+                          onPressed: () {
+                            _showRepeatOptionsDialog(context, modalSetState);
+                          },
+                          // Add trailing remove button to discard repeat options
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.only(left: 12, right: 0),
+                          ),
+                        ),
+
+                      // Show remove button for repeat options when active
+                      if (_showRepeat)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton.icon(
+                                icon: Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.red[300],
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  "Remove Repeat",
+                                  style: TextStyle(color: Colors.red[300]),
+                                ),
+                                onPressed: () {
+                                  modalSetState(() {
+                                    // Clear all repeat-related fields
+                                    _showRepeat = false;
+                                    _repeatFrequency = 'day';
+                                    _repeatInterval = 1;
+                                    _repeatEndType = 'never';
+                                    _repeatEndDateController.clear();
+                                    _repeatOccurrencesController.text = '30';
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+
                       Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: ElevatedButton(
@@ -525,8 +554,23 @@ class _CategoriesPageState extends State<CategoriesPage>
                                 _labelController.text,
                                 _dateController.text,
                                 _descriptionController.text,
-                                currentCategory
-                                    .label, // Use the current category, not the one passed to the dialog
+                                currentCategory.label,
+                                // Add repeat functionality parameters
+                                repeatFrequency:
+                                    _showRepeat ? _repeatFrequency : null,
+                                repeatInterval:
+                                    _showRepeat ? _repeatInterval : null,
+                                repeatEndType:
+                                    _showRepeat ? _repeatEndType : null,
+                                repeatEndDate:
+                                    _showRepeat && _repeatEndType == 'on'
+                                        ? _repeatEndDateController.text
+                                        : null,
+                                repeatOccurrences:
+                                    _showRepeat && _repeatEndType == 'after'
+                                        ? int.tryParse(
+                                            _repeatOccurrencesController.text)
+                                        : null,
                               );
 
                               Navigator.pop(context);
@@ -541,6 +585,525 @@ class _CategoriesPageState extends State<CategoriesPage>
                       ),
                     ],
                   ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Method to show the repeat options dialog
+  Future<void> _showRepeatOptionsDialog(
+      BuildContext context, StateSetter parentSetState) async {
+    // Make a copy of the current values to restore if user cancels
+    final String oldFrequency = _repeatFrequency;
+    final int oldInterval = _repeatInterval;
+    final String oldEndType = _repeatEndType;
+    final String oldEndDate = _repeatEndDateController.text;
+    final String oldOccurrences = _repeatOccurrencesController.text;
+
+    // Always ensure the end date is set to a reasonable value if not already set
+    if (_repeatEndType == 'on' &&
+        _repeatEndDateController.text.isEmpty &&
+        _dateController.text.isNotEmpty) {
+      try {
+        final datePart = _dateController.text.split(" ")[0];
+        final parts = datePart.split("-");
+        final startDate = DateTime(
+          int.parse(parts[0]),
+          int.parse(parts[1]),
+          int.parse(parts[2]),
+        );
+        final endDate = startDate.add(Duration(days: 30));
+        _repeatEndDateController.text =
+            "${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}";
+      } catch (e) {
+        print("Error setting default end date: $e");
+      }
+    }
+
+    return showDialog<void>(
+      context: context,
+      builder: (BuildContext context) {
+        // This refreshes the dialog with the latest date/time values from the modal bottom sheet
+        String timeValue = _dateController.text.isNotEmpty &&
+                _dateController.text.contains(":")
+            ? _dateController.text.split(" ")[1]
+            : "12:00";
+
+        String dateValue = _dateController.text.isNotEmpty &&
+                _dateController.text.contains(" ")
+            ? _dateController.text.split(" ")[0].replaceAll('-', '/')
+            : DateTime.now().toString().split(" ")[0].replaceAll('-', '/');
+
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return AlertDialog(
+              backgroundColor: Colors.grey[900],
+              contentPadding: const EdgeInsets.symmetric(vertical: 16.0),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16.0),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Text(
+                        'Repeats every',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0, vertical: 8.0),
+                      child: Row(
+                        children: [
+                          // Interval input
+                          SizedBox(
+                            width: 50,
+                            child: TextFormField(
+                              initialValue: _repeatInterval.toString(),
+                              keyboardType: TextInputType.number,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(
+                                    vertical: 8.0, horizontal: 8.0),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  borderSide:
+                                      BorderSide(color: Colors.grey[700]!),
+                                ),
+                              ),
+                              onChanged: (value) {
+                                setState(() {
+                                  _repeatInterval = int.tryParse(value) ?? 1;
+                                  if (_repeatInterval < 1) _repeatInterval = 1;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          // Frequency dropdown
+                          Expanded(
+                            child: Container(
+                              padding: EdgeInsets.symmetric(horizontal: 10.0),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey[700]!),
+                                borderRadius: BorderRadius.circular(8.0),
+                              ),
+                              child: DropdownButton<String>(
+                                value: _repeatFrequency,
+                                isExpanded: true,
+                                dropdownColor: Colors.grey[800],
+                                style: const TextStyle(color: Colors.white),
+                                icon: Icon(Icons.arrow_drop_down,
+                                    color: Colors.white),
+                                underline: Container(),
+                                items: [
+                                  DropdownMenuItem(
+                                      value: 'day', child: Text('day')),
+                                  DropdownMenuItem(
+                                      value: 'week', child: Text('week')),
+                                  DropdownMenuItem(
+                                      value: 'month', child: Text('month')),
+                                  DropdownMenuItem(
+                                      value: 'year', child: Text('year')),
+                                ],
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() {
+                                      _repeatFrequency = value;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Set time field - Show time from date selection and allow editing
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0, vertical: 8.0),
+                      child: TextFormField(
+                        initialValue: timeValue, // Use the refreshed time value
+                        readOnly: true,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: "Set time",
+                          hintStyle: TextStyle(color: Colors.grey[600]),
+                          prefixIcon:
+                              Icon(Icons.access_time, color: Colors.white),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                            borderSide: BorderSide(color: Colors.grey[700]!),
+                          ),
+                        ),
+                        onTap: () async {
+                          // Get current time from date string or use current time as fallback
+                          TimeOfDay initialTime;
+                          if (_dateController.text.isNotEmpty &&
+                              _dateController.text.contains(":")) {
+                            final timePart = _dateController.text.split(" ")[1];
+                            final parts = timePart.split(":");
+                            initialTime = TimeOfDay(
+                              hour: int.parse(parts[0]),
+                              minute: int.parse(parts[1]),
+                            );
+                          } else {
+                            initialTime = TimeOfDay.now();
+                          }
+
+                          // Show time picker
+                          final TimeOfDay? selectedTime = await showTimePicker(
+                            context: context,
+                            initialTime: initialTime,
+                          );
+
+                          if (selectedTime != null) {
+                            // Parse existing date from the date controller
+                            String currentDateStr = "";
+                            if (_dateController.text.isNotEmpty &&
+                                _dateController.text.contains(" ")) {
+                              currentDateStr =
+                                  _dateController.text.split(" ")[0];
+                            } else {
+                              // If no date, use today's date
+                              final now = DateTime.now();
+                              currentDateStr =
+                                  "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+                            }
+
+                            // Update the date controller with new time
+                            String newTimeStr =
+                                "${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}";
+
+                            // Update both the original date controller and the current display
+                            parentSetState(() {
+                              _dateController.text =
+                                  "$currentDateStr $newTimeStr";
+                            });
+
+                            // Force dialog to rebuild with new values
+                            Navigator.of(context).pop();
+                            _showRepeatOptionsDialog(context, parentSetState);
+                          }
+                        },
+                      ),
+                    ),
+                    // Starts field - Make it editable
+                    Padding(
+                      padding: const EdgeInsets.only(
+                          left: 16.0, right: 16.0, top: 16.0, bottom: 8.0),
+                      child: Text(
+                        'Starts',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: TextFormField(
+                        initialValue: dateValue, // Use the refreshed date value
+                        readOnly: true,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          prefixIcon:
+                              Icon(Icons.calendar_today, color: Colors.white),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                            borderSide: BorderSide(color: Colors.grey[700]!),
+                          ),
+                        ),
+                        onTap: () async {
+                          // Get current date from date string or use current date as fallback
+                          DateTime initialDate;
+                          if (_dateController.text.isNotEmpty) {
+                            final datePart = _dateController.text.split(" ")[0];
+                            final parts = datePart.split("-");
+                            initialDate = DateTime(
+                              int.parse(parts[0]),
+                              int.parse(parts[1]),
+                              int.parse(parts[2]),
+                            );
+                          } else {
+                            initialDate = DateTime.now();
+                          }
+
+                          // Show date picker
+                          final DateTime? selectedDate = await showDatePicker(
+                            context: context,
+                            initialDate: initialDate,
+                            firstDate: DateTime.now(),
+                            lastDate: DateTime(2100),
+                          );
+
+                          if (selectedDate != null) {
+                            // Get current time from date string or use current time as fallback
+                            TimeOfDay initialTime;
+                            if (_dateController.text.isNotEmpty &&
+                                _dateController.text.contains(":")) {
+                              final timePart =
+                                  _dateController.text.split(" ")[1];
+                              final parts = timePart.split(":");
+                              initialTime = TimeOfDay(
+                                hour: int.parse(parts[0]),
+                                minute: int.parse(parts[1]),
+                              );
+                            } else {
+                              initialTime = TimeOfDay.now();
+                            }
+
+                            // Format the new date string
+                            String newDateStr =
+                                "${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}";
+                            String newTimeStr =
+                                "${initialTime.hour.toString().padLeft(2, '0')}:${initialTime.minute.toString().padLeft(2, '0')}";
+
+                            // Update both the original date controller and the current display
+                            parentSetState(() {
+                              _dateController.text = "$newDateStr $newTimeStr";
+                            });
+
+                            // Force dialog to rebuild with new values
+                            Navigator.of(context).pop();
+                            _showRepeatOptionsDialog(context, parentSetState);
+                          }
+                        },
+                      ),
+                    ),
+                    // Ends section
+                    Padding(
+                      padding: const EdgeInsets.only(
+                          left: 16.0, right: 16.0, top: 16.0, bottom: 8.0),
+                      child: Text(
+                        'Ends',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+
+                    // Never radio option
+                    RadioListTile<String>(
+                      title:
+                          Text('Never', style: TextStyle(color: Colors.white)),
+                      value: 'never',
+                      groupValue: _repeatEndType,
+                      activeColor: Colors.blue,
+                      onChanged: (value) {
+                        setState(() {
+                          _repeatEndType = value!;
+                        });
+                      },
+                    ),
+
+                    // On specific date radio option
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        children: [
+                          Radio<String>(
+                            value: 'on',
+                            groupValue: _repeatEndType,
+                            activeColor: Colors.blue,
+                            onChanged: (value) {
+                              setState(() {
+                                _repeatEndType = value!;
+
+                                // Auto-set reasonable end date if not set
+                                if (_repeatEndDateController.text.isEmpty &&
+                                    _dateController.text.isNotEmpty) {
+                                  try {
+                                    final datePart =
+                                        _dateController.text.split(" ")[0];
+                                    final parts = datePart.split("-");
+                                    final startDate = DateTime(
+                                      int.parse(parts[0]),
+                                      int.parse(parts[1]),
+                                      int.parse(parts[2]),
+                                    );
+                                    final endDate =
+                                        startDate.add(Duration(days: 30));
+                                    _repeatEndDateController.text =
+                                        "${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}";
+                                  } catch (e) {
+                                    print("Error setting default end date: $e");
+                                  }
+                                }
+                              });
+                            },
+                          ),
+                          Text('On', style: TextStyle(color: Colors.white)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _repeatEndDateController,
+                              readOnly: true,
+                              enabled: _repeatEndType == 'on',
+                              style: TextStyle(
+                                color: _repeatEndType == 'on'
+                                    ? Colors.white
+                                    : Colors.grey[600],
+                              ),
+                              decoration: InputDecoration(
+                                hintText: "End date",
+                                hintStyle: TextStyle(color: Colors.grey[600]),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  borderSide:
+                                      BorderSide(color: Colors.grey[700]!),
+                                ),
+                              ),
+                              onTap: () async {
+                                if (_repeatEndType == 'on') {
+                                  // Get current date from date string or use current date + 30 days as fallback
+                                  DateTime initialDate;
+                                  if (_dateController.text.isNotEmpty) {
+                                    final datePart =
+                                        _dateController.text.split(" ")[0];
+                                    final parts = datePart.split("-");
+                                    initialDate = DateTime(
+                                      int.parse(parts[0]),
+                                      int.parse(parts[1]),
+                                      int.parse(parts[2]),
+                                    ).add(Duration(
+                                        days: 30)); // Default to 30 days ahead
+                                  } else {
+                                    initialDate =
+                                        DateTime.now().add(Duration(days: 30));
+                                  }
+
+                                  DateTime? date = await showDatePicker(
+                                    context: context,
+                                    initialDate: initialDate,
+                                    firstDate: DateTime.now(),
+                                    lastDate: DateTime(2100),
+                                  );
+
+                                  if (date != null) {
+                                    setState(() {
+                                      // Format the end date properly
+                                      _repeatEndDateController.text =
+                                          "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+                                    });
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // After X occurrences radio option
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        children: [
+                          Radio<String>(
+                            value: 'after',
+                            groupValue: _repeatEndType,
+                            activeColor: Colors.blue,
+                            onChanged: (value) {
+                              setState(() {
+                                _repeatEndType = value!;
+                                if (_repeatOccurrencesController.text.isEmpty) {
+                                  _repeatOccurrencesController.text = '30';
+                                }
+                              });
+                            },
+                          ),
+                          Text('After', style: TextStyle(color: Colors.white)),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 60,
+                            child: TextFormField(
+                              controller: _repeatOccurrencesController,
+                              enabled: _repeatEndType == 'after',
+                              keyboardType: TextInputType.number,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: _repeatEndType == 'after'
+                                    ? Colors.white
+                                    : Colors.grey[600],
+                              ),
+                              decoration: InputDecoration(
+                                contentPadding: EdgeInsets.symmetric(
+                                    vertical: 8.0, horizontal: 8.0),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8.0),
+                                  borderSide:
+                                      BorderSide(color: Colors.grey[700]!),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('occurrences',
+                              style: TextStyle(color: Colors.white)),
+                        ],
+                      ),
+                    ),
+
+                    // Buttons
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0, vertical: 16.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              // Restore previous values
+                              _repeatFrequency = oldFrequency;
+                              _repeatInterval = oldInterval;
+                              _repeatEndType = oldEndType;
+                              _repeatEndDateController.text = oldEndDate;
+                              _repeatOccurrencesController.text =
+                                  oldOccurrences;
+                              Navigator.of(context).pop();
+                            },
+                            child: Text('Cancel',
+                                style: TextStyle(color: Colors.grey[300])),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () {
+                              // Enable repeat in the parent dialog
+                              parentSetState(() {
+                                _showRepeat = true;
+                              });
+                              Navigator.of(context).pop();
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue[300],
+                            ),
+                            child: Text('Done'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -567,12 +1130,15 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
   final TaskService _taskService = TaskService();
   final CompletedTaskService _completedTaskService = CompletedTaskService();
   List<Task> _tasks = [];
+  List<Task> _completedTasks = [];
   bool _isLoading = true;
+  bool _isExpanded = false;
 
   @override
   void initState() {
     super.initState();
     _loadTasks();
+    _loadCompletedTasks();
 
     // Listen for changes to tasks
     TaskService.tasksUpdatedNotifier.addListener(_refreshTasks);
@@ -581,6 +1147,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
   void _refreshTasks() {
     if (mounted) {
       _loadTasks();
+      _loadCompletedTasks();
     }
   }
 
@@ -612,16 +1179,199 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
     }
   }
 
+  Future<void> _loadCompletedTasks() async {
+    try {
+      final allCompletedTasks = await _completedTaskService.getCompletedTasks();
+      setState(() {
+        _completedTasks = allCompletedTasks
+            .where((task) => task.category == widget.category.label)
+            .toList();
+      });
+    } catch (e) {
+      print('Error loading completed tasks: $e');
+    }
+  }
+
   Future<void> _markTaskCompleted(Task task) async {
+    // Before deleting the original task, check if it has repeat functionality
+    String? nextDeadlineStr;
+    if (task.repeatFrequency != null && task.repeatInterval != null) {
+      // Calculate the next occurrence date based on repeat settings
+      DateTime nextDeadline = _calculateNextDeadline(task);
+      nextDeadlineStr = _formatDateTime(nextDeadline);
+    }
+
+    // First, add the task to completed_tasks with next deadline info
     await _completedTaskService.addCompletedTask(
       task.label,
       task.deadline,
       task.description,
       task.category,
+      nextDeadline: nextDeadlineStr,
     );
+
+    // Before deleting the original task, check if it has repeat functionality
+    if (task.repeatFrequency != null && task.repeatInterval != null) {
+      // Calculate the next occurrence date based on repeat settings
+      DateTime nextDeadline = _calculateNextDeadline(task);
+
+      // Check if we should create another occurrence based on end conditions
+      bool shouldCreateNextOccurrence = true;
+
+      // If "on" end type, check if next deadline is after the end date
+      if (task.repeatEndType == 'on' && task.repeatEndDate != null) {
+        DateTime endDate = _parseDateTime(task.repeatEndDate!);
+        shouldCreateNextOccurrence = nextDeadline.isBefore(endDate) ||
+            nextDeadline.isAtSameMomentAs(endDate);
+      }
+      // If "after" end type, we need to update the occurrence count
+      else if (task.repeatEndType == 'after' &&
+          task.repeatOccurrences != null) {
+        // Get count of occurrences needed to re-create this task
+        int remainingOccurrences = task.repeatOccurrences! - 1;
+        if (remainingOccurrences <= 0) {
+          shouldCreateNextOccurrence = false;
+        } else {
+          // Create a new task with updated occurrence count
+          if (shouldCreateNextOccurrence) {
+            await _taskService.addTask(
+              task.label,
+              _formatDateTime(nextDeadline),
+              task.description,
+              task.category,
+              repeatFrequency: task.repeatFrequency,
+              repeatInterval: task.repeatInterval,
+              repeatEndType: task.repeatEndType,
+              repeatEndDate: task.repeatEndDate,
+              repeatOccurrences: remainingOccurrences, // Decrement occurrences
+            );
+          }
+          // Skip the standard task creation below since we've already created it with updated occurrence count
+          shouldCreateNextOccurrence = false;
+        }
+      }
+
+      // Create the next occurrence if needed (for 'never' end type or 'on' date that hasn't been reached)
+      if (shouldCreateNextOccurrence && task.repeatEndType != 'after') {
+        // Format the next deadline
+        String nextDeadlineStr = _formatDateTime(nextDeadline);
+
+        // Get all current tasks to check for duplicates
+        List<Task> currentTasks = await _taskService.getTasks();
+
+        // Check if a task with the same label and deadline already exists
+        bool duplicateExists = currentTasks.any((existingTask) =>
+            existingTask.label == task.label &&
+            existingTask.deadline == nextDeadlineStr);
+
+        // Only create the new task if it doesn't already exist
+        if (!duplicateExists) {
+          await _taskService.addTask(
+            task.label,
+            nextDeadlineStr,
+            task.description,
+            task.category,
+            repeatFrequency: task.repeatFrequency,
+            repeatInterval: task.repeatInterval,
+            repeatEndType: task.repeatEndType,
+            repeatEndDate: task.repeatEndDate,
+            repeatOccurrences: task.repeatOccurrences,
+          );
+        }
+      }
+    }
+
+    // Delete the original task
     await _taskService.deleteTask(task.id);
 
+    // Refresh the task list
     _loadTasks();
+  }
+
+  // Helper method to calculate the next deadline based on repeat settings
+  DateTime _calculateNextDeadline(Task task) {
+    // Parse the current deadline
+    DateTime currentDeadline = _parseDateTime(task.deadline);
+    int interval = task.repeatInterval ?? 1;
+
+    // Calculate next deadline based on frequency
+    DateTime nextDeadline;
+    switch (task.repeatFrequency) {
+      case 'day':
+        nextDeadline = currentDeadline.add(Duration(days: interval));
+        break;
+      case 'week':
+        nextDeadline = currentDeadline.add(Duration(days: 7 * interval));
+        break;
+      case 'month':
+        // Add months by calculating days (approximate)
+        int year = currentDeadline.year;
+        int month = currentDeadline.month + interval;
+        int day = currentDeadline.day;
+
+        // Handle month overflow
+        while (month > 12) {
+          month -= 12;
+          year++;
+        }
+
+        // Handle day validity for the month (e.g., Feb 30 -> Feb 28/29)
+        int daysInMonth = DateTime(year, month + 1, 0).day;
+        if (day > daysInMonth) {
+          day = daysInMonth;
+        }
+
+        nextDeadline = DateTime(
+            year, month, day, currentDeadline.hour, currentDeadline.minute);
+        break;
+      case 'year':
+        // Add years
+        nextDeadline = DateTime(
+            currentDeadline.year + interval,
+            currentDeadline.month,
+            currentDeadline.day,
+            currentDeadline.hour,
+            currentDeadline.minute);
+        break;
+      default:
+        // Default to daily if something goes wrong
+        nextDeadline = currentDeadline.add(Duration(days: interval));
+    }
+
+    return nextDeadline;
+  }
+
+  // Helper method to parse date string into DateTime
+  DateTime _parseDateTime(String dateString) {
+    try {
+      if (dateString.isEmpty) {
+        return DateTime.now(); // Default to now if empty
+      }
+
+      List<String> parts = dateString.split(' ');
+      String datePart = parts[0];
+      String timePart = parts.length > 1 ? parts[1] : "00:00";
+
+      List<String> dateParts = datePart.split('-');
+      List<String> timeParts = timePart.split(':');
+
+      return DateTime(
+        int.parse(dateParts[0]), // year
+        int.parse(dateParts[1]), // month
+        int.parse(dateParts[2]), // day
+        int.parse(timeParts[0]), // hour
+        int.parse(timeParts[1]), // minute
+      );
+    } catch (e) {
+      print("Error parsing date: $e for string: $dateString");
+      return DateTime.now(); // Default to now if parsing fails
+    }
+  }
+
+  // Helper method to format DateTime back to string format used by the app
+  String _formatDateTime(DateTime dateTime) {
+    return "${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} "
+        "${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}";
   }
 
   @override
@@ -632,7 +1382,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
       );
     }
 
-    if (_tasks.isEmpty) {
+    if (_tasks.isEmpty && _completedTasks.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -661,43 +1411,222 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadTasks,
-      // Make refresh easier to trigger
+      onRefresh: () async {
+        await _loadTasks();
+        await _loadCompletedTasks();
+      },
       edgeOffset: 0.0,
       displacement: 40.0,
       color: Colors.blue,
       backgroundColor: Colors.white,
       strokeWidth: 3.0,
-      // Tell user to pull down to refresh
-      child: Stack(
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          // This empty container with a text ensures users can pull to refresh
-          // even when list is empty (but we handle that with the isEmpty check above)
-          Container(
-            alignment: Alignment.center,
-            child: const SizedBox.shrink(),
-          ),
-          ListView.builder(
-            // Make list scrolling require more deliberate gesture
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: ClampingScrollPhysics(),
+          // Active tasks list
+          if (_tasks.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+              child: Text(
+                "Active Tasks",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey[800],
+                ),
+              ),
             ),
-            padding: const EdgeInsets.all(16),
-            itemCount: _tasks.length,
-            itemBuilder: (context, index) {
-              final task = _tasks[index];
-              return TaskCard(
-                task: task,
-                onTaskCompleted: () {
-                  _markTaskCompleted(task);
-                },
-                onRefresh: _loadTasks,
-              );
+            ..._tasks.map((task) => Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: TaskCard(
+                    task: task,
+                    onTaskCompleted: () {
+                      _markTaskCompleted(task);
+                    },
+                    onRefresh: _loadTasks,
+                  ),
+                )),
+          ],
+
+          // Completed tasks section - only show if there are completed tasks
+          if (_completedTasks.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 16, bottom: 8),
+              child: _buildCompletedTasksList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompletedTasksList() {
+    return ExpansionPanelList(
+      expansionCallback: (int index, bool isExpanded) {
+        setState(() {
+          _isExpanded = !_isExpanded;
+        });
+      },
+      children: [
+        ExpansionPanel(
+          isExpanded: _isExpanded,
+          headerBuilder: (context, isExpanded) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Text(
+              "Completed Tasks (${_completedTasks.length})",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[800],
+              ),
+            ),
+          ),
+          body: Column(
+            children: _completedTasks
+                .map((task) => _buildCompletedTaskItem(task))
+                .toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompletedTaskItem(Task task) {
+    return Dismissible(
+      key: Key('completed-${task.id}'),
+      background: Container(
+        color: Colors.red,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) async {
+        await _completedTaskService.deleteCompTask(task.id);
+        _loadCompletedTasks();
+      },
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        title: Text(
+          task.label,
+          style: const TextStyle(
+            decoration: TextDecoration.lineThrough,
+            color: Colors.grey,
+          ),
+        ),
+        subtitle: task.deadline.isNotEmpty
+            ? Text(
+                "Completed on: ${task.deadline}",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                ),
+              )
+            : null,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (task.nextDeadline != null && task.nextDeadline!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Icon(
+                  Icons.event_repeat,
+                  color: Colors.blue[300],
+                  size: 20,
+                ),
+              ),
+            IconButton(
+              icon: Icon(Icons.restore, color: Colors.blue[700]),
+              onPressed: () => _restoreCompletedTask(task),
+              tooltip: 'Restore task',
+            ),
+          ],
+        ),
+        onTap: () => _showCompletedTaskDetails(context, task),
+      ),
+    );
+  }
+
+  void _showCompletedTaskDetails(BuildContext context, Task task) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(task.label),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (task.description.isNotEmpty) ...[
+              const Text(
+                "Description:",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(task.description),
+              const SizedBox(height: 16),
+            ],
+            if (task.deadline.isNotEmpty) ...[
+              const Text(
+                "Completed on:",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(task.deadline),
+              const SizedBox(height: 16),
+            ],
+            if (task.nextDeadline != null && task.nextDeadline!.isNotEmpty) ...[
+              const Text(
+                "Next occurrence:",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(task.nextDeadline!),
+              const SizedBox(height: 16),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _restoreCompletedTask(task);
             },
+            child: const Text('Restore'),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _restoreCompletedTask(Task task) async {
+    // Add the task back to the active tasks
+    await _taskService.addTask(
+      task.label,
+      task.deadline,
+      task.description,
+      task.category,
+    );
+
+    // Remove from completed tasks
+    await _completedTaskService.deleteCompTask(task.id);
+
+    // Refresh both lists
+    _loadTasks();
+    _loadCompletedTasks();
+
+    // Show a confirmation
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Task "${task.label}" restored'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 }
 

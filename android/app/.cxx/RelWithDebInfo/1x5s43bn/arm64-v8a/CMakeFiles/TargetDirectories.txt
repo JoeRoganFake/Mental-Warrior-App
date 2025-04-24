@@ -1,2 +1,0 @@
-C:/app/aplications/mental_warior/android/app/.cxx/RelWithDebInfo/1x5s43bn/arm64-v8a/CMakeFiles/edit_cache.dir
-C:/app/aplications/mental_warior/android/app/.cxx/RelWithDebInfo/1x5s43bn/arm64-v8a/CMakeFiles/rebuild_cache.dir

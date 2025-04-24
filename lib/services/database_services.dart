@@ -150,14 +150,15 @@ class TaskService {
     await db.delete(_taskTableName, where: "id = ?", whereArgs: [id]);
   }
 
-  Future<void> updateTask(int id, String fieldToUpdate, String key) async {
+  Future<void> updateTask(int id, String fieldToUpdate, dynamic value) async {
     final db = await DatabaseService.instance.database;
     await db.update(
       _taskTableName,
-      {fieldToUpdate: key},
+      {fieldToUpdate: value},
       where: "id = ?",
       whereArgs: [id],
     );
+    tasksUpdatedNotifier.value = !tasksUpdatedNotifier.value;
   }
 }
 
@@ -169,6 +170,7 @@ class CompletedTaskService {
   final String _taskDescriptionColumnName = "description";
   final String _taskDeadlineColumnName = "deadline";
   final String _taskCategoryColumnName = "category";
+  final String _taskNextDeadlineColumnName = "nextDeadline";
 
   void createCompletedTaskTable(Database db) async {
     await db.execute('''
@@ -178,13 +180,15 @@ class CompletedTaskService {
         $_taskStatusColumnName INTEGER NOT NULL,
         $_taskDeadlineColumnName TEXT,
         $_taskDescriptionColumnName TEXT,
-        $_taskCategoryColumnName TEXT
+        $_taskCategoryColumnName TEXT,
+        $_taskNextDeadlineColumnName TEXT
       )
     ''');
   }
 
-  Future addCompletedTask(String label, String deadline, String description,
-      String category) async {
+  Future addCompletedTask(
+      String label, String deadline, String description, String category,
+      {String? nextDeadline}) async {
     final db = await DatabaseService.instance.database;
     await db.insert(
       _completedTaskTableName,
@@ -194,6 +198,7 @@ class CompletedTaskService {
         _taskDeadlineColumnName: deadline,
         _taskDescriptionColumnName: description,
         _taskCategoryColumnName: category,
+        _taskNextDeadlineColumnName: nextDeadline,
       },
     );
   }
@@ -211,6 +216,7 @@ class CompletedTaskService {
             description: e[_taskDescriptionColumnName] as String,
             deadline: e[_taskDeadlineColumnName] as String,
             category: e[_taskCategoryColumnName] as String,
+            nextDeadline: e[_taskNextDeadlineColumnName] as String?,
           ),
         )
         .toList();
