@@ -31,6 +31,7 @@ class DatabaseService {
       onCreate: (db, version) {
         TaskService().createTaskTable(db);
         CompletedTaskService().createCompletedTaskTable(db);
+        PendingTaskService().createPendingTaskTable(db);
         HabitService().createHabitTable(db);
         GoalService().createGoalTable(db);
         BookService().createbookTable(db);
@@ -647,5 +648,150 @@ class CategoryService {
 
     // Throw an exception if no default category is found
     throw Exception("Default category not found");
+  }
+}
+
+// Add a new PendingTaskService for storing future repeating tasks
+class PendingTaskService {
+  final String _pendingTaskTableName = "pending_tasks";
+  final String _taskIdColumnName = "id";
+  final String _taskLabelColumnName = "label";
+  final String _taskStatusColumnName = "status";
+  final String _taskDescriptionColumnName = "description";
+  final String _taskDeadlineColumnName = "deadline";
+  final String _taskCategoryColumnName = "category";
+  final String _taskRepeatFrequencyColumnName = "repeatFrequency";
+  final String _taskRepeatIntervalColumnName = "repeatInterval";
+  final String _taskRepeatEndTypeColumnName = "repeatEndType";
+  final String _taskRepeatEndDateColumnName = "repeatEndDate";
+  final String _taskRepeatOccurrencesColumnName = "repeatOccurrences";
+
+  void createPendingTaskTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_pendingTaskTableName (
+        $_taskIdColumnName INTEGER PRIMARY KEY,
+        $_taskLabelColumnName TEXT NOT NULL,
+        $_taskStatusColumnName INTEGER NOT NULL,
+        $_taskDeadlineColumnName TEXT NOT NULL,
+        $_taskDescriptionColumnName TEXT,
+        $_taskCategoryColumnName TEXT,
+        $_taskRepeatFrequencyColumnName TEXT,
+        $_taskRepeatIntervalColumnName INTEGER,
+        $_taskRepeatEndTypeColumnName TEXT,
+        $_taskRepeatEndDateColumnName TEXT,
+        $_taskRepeatOccurrencesColumnName INTEGER
+      ) 
+    ''');
+  }
+
+  Future<void> addPendingTask(
+    String label,
+    String deadline,
+    String description,
+    String category, {
+    String? repeatFrequency,
+    int? repeatInterval,
+    String? repeatEndType,
+    String? repeatEndDate,
+    int? repeatOccurrences,
+  }) async {
+    final db = await DatabaseService.instance.database;
+    await db.insert(
+      _pendingTaskTableName,
+      {
+        _taskLabelColumnName: label,
+        _taskStatusColumnName: 0,
+        _taskDeadlineColumnName: deadline,
+        _taskDescriptionColumnName: description,
+        _taskCategoryColumnName: category,
+        _taskRepeatFrequencyColumnName: repeatFrequency,
+        _taskRepeatIntervalColumnName: repeatInterval,
+        _taskRepeatEndTypeColumnName: repeatEndType,
+        _taskRepeatEndDateColumnName: repeatEndDate,
+        _taskRepeatOccurrencesColumnName: repeatOccurrences,
+      },
+    );
+  }
+
+  Future<List<Task>> getPendingTasks() async {
+    final db = await DatabaseService.instance.database;
+    final data = await db.query(_pendingTaskTableName);
+
+    return data
+        .map(
+          (e) => Task(
+            id: e[_taskIdColumnName] as int,
+            label: e[_taskLabelColumnName] as String,
+            status: e[_taskStatusColumnName] as int,
+            description: e[_taskDescriptionColumnName] as String,
+            deadline: e[_taskDeadlineColumnName] as String,
+            category: e[_taskCategoryColumnName] as String,
+            repeatFrequency: e[_taskRepeatFrequencyColumnName] as String?,
+            repeatInterval: e[_taskRepeatIntervalColumnName] as int?,
+            repeatEndType: e[_taskRepeatEndTypeColumnName] as String?,
+            repeatEndDate: e[_taskRepeatEndDateColumnName] as String?,
+            repeatOccurrences: e[_taskRepeatOccurrencesColumnName] as int?,
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> deletePendingTask(int id) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete(_pendingTaskTableName, where: "id = ?", whereArgs: [id]);
+  }
+
+  // Check for pending tasks that are due today (on the actual day of the deadline)
+  Future<void> checkForDueTasks() async {
+    final TaskService taskService = TaskService();
+
+    // Get today's date at the start of the day (midnight)
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Get all pending tasks
+    final pendingTasks = await getPendingTasks();
+
+    for (final task in pendingTasks) {
+      try {
+        // Parse the task deadline
+        final deadlineStr =
+            task.deadline.split(" ")[0]; // Get just the date part
+        final parts = deadlineStr.split("-");
+        final taskDate = DateTime(
+            int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+
+        // Only activate tasks that are due today (exactly on the deadline date)
+        // This ensures tasks appear only on the day they're due, not a day before
+        if (taskDate.year == today.year &&
+            taskDate.month == today.month &&
+            taskDate.day == today.day) {
+          print(
+              "📅 Activating task '${task.label}' due today on ${task.deadline}");
+
+          // Add to active tasks
+          await taskService.addTask(
+            task.label,
+            task.deadline,
+            task.description,
+            task.category,
+            repeatFrequency: task.repeatFrequency,
+            repeatInterval: task.repeatInterval,
+            repeatEndType: task.repeatEndType,
+            repeatEndDate: task.repeatEndDate,
+            repeatOccurrences: task.repeatOccurrences,
+          );
+
+          // Remove from pending tasks
+          await deletePendingTask(task.id);
+        }
+      } catch (e) {
+        print("Error processing pending task: $e");
+      }
+    }
+
+    // Notify listeners that tasks may have changed
+    TaskService.tasksUpdatedNotifier.value =
+        !TaskService.tasksUpdatedNotifier.value;
   }
 }

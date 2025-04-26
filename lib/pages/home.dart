@@ -15,6 +15,7 @@ import 'package:mental_warior/models/tasks.dart';
 import 'dart:isolate';
 import 'package:mental_warior/pages/meditation.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:mental_warior/services/background_task_manager.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -42,6 +43,7 @@ class _HomePageState extends State<HomePage> {
   bool _showDateTime = false;
   final CategoryService _categoryService = CategoryService();
   Category? selectedCategory;
+  Quote? _currentDailyQuote;
 
   @override
   void initState() {
@@ -50,8 +52,30 @@ class _HomePageState extends State<HomePage> {
     IsolateNameServer.registerPortWithName(_receivePort.sendPort, isolateName);
 
     _receivePort.listen((message) {
+      if (message == 'quote_updated') {
+        _loadStoredQuote();
+      }
       setState(() {});
     });
+
+    _loadStoredQuote();
+  }
+
+  Future<void> _loadStoredQuote() async {
+    // Try to get the stored quote first
+    final storedQuote = await BackgroundTaskManager.getStoredDailyQuote();
+
+    // If there's no stored quote, get one from the service and store it
+    if (storedQuote == null) {
+      final newQuote = _quoteService.getDailyQuote();
+      await BackgroundTaskManager.dailyQuoteCallback();
+
+      _currentDailyQuote = newQuote;
+    } else {
+      _currentDailyQuote = storedQuote;
+    }
+
+    setState(() {});
   }
 
   @override
@@ -1939,16 +1963,29 @@ class _HomePageState extends State<HomePage> {
                                     List<Task> currentTasks =
                                         await _taskService.getTasks();
 
+                                    // Also get all pending tasks to check for duplicates
+                                    final pendingTaskService =
+                                        PendingTaskService();
+                                    List<Task> pendingTasks =
+                                        await pendingTaskService
+                                            .getPendingTasks();
+
                                     // Check if a task with the same label and deadline already exists
                                     bool duplicateExists = currentTasks.any(
-                                        (existingTask) =>
+                                            (existingTask) =>
+                                                existingTask.label ==
+                                                    task.label &&
+                                                existingTask.deadline ==
+                                                    nextDeadlineStr) ||
+                                        pendingTasks.any((existingTask) =>
                                             existingTask.label == task.label &&
                                             existingTask.deadline ==
                                                 nextDeadlineStr);
 
                                     // Only create the new task if it doesn't already exist
                                     if (!duplicateExists) {
-                                      await _taskService.addTask(
+                                      // ALWAYS add to pending tasks instead of active tasks
+                                      await pendingTaskService.addPendingTask(
                                         task.label,
                                         nextDeadlineStr,
                                         task.description,
@@ -2456,6 +2493,12 @@ class _HomePageState extends State<HomePage> {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
+        IconButton(
+            onPressed: () async {
+              await BackgroundTaskManager.runAllTasksNow();
+              _loadStoredQuote(); // Reload the quote after running tasks
+            },
+            icon: Icon(Icons.run_circle_outlined)),
         Padding(
           padding: const EdgeInsets.only(top: 30),
           child: Text(
@@ -2468,16 +2511,22 @@ class _HomePageState extends State<HomePage> {
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         SizedBox(height: 20),
-        Text(
-          '"${_quoteService.getDailyQuote().text}"',
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
-        ),
+        // Show loading indicator while quote is null, otherwise show the quote
+        _currentDailyQuote == null
+            ? Center(child: CircularProgressIndicator())
+            : Text(
+                '"${_currentDailyQuote!.text}"',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+              ),
         SizedBox(height: 20),
-        Text(
-          "- ${_quoteService.getDailyQuote().author}",
-          style: TextStyle(fontSize: 14, fontStyle: FontStyle.normal),
-        ),
+        // Show loading indicator while quote is null, otherwise show the author
+        _currentDailyQuote == null
+            ? SizedBox.shrink()
+            : Text(
+                "- ${_currentDailyQuote!.author}",
+                style: TextStyle(fontSize: 14, fontStyle: FontStyle.normal),
+              ),
         const SizedBox(height: 25),
         Text(
           "Goals",
@@ -2530,7 +2579,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Helper method to calculate the next deadline based on repeat settings
+  // Helper method  // Helper method to calculate thenext deadline based on repeat settings
   DateTime _calculateNextDeadline(Task task) {
     // Parse the current deadline
     DateTime currentDeadline = _parseDateTime(task.deadline);

@@ -200,19 +200,33 @@ class _CategoriesPageState extends State<CategoriesPage>
     }
 
     return Scaffold(
+      resizeToAvoidBottomInset: false, // Prevent keyboard from pushing widgets
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          _showAddTaskDialog(context, _currentCategory!);
+          // Check if _currentCategory is null, use the first category if it is
+          Category categoryToUse = _currentCategory ?? _categories.first;
+          _showAddTaskDialog(context, categoryToUse);
         },
         backgroundColor: Colors.blue,
         child: const Icon(Icons.add),
       ),
       appBar: AppBar(
         title: Padding(
-          padding: const EdgeInsets.only(right: 16.0, top: 55.0),
-          child: const Text(
-            "Tasks",
-            style: TextStyle(fontWeight: FontWeight.bold),
+          padding: const EdgeInsets.only(right: 16.0, top: 50.0),
+          child: Row(
+            children: [
+              const Text(
+                "Tasks",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const Spacer(),
+              // Add Category button moved to title row for better visibility
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline),
+                onPressed: () => _showAddCategoryDialog(context),
+                tooltip: 'Add Category',
+              ),
+            ],
           ),
         ),
         toolbarHeight: 80,
@@ -268,9 +282,10 @@ class _CategoriesPageState extends State<CategoriesPage>
                 ScrollPhysics(parent: const ClampingScrollPhysics()),
               ),
             ),
-            children: _categories
-                .map((category) => CategoryTasksView(category: category))
-                .toList(),
+            children: [
+              ..._categories
+                  .map((category) => CategoryTasksView(category: category)),
+            ],
           ),
         ),
       ),
@@ -301,8 +316,7 @@ class _CategoriesPageState extends State<CategoriesPage>
       backgroundColor: Colors.grey[900],
       useSafeArea: true,
       isDismissible: true,
-      enableDrag: true,
-      useRootNavigator: true,
+      enableDrag: false, // Disable dragging
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -313,278 +327,273 @@ class _CategoriesPageState extends State<CategoriesPage>
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: taskFormKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(
-                          "New Task",
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+              child: Form(
+                key: taskFormKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        "New Task",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0, vertical: 8.0),
+                      child: TextFormField(
+                        controller: _labelController,
+                        autofocus: true,
+                        style: const TextStyle(color: Colors.white),
+                        validator: (value) =>
+                            value?.isEmpty ?? true ? "Required" : null,
+                        decoration: InputDecoration(
+                          hintText: "Task name",
+                          hintStyle: TextStyle(color: Colors.grey[400]),
+                          prefixIcon:
+                              const Icon(Icons.task, color: Colors.white),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8.0),
+                            borderSide: BorderSide(color: Colors.grey[700]!),
                           ),
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16.0, vertical: 8.0),
-                        child: TextFormField(
-                          controller: _labelController,
-                          autofocus: true,
-                          style: const TextStyle(color: Colors.white),
-                          validator: (value) =>
-                              value?.isEmpty ?? true ? "Required" : null,
-                          decoration: InputDecoration(
-                            hintText: "Task name",
-                            hintStyle: TextStyle(color: Colors.grey[400]),
-                            prefixIcon:
-                                const Icon(Icons.task, color: Colors.white),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8.0),
-                              borderSide: BorderSide(color: Colors.grey[700]!),
-                            ),
-                          ),
-                        ),
+                    ),
+                    if (!_showDescription)
+                      TextButton.icon(
+                        icon: Icon(Icons.add, color: Colors.grey[400]),
+                        label: Text("Add Description",
+                            style: TextStyle(color: Colors.grey[400])),
+                        onPressed: () {
+                          modalSetState(() {
+                            _showDescription = true;
+                          });
+                        },
                       ),
-                      if (!_showDescription)
-                        TextButton.icon(
-                          icon: Icon(Icons.add, color: Colors.grey[400]),
-                          label: Text("Add Description",
-                              style: TextStyle(color: Colors.grey[400])),
-                          onPressed: () {
-                            modalSetState(() {
-                              _showDescription = true;
-                            });
-                          },
-                        ),
-                      if (_showDescription)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: TextFormField(
-                                  controller: _descriptionController,
-                                  style: const TextStyle(color: Colors.white),
-                                  maxLines: 3,
-                                  minLines: 1,
-                                  decoration: InputDecoration(
-                                    hintText: "Description",
-                                    hintStyle:
-                                        TextStyle(color: Colors.grey[400]),
-                                    prefixIcon: const Icon(Icons.description,
-                                        color: Colors.white),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8.0),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8.0),
-                                      borderSide:
-                                          BorderSide(color: Colors.grey[700]!),
-                                    ),
+                    if (_showDescription)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _descriptionController,
+                                style: const TextStyle(color: Colors.white),
+                                maxLines: 3,
+                                minLines: 1,
+                                decoration: InputDecoration(
+                                  hintText: "Description",
+                                  hintStyle: TextStyle(color: Colors.grey[400]),
+                                  prefixIcon: const Icon(Icons.description,
+                                      color: Colors.white),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey[700]!),
                                   ),
                                 ),
                               ),
-                              IconButton(
-                                icon: Icon(Icons.remove_circle,
-                                    color: Colors.grey[400]),
-                                onPressed: () {
-                                  modalSetState(() {
-                                    _showDescription = false;
-                                    _descriptionController.clear();
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.remove_circle,
+                                  color: Colors.grey[400]),
+                              onPressed: () {
+                                modalSetState(() {
+                                  _showDescription = false;
+                                  _descriptionController.clear();
+                                });
+                              },
+                            ),
+                          ],
                         ),
-                      if (!_showDateTime)
-                        TextButton.icon(
-                          icon: Icon(Icons.add, color: Colors.grey[400]),
-                          label: Text("Add Due Date",
-                              style: TextStyle(color: Colors.grey[400])),
-                          onPressed: () {
-                            modalSetState(() {
-                              _showDateTime = true;
-                            });
-                          },
-                        ),
-                      if (_showDateTime)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: TextFormField(
-                                  controller: _dateController,
-                                  style: const TextStyle(color: Colors.white),
-                                  readOnly: true,
-                                  onTap: () async {
-                                    DateTime? date = await showDatePicker(
+                      ),
+                    if (!_showDateTime)
+                      TextButton.icon(
+                        icon: Icon(Icons.add, color: Colors.grey[400]),
+                        label: Text("Add Due Date",
+                            style: TextStyle(color: Colors.grey[400])),
+                        onPressed: () {
+                          modalSetState(() {
+                            _showDateTime = true;
+                          });
+                        },
+                      ),
+                    if (_showDateTime)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _dateController,
+                                style: const TextStyle(color: Colors.white),
+                                readOnly: true,
+                                onTap: () async {
+                                  DateTime? date = await showDatePicker(
+                                    context: context,
+                                    initialDate: DateTime.now(),
+                                    firstDate: DateTime.now(),
+                                    lastDate: DateTime(2100),
+                                  );
+
+                                  if (date != null) {
+                                    TimeOfDay? time = await showTimePicker(
                                       context: context,
-                                      initialDate: DateTime.now(),
-                                      firstDate: DateTime.now(),
-                                      lastDate: DateTime(2100),
+                                      initialTime: TimeOfDay.now(),
                                     );
 
-                                    if (date != null) {
-                                      TimeOfDay? time = await showTimePicker(
-                                        context: context,
-                                        initialTime: TimeOfDay.now(),
-                                      );
-
-                                      if (time != null) {
-                                        modalSetState(() {
-                                          _dateController.text =
-                                              "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} "
-                                              "${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
-                                        });
-                                      }
+                                    if (time != null) {
+                                      modalSetState(() {
+                                        _dateController.text =
+                                            "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} "
+                                            "${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
+                                      });
                                     }
-                                  },
-                                  decoration: InputDecoration(
-                                    hintText: "Due Date",
-                                    hintStyle:
-                                        TextStyle(color: Colors.grey[400]),
-                                    prefixIcon: const Icon(Icons.calendar_today,
-                                        color: Colors.white),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8.0),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8.0),
-                                      borderSide:
-                                          BorderSide(color: Colors.grey[700]!),
-                                    ),
+                                  }
+                                },
+                                decoration: InputDecoration(
+                                  hintText: "Due Date",
+                                  hintStyle: TextStyle(color: Colors.grey[400]),
+                                  prefixIcon: const Icon(Icons.calendar_today,
+                                      color: Colors.white),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8.0),
+                                    borderSide:
+                                        BorderSide(color: Colors.grey[700]!),
                                   ),
                                 ),
                               ),
-                              IconButton(
-                                icon: Icon(Icons.remove_circle,
-                                    color: Colors.grey[400]),
-                                onPressed: () {
-                                  modalSetState(() {
-                                    _showDateTime = false;
-                                    _dateController.clear();
-                                    // Reset repeat options if date is removed
-                                    _showRepeat = false;
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-
-                      // Add Repeat button (only shows if a date is selected and has a valid time)
-                      if (_showDateTime &&
-                          _dateController.text.isNotEmpty &&
-                          _dateController.text.contains(":"))
-                        TextButton.icon(
-                          icon: Icon(Icons.repeat, color: Colors.grey[400]),
-                          label: Text(
-                            _showRepeat
-                                ? "Repeats every $_repeatInterval ${_repeatFrequency}${_repeatInterval > 1 ? 's' : ''}"
-                                : "Add Repeat",
-                            style: TextStyle(
-                                color: _showRepeat
-                                    ? Colors.blue
-                                    : Colors.grey[400]),
-                          ),
-                          onPressed: () {
-                            _showRepeatOptionsDialog(context, modalSetState);
-                          },
-                          // Add trailing remove button to discard repeat options
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.only(left: 12, right: 0),
-                          ),
-                        ),
-
-                      // Show remove button for repeat options when active
-                      if (_showRepeat)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton.icon(
-                                icon: Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.red[300],
-                                  size: 18,
-                                ),
-                                label: Text(
-                                  "Remove Repeat",
-                                  style: TextStyle(color: Colors.red[300]),
-                                ),
-                                onPressed: () {
-                                  modalSetState(() {
-                                    // Clear all repeat-related fields
-                                    _showRepeat = false;
-                                    _repeatFrequency = 'day';
-                                    _repeatInterval = 1;
-                                    _repeatEndType = 'never';
-                                    _repeatEndDateController.clear();
-                                    _repeatOccurrencesController.text = '30';
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            if (taskFormKey.currentState!.validate()) {
-                              // Get the CURRENT category at the moment the user presses "Add Task"
-                              final currentIndex = _tabController!.index;
-                              final currentCategory = _categories[currentIndex];
-
-                              await _taskService.addTask(
-                                _labelController.text,
-                                _dateController.text,
-                                _descriptionController.text,
-                                currentCategory.label,
-                                // Add repeat functionality parameters
-                                repeatFrequency:
-                                    _showRepeat ? _repeatFrequency : null,
-                                repeatInterval:
-                                    _showRepeat ? _repeatInterval : null,
-                                repeatEndType:
-                                    _showRepeat ? _repeatEndType : null,
-                                repeatEndDate:
-                                    _showRepeat && _repeatEndType == 'on'
-                                        ? _repeatEndDateController.text
-                                        : null,
-                                repeatOccurrences:
-                                    _showRepeat && _repeatEndType == 'after'
-                                        ? int.tryParse(
-                                            _repeatOccurrencesController.text)
-                                        : null,
-                              );
-
-                              Navigator.pop(context);
-                              // The CategoryTasksView will update automatically via the listener
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(double.infinity, 50),
-                          ),
-                          child: const Text("Add Task"),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.remove_circle,
+                                  color: Colors.grey[400]),
+                              onPressed: () {
+                                modalSetState(() {
+                                  _showDateTime = false;
+                                  _dateController.clear();
+                                  // Reset repeat options if date is removed
+                                  _showRepeat = false;
+                                });
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
+
+                    // Add Repeat button (only shows if a date is selected and has a valid time)
+                    if (_showDateTime &&
+                        _dateController.text.isNotEmpty &&
+                        _dateController.text.contains(":"))
+                      TextButton.icon(
+                        icon: Icon(Icons.repeat, color: Colors.grey[400]),
+                        label: Text(
+                          _showRepeat
+                              ? "Repeats every $_repeatInterval ${_repeatFrequency}${_repeatInterval > 1 ? 's' : ''}"
+                              : "Add Repeat",
+                          style: TextStyle(
+                              color:
+                                  _showRepeat ? Colors.blue : Colors.grey[400]),
+                        ),
+                        onPressed: () {
+                          _showRepeatOptionsDialog(context, modalSetState);
+                        },
+                        // Add trailing remove button to discard repeat options
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.only(left: 12, right: 0),
+                        ),
+                      ),
+
+                    // Show remove button for repeat options when active
+                    if (_showRepeat)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton.icon(
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: Colors.red[300],
+                                size: 18,
+                              ),
+                              label: Text(
+                                "Remove Repeat",
+                                style: TextStyle(color: Colors.red[300]),
+                              ),
+                              onPressed: () {
+                                modalSetState(() {
+                                  // Clear all repeat-related fields
+                                  _showRepeat = false;
+                                  _repeatFrequency = 'day';
+                                  _repeatInterval = 1;
+                                  _repeatEndType = 'never';
+                                  _repeatEndDateController.clear();
+                                  _repeatOccurrencesController.text = '30';
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          if (taskFormKey.currentState!.validate()) {
+                            // Get the CURRENT category at the moment the user presses "Add Task"
+                            final currentIndex = _tabController!.index;
+                            final currentCategory = _categories[currentIndex];
+
+                            await _taskService.addTask(
+                              _labelController.text,
+                              _dateController.text,
+                              _descriptionController.text,
+                              currentCategory.label,
+                              // Add repeat functionality parameters
+                              repeatFrequency:
+                                  _showRepeat ? _repeatFrequency : null,
+                              repeatInterval:
+                                  _showRepeat ? _repeatInterval : null,
+                              repeatEndType:
+                                  _showRepeat ? _repeatEndType : null,
+                              repeatEndDate:
+                                  _showRepeat && _repeatEndType == 'on'
+                                      ? _repeatEndDateController.text
+                                      : null,
+                              repeatOccurrences:
+                                  _showRepeat && _repeatEndType == 'after'
+                                      ? int.tryParse(
+                                          _repeatOccurrencesController.text)
+                                      : null,
+                            );
+
+                            Navigator.pop(context);
+                            // The CategoryTasksView will update automatically via the listener
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 50),
+                        ),
+                        child: const Text("Add Task"),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -831,7 +840,7 @@ class _CategoriesPageState extends State<CategoriesPage>
                           ),
                         ),
                         onTap: () async {
-                          // Get current date from date string or use current date as fallback
+                          // Get current date from date string or use current date + 30 days as fallback
                           DateTime initialDate;
                           if (_dateController.text.isNotEmpty) {
                             final datePart = _dateController.text.split(" ")[0];
@@ -899,17 +908,16 @@ class _CategoriesPageState extends State<CategoriesPage>
 
                     // Never radio option
                     RadioListTile<String>(
-                      title:
-                          Text('Never', style: TextStyle(color: Colors.white)),
-                      value: 'never',
-                      groupValue: _repeatEndType,
-                      activeColor: Colors.blue,
-                      onChanged: (value) {
-                        setState(() {
-                          _repeatEndType = value!;
-                        });
-                      },
-                    ),
+                        title: Text('Never',
+                            style: TextStyle(color: Colors.white)),
+                        value: 'never',
+                        groupValue: _repeatEndType,
+                        activeColor: Colors.blue,
+                        onChanged: (value) {
+                          setState(() {
+                            _repeatEndType = value!;
+                          });
+                        }),
 
                     // On specific date radio option
                     Padding(
@@ -1112,15 +1120,64 @@ class _CategoriesPageState extends State<CategoriesPage>
       },
     );
   }
+
+  // Method to add a new category
+  Future<void> _showAddCategoryDialog(BuildContext context) async {
+    _labelController.clear();
+    final GlobalKey<FormState> formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Category'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: _labelController,
+            autofocus: true,
+            validator: (value) => value?.isEmpty ?? true ? "Required" : null,
+            decoration: InputDecoration(
+              hintText: "Category name",
+              prefixIcon: const Icon(Icons.category),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8.0),
+                borderSide: BorderSide(color: Colors.grey[700]!),
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                await _categoryService.addCategory(_labelController.text);
+                Navigator.pop(context);
+                // Reload categories to reflect new category
+                _loadCategories();
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class CategoryTasksView extends StatefulWidget {
   final Category category;
 
   const CategoryTasksView({
-    Key? key,
+    super.key,
     required this.category,
-  }) : super(key: key);
+  });
 
   @override
   State<CategoryTasksView> createState() => _CategoryTasksViewState();
@@ -1232,9 +1289,12 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
         if (remainingOccurrences <= 0) {
           shouldCreateNextOccurrence = false;
         } else {
-          // Create a new task with updated occurrence count
+          // Create a pending task with updated occurrence count instead of an active task
           if (shouldCreateNextOccurrence) {
-            await _taskService.addTask(
+            // Create a PendingTaskService instance
+            final pendingTaskService = PendingTaskService();
+
+            await pendingTaskService.addPendingTask(
               task.label,
               _formatDateTime(nextDeadline),
               task.description,
@@ -1246,7 +1306,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
               repeatOccurrences: remainingOccurrences, // Decrement occurrences
             );
           }
-          // Skip the standard task creation below since we've already created it with updated occurrence count
+          // Skip the standard task creation below since we've already created it as a pending task
           shouldCreateNextOccurrence = false;
         }
       }
@@ -1256,17 +1316,25 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
         // Format the next deadline
         String nextDeadlineStr = _formatDateTime(nextDeadline);
 
-        // Get all current tasks to check for duplicates
+        // Get all pending tasks to check for duplicates
+        final pendingTaskService = PendingTaskService();
+        List<Task> pendingTasks = await pendingTaskService.getPendingTasks();
+
+        // Also check active tasks for duplicates
         List<Task> currentTasks = await _taskService.getTasks();
 
-        // Check if a task with the same label and deadline already exists
+        // Check if a task with the same label and deadline already exists in either list
         bool duplicateExists = currentTasks.any((existingTask) =>
-            existingTask.label == task.label &&
-            existingTask.deadline == nextDeadlineStr);
+                existingTask.label == task.label &&
+                existingTask.deadline == nextDeadlineStr) ||
+            pendingTasks.any((existingTask) =>
+                existingTask.label == task.label &&
+                existingTask.deadline == nextDeadlineStr);
 
-        // Only create the new task if it doesn't already exist
+        // Only create the new pending task if it doesn't already exist
         if (!duplicateExists) {
-          await _taskService.addTask(
+          // ALWAYS add to pending tasks instead of active tasks
+          await pendingTaskService.addPendingTask(
             task.label,
             nextDeadlineStr,
             task.description,
@@ -1284,8 +1352,13 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
     // Delete the original task
     await _taskService.deleteTask(task.id);
 
-    // Refresh the task list
+    // Check for any pending tasks that might now be due
+    final pendingTaskService = PendingTaskService();
+    await pendingTaskService.checkForDueTasks();
+
+    // Refresh both task lists
     _loadTasks();
+    _loadCompletedTasks();
   }
 
   // Helper method to calculate the next deadline based on repeat settings
@@ -1383,29 +1456,39 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
     }
 
     if (_tasks.isEmpty && _completedTasks.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.task_alt,
-              size: 80,
-              color: Colors.grey[300],
+      return SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Container(
+          height: MediaQuery.of(context).size.height -
+              180, // Adjust height to account for app bar
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min, // Use min instead of center
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.task_alt,
+                  size: 80,
+                  color: Colors.grey[300],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  "No tasks in ${widget.category.label}",
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Add a new task to this category",
+                  style: TextStyle(color: Colors.grey[500]),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              "No tasks in ${widget.category.label}",
-              style: TextStyle(
-                fontSize: 18,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "Add a new task to this category",
-              style: TextStyle(color: Colors.grey[500]),
-            ),
-          ],
+          ),
         ),
       );
     }
@@ -1519,7 +1602,9 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
         ),
         subtitle: task.deadline.isNotEmpty
             ? Text(
-                "Completed on: ${task.deadline}",
+                task.nextDeadline != null && task.nextDeadline!.isNotEmpty
+                    ? "Next due: ${task.nextDeadline}"
+                    : "Completed on: ${task.deadline}",
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey[600],
@@ -1577,7 +1662,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
             ],
             if (task.nextDeadline != null && task.nextDeadline!.isNotEmpty) ...[
               const Text(
-                "Next occurrence:",
+                "Next due:",
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Text(task.nextDeadline!),

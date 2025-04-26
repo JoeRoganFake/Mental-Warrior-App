@@ -1,3 +1,5 @@
+import 'dart:math';
+
 class Quote {
   final String text;
   final String author;
@@ -882,9 +884,22 @@ class QuoteService {
     //200
   ];
 
+  // Store the daily quote
+  Quote? _dailyQuote;
+  DateTime? _lastQuoteDate;
+
   Quote getDailyQuote() {
-    int dayOfYear =
-        DateTime.now().difference(DateTime(DateTime.now().year, 1, 1)).inDays;
-    return quotes[dayOfYear % quotes.length];
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    // Generate a new quote if we don't have one yet or if it's a new day
+    if (_dailyQuote == null ||
+        _lastQuoteDate == null ||
+        _lastQuoteDate != today) {
+      _dailyQuote = quotes[Random().nextInt(quotes.length)];
+      _lastQuoteDate = today;
+    }
+
+    return _dailyQuote!;
   }
 }
