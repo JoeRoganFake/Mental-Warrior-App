@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mental_warior/pages/home.dart';
 import 'package:mental_warior/pages/meditation.dart';
 import 'package:mental_warior/pages/categories_page.dart';
+import 'package:mental_warior/pages/splash_screen.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/background_task_manager.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -55,10 +56,11 @@ class MyApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(fontFamily: "Poppins"),
+      home: SplashScreen(),
       routes: {
-        '/': (context) => HomePage(),
+        '/home': (context) => HomePage(),
         '/meditation': (context) => MeditationPage(),
-        '/categories': (context) => CategoriesPage(), // Add this route
+        '/categories': (context) => CategoriesPage(),
       },
     );
   }

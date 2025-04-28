@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mental_warior/models/tasks.dart';
 import 'package:mental_warior/models/categories.dart';
+import 'package:mental_warior/pages/home.dart';
 import 'package:mental_warior/services/database_services.dart';
 
 class CategoriesPage extends StatefulWidget {
@@ -21,6 +22,7 @@ class _CategoriesPageState extends State<CategoriesPage>
   final TextEditingController _labelController = TextEditingController();
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _dateController = TextEditingController();
+
   bool _showDescription = false;
   bool _showDateTime = false;
 
@@ -1805,53 +1807,61 @@ class TaskCard extends StatelessWidget {
   }
 
   void _showTaskDetailsDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(task.label),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (task.description.isNotEmpty) ...[
+    // Import the HomePage class to access its taskFormDialog method
+    final homePageState = HomePage.of(context);
+    if (homePageState != null) {
+      // Use the taskFormDialog from HomePage
+      homePageState.taskFormDialog(context, task: task, add: false);
+    } else {
+      // Fallback to the original dialog if HomePage is not found
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(task.label),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (task.description.isNotEmpty) ...[
+                const Text(
+                  "Description:",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(task.description),
+                const SizedBox(height: 16),
+              ],
+              if (task.deadline.isNotEmpty) ...[
+                const Text(
+                  "Deadline:",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(task.deadline),
+                const SizedBox(height: 16),
+              ],
               const Text(
-                "Description:",
+                "Status:",
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              Text(task.description),
-              const SizedBox(height: 16),
+              Text(task.status == 1 ? "Completed" : "Pending"),
             ],
-            if (task.deadline.isNotEmpty) ...[
-              const Text(
-                "Deadline:",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              Text(task.deadline),
-              const SizedBox(height: 16),
-            ],
-            const Text(
-              "Status:",
-              style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Close'),
             ),
-            Text(task.status == 1 ? "Completed" : "Pending"),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                onTaskCompleted();
+              },
+              child: const Text('Mark Complete'),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              onTaskCompleted();
-            },
-            child: const Text('Mark Complete'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
   }
 }

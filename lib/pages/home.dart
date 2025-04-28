@@ -21,10 +21,17 @@ class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomePage> createState() => HomePageState();
+
+  // Static method to access the HomePage state from anywhere
+  static HomePageState? of(BuildContext context) {
+    final state = context.findAncestorStateOfType<HomePageState>();
+    return state;
+  }
 }
 
-class _HomePageState extends State<HomePage> {
+class HomePageState extends State<HomePage>
+    with AutomaticKeepAliveClientMixin<HomePage> {
   var function = Functions();
   final _dateController = TextEditingController();
   final _labelController = TextEditingController();
@@ -99,6 +106,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       floatingActionButton: _currentIndex == 0
           ? FloatingActionButton(
@@ -205,13 +213,13 @@ class _HomePageState extends State<HomePage> {
     Category defaultCategory;
 
     // Add repeat functionality variables
-    bool _showRepeat = false;
-    String _repeatFrequency = 'day';
-    int _repeatInterval = 1;
-    String _repeatEndType = 'never';
-    final TextEditingController _repeatEndDateController =
+    bool showRepeat = false;
+    String repeatFrequency = 'day';
+    int repeatInterval = 1;
+    String repeatEndType = 'never';
+    final TextEditingController repeatEndDateController =
         TextEditingController();
-    final TextEditingController _repeatOccurrencesController =
+    final TextEditingController repeatOccurrencesController =
         TextEditingController();
 
     try {
@@ -232,20 +240,20 @@ class _HomePageState extends State<HomePage> {
       _showDateTime = task.deadline.isNotEmpty;
 
       // Set repeat functionality fields if this is a repeating task
-      _showRepeat = task.repeatFrequency != null;
+      showRepeat = task.repeatFrequency != null;
       if (task.repeatFrequency != null) {
-        _repeatFrequency = task.repeatFrequency!;
-        _repeatInterval = task.repeatInterval ?? 1;
-        _repeatEndType = task.repeatEndType ?? 'never';
+        repeatFrequency = task.repeatFrequency!;
+        repeatInterval = task.repeatInterval ?? 1;
+        repeatEndType = task.repeatEndType ?? 'never';
 
         if (task.repeatEndDate != null) {
-          _repeatEndDateController.text = task.repeatEndDate!;
+          repeatEndDateController.text = task.repeatEndDate!;
         }
 
         if (task.repeatOccurrences != null) {
-          _repeatOccurrencesController.text = task.repeatOccurrences.toString();
+          repeatOccurrencesController.text = task.repeatOccurrences.toString();
         } else {
-          _repeatOccurrencesController.text = '30';
+          repeatOccurrencesController.text = '30';
         }
       }
 
@@ -265,12 +273,12 @@ class _HomePageState extends State<HomePage> {
       selectedCategory = defaultCategory;
       _showDescription = false;
       _showDateTime = false;
-      _showRepeat = false;
-      _repeatFrequency = 'day';
-      _repeatInterval = 1;
-      _repeatEndType = 'never';
-      _repeatEndDateController.clear();
-      _repeatOccurrencesController.text = '30';
+      showRepeat = false;
+      repeatFrequency = 'day';
+      repeatInterval = 1;
+      repeatEndType = 'never';
+      repeatEndDateController.clear();
+      repeatOccurrencesController.text = '30';
     }
 
     return showModalBottomSheet(
@@ -666,7 +674,6 @@ class _HomePageState extends State<HomePage> {
                           ],
                         ),
 
-                      // Add DateTime Button (when field is hidden)
                       if (!_showDateTime)
                         TextButton.icon(
                           icon: Icon(
@@ -714,7 +721,7 @@ class _HomePageState extends State<HomePage> {
                                                 color: Colors.white, size: 18),
                                             onPressed: () => modalSetState(() {
                                               _dateController.clear();
-                                              _showRepeat =
+                                              showRepeat =
                                                   false; // Reset repeat when deadline is cleared
                                             }),
                                           )
@@ -743,7 +750,7 @@ class _HomePageState extends State<HomePage> {
                                 modalSetState(() {
                                   _showDateTime = false;
                                   _dateController.clear();
-                                  _showRepeat =
+                                  showRepeat =
                                       false; // Reset repeat when deadline is removed
                                 });
                               },
@@ -758,13 +765,13 @@ class _HomePageState extends State<HomePage> {
                         TextButton.icon(
                           icon: Icon(Icons.repeat,
                               color:
-                                  _showRepeat ? Colors.blue : Colors.grey[400]),
+                                  showRepeat ? Colors.blue : Colors.grey[400]),
                           label: Text(
-                            _showRepeat
-                                ? "Repeats every $_repeatInterval ${_repeatFrequency}${_repeatInterval > 1 ? 's' : ''}"
+                            showRepeat
+                                ? "Repeats every $repeatInterval ${repeatFrequency}${repeatInterval > 1 ? 's' : ''}"
                                 : "Add Repeat",
                             style: TextStyle(
-                                color: _showRepeat
+                                color: showRepeat
                                     ? Colors.blue
                                     : Colors.grey[400]),
                           ),
@@ -772,18 +779,18 @@ class _HomePageState extends State<HomePage> {
                             _showRepeatOptionsDialog(
                                 context,
                                 modalSetState,
-                                _repeatFrequency,
-                                _repeatInterval,
-                                _repeatEndType,
-                                _repeatEndDateController,
-                                _repeatOccurrencesController, onUpdate:
+                                repeatFrequency,
+                                repeatInterval,
+                                repeatEndType,
+                                repeatEndDateController,
+                                repeatOccurrencesController, onUpdate:
                                     (frequency, interval, endType, endDate,
                                         occurrences) {
                               modalSetState(() {
-                                _showRepeat = true;
-                                _repeatFrequency = frequency;
-                                _repeatInterval = interval;
-                                _repeatEndType = endType;
+                                showRepeat = true;
+                                repeatFrequency = frequency;
+                                repeatInterval = interval;
+                                repeatEndType = endType;
                                 // The controllers are updated directly
                               });
                             });
@@ -795,7 +802,7 @@ class _HomePageState extends State<HomePage> {
                         ),
 
                       // Show remove button for repeat options when active
-                      if (_showRepeat)
+                      if (showRepeat)
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16.0),
                           child: Row(
@@ -814,12 +821,12 @@ class _HomePageState extends State<HomePage> {
                                 onPressed: () {
                                   modalSetState(() {
                                     // Clear all repeat-related fields
-                                    _showRepeat = false;
-                                    _repeatFrequency = 'day';
-                                    _repeatInterval = 1;
-                                    _repeatEndType = 'never';
-                                    _repeatEndDateController.clear();
-                                    _repeatOccurrencesController.text = '30';
+                                    showRepeat = false;
+                                    repeatFrequency = 'day';
+                                    repeatInterval = 1;
+                                    repeatEndType = 'never';
+                                    repeatEndDateController.clear();
+                                    repeatOccurrencesController.text = '30';
                                   });
                                 },
                               ),
@@ -845,19 +852,19 @@ class _HomePageState extends State<HomePage> {
                                   selectedCategory!.label,
                                   // Add repeat functionality parameters
                                   repeatFrequency:
-                                      _showRepeat ? _repeatFrequency : null,
+                                      showRepeat ? repeatFrequency : null,
                                   repeatInterval:
-                                      _showRepeat ? _repeatInterval : null,
+                                      showRepeat ? repeatInterval : null,
                                   repeatEndType:
-                                      _showRepeat ? _repeatEndType : null,
+                                      showRepeat ? repeatEndType : null,
                                   repeatEndDate:
-                                      _showRepeat && _repeatEndType == 'on'
-                                          ? _repeatEndDateController.text
+                                      showRepeat && repeatEndType == 'on'
+                                          ? repeatEndDateController.text
                                           : null,
                                   repeatOccurrences:
-                                      _showRepeat && _repeatEndType == 'after'
+                                      showRepeat && repeatEndType == 'after'
                                           ? int.tryParse(
-                                              _repeatOccurrencesController.text)
+                                              repeatOccurrencesController.text)
                                           : null,
                                 );
                               } else if (changeCompletedTask && task != null) {
@@ -872,6 +879,10 @@ class _HomePageState extends State<HomePage> {
                                       task.id,
                                       "deadline",
                                       _dateController.text),
+                                  _completedTaskService.updateCompletedTask(
+                                      task.id,
+                                      "category",
+                                      selectedCategory!.label),
                                 ]);
                               } else if (!add && task != null) {
                                 // Clean up the date string before saving
@@ -888,34 +899,35 @@ class _HomePageState extends State<HomePage> {
                                       _descriptionController.text),
                                   _taskService.updateTask(
                                       task.id, "deadline", deadline),
+                                  _taskService.updateTask(task.id, "category",
+                                      selectedCategory!.label),
                                 ]);
 
                                 // Then update repeat fields
-                                if (_showRepeat) {
+                                if (showRepeat) {
                                   await Future.wait([
                                     _taskService.updateTask(task.id,
-                                        "repeatFrequency", _repeatFrequency),
+                                        "repeatFrequency", repeatFrequency),
                                     _taskService.updateTask(task.id,
-                                        "repeatInterval", _repeatInterval),
+                                        "repeatInterval", repeatInterval),
                                     _taskService.updateTask(task.id,
-                                        "repeatEndType", _repeatEndType),
+                                        "repeatEndType", repeatEndType),
                                   ]);
 
-                                  if (_repeatEndType == 'on') {
+                                  if (repeatEndType == 'on') {
                                     await _taskService.updateTask(
                                         task.id,
                                         "repeatEndDate",
-                                        _repeatEndDateController.text);
+                                        repeatEndDateController.text);
                                     // Clear the occurrences field when using end date
                                     await _taskService.updateTask(
                                         task.id, "repeatOccurrences", null);
-                                  } else if (_repeatEndType == 'after') {
+                                  } else if (repeatEndType == 'after') {
                                     await _taskService.updateTask(
                                         task.id,
                                         "repeatOccurrences",
-                                        int.tryParse(
-                                                _repeatOccurrencesController
-                                                    .text) ??
+                                        int.tryParse(repeatOccurrencesController
+                                                .text) ??
                                             30);
                                     // Clear the end date field when using occurrences
                                     await _taskService.updateTask(
@@ -2561,8 +2573,8 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "Habits Today",
+                  Text(
+                    "Habits",
                     textAlign: TextAlign.start,
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
@@ -2579,7 +2591,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Helper method  // Helper method to calculate thenext deadline based on repeat settings
+  // Helper method  // Helper method to calculate the next deadline based on repeat settings
   DateTime _calculateNextDeadline(Task task) {
     // Parse the current deadline
     DateTime currentDeadline = _parseDateTime(task.deadline);
@@ -2664,6 +2676,9 @@ class _HomePageState extends State<HomePage> {
     return "${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} "
         "${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}";
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }
 
 class TaskDetailsWidget extends StatelessWidget {
@@ -2704,11 +2719,11 @@ class TaskDetailsWidget extends StatelessWidget {
 }
 
 class _HomePageContent extends StatelessWidget {
-  const _HomePageContent({Key? key}) : super(key: key);
+  const _HomePageContent();
 
   @override
   Widget build(BuildContext context) {
-    final homePageState = context.findAncestorStateOfType<_HomePageState>();
+    final homePageState = context.findAncestorStateOfType<HomePageState>();
     return homePageState!._buildHomePage();
   }
 }
