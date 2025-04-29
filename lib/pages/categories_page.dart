@@ -54,20 +54,29 @@ class _CategoriesPageState extends State<CategoriesPage>
 
       if (!mounted) return;
 
+      // Create a virtual "All Tasks" category that will show all tasks
+      final allTasksCategory =
+          Category(id: -1, label: "All Tasks", isDefault: 0);
+
+      // Add the "All Tasks" category at the beginning of the list
+      final updatedCategories = [allTasksCategory, ...categories];
+
       // Only update the UI if categories actually changed
-      if (_categories.length != categories.length ||
-          !_categories.every((cat) => categories.any((c) => c.id == cat.id))) {
+      if (_categories.length != updatedCategories.length ||
+          !_categories
+              .every((cat) => updatedCategories.any((c) => c.id == cat.id))) {
         // Save current index if possible
         int currentIndex = _tabController?.index ?? 0;
-        if (currentIndex >= categories.length) {
-          currentIndex = categories.isEmpty ? 0 : categories.length - 1;
+        if (currentIndex >= updatedCategories.length) {
+          currentIndex =
+              updatedCategories.isEmpty ? 0 : updatedCategories.length - 1;
         }
 
         // Dispose old controller properly
         _tabController?.dispose();
 
         final newController = TabController(
-          length: categories.length,
+          length: updatedCategories.length,
           vsync: this,
           initialIndex: currentIndex,
         );
@@ -84,11 +93,12 @@ class _CategoriesPageState extends State<CategoriesPage>
         });
 
         setState(() {
-          _categories = categories;
+          _categories = updatedCategories;
           _tabController = newController;
           // Set initial category based on current index
-          _currentCategory =
-              categories.isNotEmpty ? categories[currentIndex] : null;
+          _currentCategory = updatedCategories.isNotEmpty
+              ? updatedCategories[currentIndex]
+              : null;
           _isLoading = false;
         });
       }
@@ -1192,6 +1202,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
   List<Task> _completedTasks = [];
   bool _isLoading = true;
   bool _isExpanded = false;
+  Map<String, List<Task>> _categorizedTasks = {};
 
   @override
   void initState() {
@@ -1224,10 +1235,31 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
 
     try {
       final allTasks = await _taskService.getTasks();
-      setState(() {
+      
+      if (widget.category.id == -1) {
+        // For "All Tasks" category, group tasks by their categories
+        _categorizedTasks = {};
+        
+        // First add all tasks to their respective category groups
+        for (var task in allTasks) {
+          if (!_categorizedTasks.containsKey(task.category)) {
+            _categorizedTasks[task.category] = [];
+          }
+          _categorizedTasks[task.category]!.add(task);
+        }
+        
+        _tasks = allTasks;
+      } else {
+        // For specific categories, only show tasks from that category
         _tasks = allTasks
             .where((task) => task.category == widget.category.label)
             .toList();
+        
+        // Reset categorized tasks for specific categories
+        _categorizedTasks = {};
+      }
+      
+      setState(() {
         _isLoading = false;
       });
     } catch (e) {
@@ -1241,11 +1273,18 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
   Future<void> _loadCompletedTasks() async {
     try {
       final allCompletedTasks = await _completedTaskService.getCompletedTasks();
-      setState(() {
+      
+      if (widget.category.id == -1) {
+        // For "All Tasks" category, show all completed tasks
+        _completedTasks = allCompletedTasks;
+      } else {
+        // For specific categories, filter completed tasks by category
         _completedTasks = allCompletedTasks
             .where((task) => task.category == widget.category.label)
             .toList();
-      });
+      }
+      
+      setState(() {});
     } catch (e) {
       print('Error loading completed tasks: $e');
     }
@@ -1511,7 +1550,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
         ),
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          // Active tasks list
+          // Active tasks list - for both specific categories and "All Tasks"
           if (_tasks.isNotEmpty) ...[
             Padding(
               padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
@@ -1525,8 +1564,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
               ),
             ),
             ..._tasks.map((task) => Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: TaskCard(
                     task: task,
                     onTaskCompleted: () {
@@ -1546,6 +1584,65 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
         ],
       ),
     );
+  }
+
+  // Helper method to build tasks grouped by category for the "All Tasks" view
+  List<Widget> _buildCategorizedTasksList() {
+    List<Widget> categoryWidgets = [];
+    
+    // Sort the categories alphabetically for consistent display
+    List<String> sortedCategories = _categorizedTasks.keys.toList()..sort();
+    
+    for (String category in sortedCategories) {
+      List<Task> tasksInCategory = _categorizedTasks[category]!;
+      
+      // Add category header
+      categoryWidgets.add(
+        Padding(
+          padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blue.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.category, size: 18, color: Colors.blue[700]),
+                const SizedBox(width: 8),
+                Text(
+                  category,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue[800],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      
+      // Add tasks for this category
+      for (Task task in tasksInCategory) {
+        categoryWidgets.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: TaskCard(
+              task: task,
+              onTaskCompleted: () {
+                _markTaskCompleted(task);
+              },
+              onRefresh: _loadTasks,
+            ),
+          ),
+        );
+      }
+    }
+    
+    return categoryWidgets;
   }
 
   Widget _buildCompletedTasksList() {
@@ -1768,6 +1865,24 @@ class TaskCard extends StatelessWidget {
                   ),
                 ],
               ),
+              // Display the category name with a tag-like style
+              Container(
+                margin: EdgeInsets.only(top: 4, bottom: 4),
+                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                ),
+                child: Text(
+                  task.category,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blue[800],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
               if (task.description.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -1843,6 +1958,12 @@ class TaskCard extends StatelessWidget {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Text(task.status == 1 ? "Completed" : "Pending"),
+              const SizedBox(height: 16),
+              const Text(
+                "Category:",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(task.category),
             ],
           ),
           actions: [
