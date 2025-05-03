@@ -1235,11 +1235,11 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
 
     try {
       final allTasks = await _taskService.getTasks();
-      
+
       if (widget.category.id == -1) {
         // For "All Tasks" category, group tasks by their categories
         _categorizedTasks = {};
-        
+
         // First add all tasks to their respective category groups
         for (var task in allTasks) {
           if (!_categorizedTasks.containsKey(task.category)) {
@@ -1247,18 +1247,18 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
           }
           _categorizedTasks[task.category]!.add(task);
         }
-        
+
         _tasks = allTasks;
       } else {
         // For specific categories, only show tasks from that category
         _tasks = allTasks
             .where((task) => task.category == widget.category.label)
             .toList();
-        
+
         // Reset categorized tasks for specific categories
         _categorizedTasks = {};
       }
-      
+
       setState(() {
         _isLoading = false;
       });
@@ -1273,7 +1273,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
   Future<void> _loadCompletedTasks() async {
     try {
       final allCompletedTasks = await _completedTaskService.getCompletedTasks();
-      
+
       if (widget.category.id == -1) {
         // For "All Tasks" category, show all completed tasks
         _completedTasks = allCompletedTasks;
@@ -1283,7 +1283,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
             .where((task) => task.category == widget.category.label)
             .toList();
       }
-      
+
       setState(() {});
     } catch (e) {
       print('Error loading completed tasks: $e');
@@ -1564,7 +1564,8 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
               ),
             ),
             ..._tasks.map((task) => Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   child: TaskCard(
                     task: task,
                     onTaskCompleted: () {
@@ -1589,17 +1590,18 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
   // Helper method to build tasks grouped by category for the "All Tasks" view
   List<Widget> _buildCategorizedTasksList() {
     List<Widget> categoryWidgets = [];
-    
+
     // Sort the categories alphabetically for consistent display
     List<String> sortedCategories = _categorizedTasks.keys.toList()..sort();
-    
+
     for (String category in sortedCategories) {
       List<Task> tasksInCategory = _categorizedTasks[category]!;
-      
+
       // Add category header
       categoryWidgets.add(
         Padding(
-          padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 8),
+          padding:
+              const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 8),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: BoxDecoration(
@@ -1624,7 +1626,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
           ),
         ),
       );
-      
+
       // Add tasks for this category
       for (Task task in tasksInCategory) {
         categoryWidgets.add(
@@ -1641,7 +1643,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
         );
       }
     }
-    
+
     return categoryWidgets;
   }
 

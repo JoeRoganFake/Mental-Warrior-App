@@ -16,6 +16,7 @@ import 'dart:isolate';
 import 'package:mental_warior/pages/meditation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:mental_warior/services/background_task_manager.dart';
+import 'package:mental_warior/pages/workout_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -99,6 +100,8 @@ class HomePageState extends State<HomePage>
         return const MeditationPage();
       case 2:
         return const CategoriesPage();
+      case 3:
+        return const WorkoutPage(); // Added workout page
       default:
         return _HomePageContent();
     }
@@ -198,7 +201,13 @@ class HomePageState extends State<HomePage>
                 color: _currentIndex == 2 ? Colors.blue : Colors.grey),
             label: 'Tasks',
           ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.fitness_center,
+                color: _currentIndex == 3 ? Colors.blue : Colors.grey),
+            label: 'Workout',
+          ),
         ],
+        type: BottomNavigationBarType.fixed, // Required for more than 3 items
       ),
     );
   }
@@ -1253,7 +1262,7 @@ class HomePageState extends State<HomePage>
                           ),
                         ),
                         onTap: () async {
-                          // Get current date from date string or use current date as fallback
+                          // Get current date from date string or use current date + 30 days as fallback
                           DateTime initialDate;
                           if (_dateController.text.isNotEmpty) {
                             final datePart = _dateController.text.split(" ")[0];
@@ -1262,9 +1271,11 @@ class HomePageState extends State<HomePage>
                               int.parse(parts[0]),
                               int.parse(parts[1]),
                               int.parse(parts[2]),
-                            );
+                            ).add(
+                                Duration(days: 30)); // Default to 30 days ahead
                           } else {
-                            initialDate = DateTime.now();
+                            initialDate =
+                                DateTime.now().add(Duration(days: 30));
                           }
 
                           // Show date picker

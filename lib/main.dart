@@ -3,6 +3,7 @@ import 'package:mental_warior/pages/home.dart';
 import 'package:mental_warior/pages/meditation.dart';
 import 'package:mental_warior/pages/categories_page.dart';
 import 'package:mental_warior/pages/splash_screen.dart';
+import 'package:mental_warior/pages/workout_page.dart'; // Added workout page import
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/background_task_manager.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -61,6 +62,7 @@ class MyApp extends StatelessWidget {
         '/home': (context) => HomePage(),
         '/meditation': (context) => MeditationPage(),
         '/categories': (context) => CategoriesPage(),
+        '/workout': (context) => WorkoutPage(), // Added workout route
       },
     );
   }

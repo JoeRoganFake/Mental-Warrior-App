@@ -4,6 +4,7 @@ import 'package:mental_warior/models/tasks.dart';
 import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/models/books.dart';
 import 'package:mental_warior/models/categories.dart';
+import 'package:mental_warior/models/workouts.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter/material.dart';
@@ -27,7 +28,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 3,
+      version: 4, // Increased version for new tables
       onCreate: (db, version) {
         TaskService().createTaskTable(db);
         CompletedTaskService().createCompletedTaskTable(db);
@@ -36,6 +37,13 @@ class DatabaseService {
         GoalService().createGoalTable(db);
         BookService().createbookTable(db);
         CategoryService().createCategoryTable(db);
+        WorkoutService().createWorkoutTables(db); // Added workout tables
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 4) {
+          // Create workout tables if upgrading from a previous version
+          await WorkoutService().createWorkoutTables(db);
+        }
       },
     );
   }
@@ -793,5 +801,262 @@ class PendingTaskService {
     // Notify listeners that tasks may have changed
     TaskService.tasksUpdatedNotifier.value =
         !TaskService.tasksUpdatedNotifier.value;
+  }
+}
+
+// Add a new WorkoutService class at the end of the file
+class WorkoutService {
+  static final ValueNotifier<bool> workoutsUpdatedNotifier =
+      ValueNotifier(false);
+
+  // Table & column names
+  final String _workoutTableName = "workouts";
+  final String _workoutIdColumnName = "id";
+  final String _workoutNameColumnName = "name";
+  final String _workoutDateColumnName = "date";
+  final String _workoutDurationColumnName = "duration";
+
+  final String _exerciseTableName = "exercises";
+  final String _exerciseIdColumnName = "id";
+  final String _exerciseWorkoutIdColumnName = "workoutId";
+  final String _exerciseNameColumnName = "name";
+  final String _exerciseEquipmentColumnName = "equipment";
+
+  final String _setTableName = "exercise_sets";
+  final String _setIdColumnName = "id";
+  final String _setExerciseIdColumnName = "exerciseId";
+  final String _setNumberColumnName = "setNumber";
+  final String _setWeightColumnName = "weight";
+  final String _setRepsColumnName = "reps";
+  final String _setRestTimeColumnName = "restTime";
+  final String _setCompletedColumnName = "completed";
+
+  // Create tables for workouts, exercises, and sets
+  Future<void> createWorkoutTables(Database db) async {
+    // Create workout table
+    await db.execute('''
+      CREATE TABLE $_workoutTableName (
+        $_workoutIdColumnName INTEGER PRIMARY KEY,
+        $_workoutNameColumnName TEXT NOT NULL,
+        $_workoutDateColumnName TEXT NOT NULL,
+        $_workoutDurationColumnName INTEGER NOT NULL
+      )
+    ''');
+
+    // Create exercise table
+    await db.execute('''
+      CREATE TABLE $_exerciseTableName (
+        $_exerciseIdColumnName INTEGER PRIMARY KEY,
+        $_exerciseWorkoutIdColumnName INTEGER NOT NULL,
+        $_exerciseNameColumnName TEXT NOT NULL,
+        $_exerciseEquipmentColumnName TEXT NOT NULL,
+        FOREIGN KEY ($_exerciseWorkoutIdColumnName) REFERENCES $_workoutTableName ($_workoutIdColumnName) ON DELETE CASCADE
+      )
+    ''');
+
+    // Create sets table
+    await db.execute('''
+      CREATE TABLE $_setTableName (
+        $_setIdColumnName INTEGER PRIMARY KEY,
+        $_setExerciseIdColumnName INTEGER NOT NULL,
+        $_setNumberColumnName INTEGER NOT NULL,
+        $_setWeightColumnName REAL NOT NULL,
+        $_setRepsColumnName INTEGER NOT NULL,
+        $_setRestTimeColumnName INTEGER NOT NULL,
+        $_setCompletedColumnName INTEGER NOT NULL,
+        FOREIGN KEY ($_setExerciseIdColumnName) REFERENCES $_exerciseTableName ($_exerciseIdColumnName) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  // Add a new workout
+  Future<int> addWorkout(String name, String date, int duration) async {
+    final db = await DatabaseService.instance.database;
+    final workoutId = await db.insert(
+      _workoutTableName,
+      {
+        _workoutNameColumnName: name,
+        _workoutDateColumnName: date,
+        _workoutDurationColumnName: duration,
+      },
+    );
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+    return workoutId;
+  }
+
+  // Add a new exercise to a workout
+  Future<int> addExercise(int workoutId, String name, String equipment) async {
+    final db = await DatabaseService.instance.database;
+    final exerciseId = await db.insert(
+      _exerciseTableName,
+      {
+        _exerciseWorkoutIdColumnName: workoutId,
+        _exerciseNameColumnName: name,
+        _exerciseEquipmentColumnName: equipment,
+      },
+    );
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+    return exerciseId;
+  }
+
+  // Add a new set to an exercise
+  Future<int> addSet(int exerciseId, int setNumber, double weight, int reps,
+      int restTime) async {
+    final db = await DatabaseService.instance.database;
+    final setId = await db.insert(
+      _setTableName,
+      {
+        _setExerciseIdColumnName: exerciseId,
+        _setNumberColumnName: setNumber,
+        _setWeightColumnName: weight,
+        _setRepsColumnName: reps,
+        _setRestTimeColumnName: restTime,
+        _setCompletedColumnName: 0, // Not completed by default
+      },
+    );
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+    return setId;
+  }
+
+  // Update set completion status
+  Future<void> updateSetStatus(int setId, bool completed) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _setTableName,
+      {_setCompletedColumnName: completed ? 1 : 0},
+      where: "$_setIdColumnName = ?",
+      whereArgs: [setId],
+    );
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
+
+  // Update workout duration
+  Future<void> updateWorkoutDuration(int workoutId, int duration) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _workoutTableName,
+      {_workoutDurationColumnName: duration},
+      where: "$_workoutIdColumnName = ?",
+      whereArgs: [workoutId],
+    );
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
+
+  // Update workout name and date
+  Future<void> updateWorkout(
+      int workoutId, String name, String date, int duration) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _workoutTableName,
+      {
+        _workoutNameColumnName: name,
+        _workoutDateColumnName: date,
+        _workoutDurationColumnName: duration,
+      },
+      where: "$_workoutIdColumnName = ?",
+      whereArgs: [workoutId],
+    );
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
+
+  // Get all workouts with their exercises and sets
+  Future<List<Workout>> getWorkouts() async {
+    final db = await DatabaseService.instance.database;
+    final workoutMaps = await db.query(_workoutTableName,
+        orderBy: "$_workoutDateColumnName DESC");
+
+    List<Workout> workouts = [];
+
+    for (var workoutMap in workoutMaps) {
+      final workoutId = workoutMap[_workoutIdColumnName] as int;
+
+      // Get exercises for this workout
+      final exerciseMaps = await db.query(
+        _exerciseTableName,
+        where: "$_exerciseWorkoutIdColumnName = ?",
+        whereArgs: [workoutId],
+      );
+
+      List<Exercise> exercises = [];
+
+      for (var exerciseMap in exerciseMaps) {
+        final exerciseId = exerciseMap[_exerciseIdColumnName] as int;
+
+        // Get sets for this exercise
+        final setMaps = await db.query(
+          _setTableName,
+          where: "$_setExerciseIdColumnName = ?",
+          whereArgs: [exerciseId],
+          orderBy: "$_setNumberColumnName ASC",
+        );
+
+        List<ExerciseSet> sets = setMaps
+            .map(
+                (setMap) => ExerciseSet.fromMap(setMap as Map<String, dynamic>))
+            .toList();
+        exercises
+            .add(Exercise.fromMap(exerciseMap as Map<String, dynamic>, sets));
+      }
+
+      workouts
+          .add(Workout.fromMap(workoutMap as Map<String, dynamic>, exercises));
+    }
+
+    return workouts;
+  }
+
+  // Get a specific workout with its exercises and sets
+  Future<Workout?> getWorkout(int workoutId) async {
+    final db = await DatabaseService.instance.database;
+    final workoutMaps = await db.query(
+      _workoutTableName,
+      where: "$_workoutIdColumnName = ?",
+      whereArgs: [workoutId],
+    );
+
+    if (workoutMaps.isEmpty) {
+      return null;
+    }
+
+    // Get exercises for this workout
+    final exerciseMaps = await db.query(
+      _exerciseTableName,
+      where: "$_exerciseWorkoutIdColumnName = ?",
+      whereArgs: [workoutId],
+    );
+
+    List<Exercise> exercises = [];
+
+    for (var exerciseMap in exerciseMaps) {
+      final exerciseId = exerciseMap[_exerciseIdColumnName] as int;
+
+      // Get sets for this exercise
+      final setMaps = await db.query(
+        _setTableName,
+        where: "$_setExerciseIdColumnName = ?",
+        whereArgs: [exerciseId],
+        orderBy: "$_setNumberColumnName ASC",
+      );
+
+      List<ExerciseSet> sets = setMaps
+          .map((setMap) => ExerciseSet.fromMap(setMap as Map<String, dynamic>))
+          .toList();
+      exercises
+          .add(Exercise.fromMap(exerciseMap as Map<String, dynamic>, sets));
+    }
+
+    return Workout.fromMap(
+        workoutMaps.first as Map<String, dynamic>, exercises);
+  }
+
+  // Delete a workout and all related exercises and sets
+  Future<void> deleteWorkout(int workoutId) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete(
+      _workoutTableName,
+      where: "$_workoutIdColumnName = ?",
+      whereArgs: [workoutId],
+    );
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
   }
 }
