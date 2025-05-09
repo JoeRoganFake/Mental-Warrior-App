@@ -8,6 +8,7 @@ import 'package:mental_warior/models/workouts.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DatabaseService {
   static Database? _db;
@@ -28,7 +29,11 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 4, // Increased version for new tables
+      version: 4,
+      onConfigure: (db) async {
+        // Enable foreign key support
+        await db.execute('PRAGMA foreign_keys = ON');
+      },
       onCreate: (db, version) {
         TaskService().createTaskTable(db);
         CompletedTaskService().createCompletedTaskTable(db);
@@ -918,6 +923,17 @@ class WorkoutService {
     return setId;
   }
 
+  // Delete a set
+  Future<void> deleteSet(int setId) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete(
+      _setTableName,
+      where: "$_setIdColumnName = ?",
+      whereArgs: [setId],
+    );
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
+
   // Update set completion status
   Future<void> updateSetStatus(int setId, bool completed) async {
     final db = await DatabaseService.instance.database;
@@ -1058,5 +1074,36 @@ class WorkoutService {
       whereArgs: [workoutId],
     );
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
+}
+
+// Add a new SettingsService class at the end of the file
+class SettingsService {
+  // Singleton instance
+  static final SettingsService _instance = SettingsService._internal();
+  factory SettingsService() => _instance;
+  SettingsService._internal();
+
+  // Notifier to inform listeners when settings change
+  static final ValueNotifier<bool> settingsUpdatedNotifier =
+      ValueNotifier(false);
+
+  // Keys for SharedPreferences
+  static const String _weeklyWorkoutGoalKey = 'weekly_workout_goal';
+
+  // Default values
+  static const int defaultWeeklyWorkoutGoal = 5;
+
+  // Get the weekly workout goal
+  Future<int> getWeeklyWorkoutGoal() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_weeklyWorkoutGoalKey) ?? defaultWeeklyWorkoutGoal;
+  }
+
+  // Set the weekly workout goal
+  Future<void> setWeeklyWorkoutGoal(int goal) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_weeklyWorkoutGoalKey, goal);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
   }
 }

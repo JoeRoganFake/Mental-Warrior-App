@@ -1588,64 +1588,6 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
   }
 
   // Helper method to build tasks grouped by category for the "All Tasks" view
-  List<Widget> _buildCategorizedTasksList() {
-    List<Widget> categoryWidgets = [];
-
-    // Sort the categories alphabetically for consistent display
-    List<String> sortedCategories = _categorizedTasks.keys.toList()..sort();
-
-    for (String category in sortedCategories) {
-      List<Task> tasksInCategory = _categorizedTasks[category]!;
-
-      // Add category header
-      categoryWidgets.add(
-        Padding(
-          padding:
-              const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.category, size: 18, color: Colors.blue[700]),
-                const SizedBox(width: 8),
-                Text(
-                  category,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue[800],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-
-      // Add tasks for this category
-      for (Task task in tasksInCategory) {
-        categoryWidgets.add(
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: TaskCard(
-              task: task,
-              onTaskCompleted: () {
-                _markTaskCompleted(task);
-              },
-              onRefresh: _loadTasks,
-            ),
-          ),
-        );
-      }
-    }
-
-    return categoryWidgets;
-  }
 
   Widget _buildCompletedTasksList() {
     return ExpansionPanelList(

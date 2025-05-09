@@ -1,48 +1,48 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:mental_warior/data/exercises_data.dart';
 
 class ExerciseSelectionPage extends StatefulWidget {
-  const ExerciseSelectionPage({Key? key}) : super(key: key);
+  const ExerciseSelectionPage({super.key});
 
   @override
-  _ExerciseSelectionPageState createState() => _ExerciseSelectionPageState();
+  ExerciseSelectionPageState createState() => ExerciseSelectionPageState();
 }
 
-class _ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
+class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   final TextEditingController _searchController = TextEditingController();
   final TextEditingController _customExerciseController =
       TextEditingController();
-  final TextEditingController _equipmentController = TextEditingController();
   String _searchQuery = '';
+  String _selectedBodyPart = 'All';
+  String _selectedEquipment = 'All';
+  late List<Map<String, dynamic>> _exercises = [];
 
-  // List of common exercises
-  final List<Map<String, String>> _exercises = [
-    {'name': 'Bench Press', 'equipment': 'Barbell', 'type': 'Chest'},
-    {'name': 'Squat', 'equipment': 'Barbell', 'type': 'Legs'},
-    {'name': 'Deadlift', 'equipment': 'Barbell', 'type': 'Back'},
-    {'name': 'Pull Up', 'equipment': 'Body Weight', 'type': 'Back'},
-    {'name': 'Push Up', 'equipment': 'Body Weight', 'type': 'Chest'},
-    {'name': 'Shoulder Press', 'equipment': 'Dumbbell', 'type': 'Shoulders'},
-    {'name': 'Bicep Curl', 'equipment': 'Dumbbell', 'type': 'Arms'},
-    {'name': 'Tricep Extension', 'equipment': 'Cable', 'type': 'Arms'},
-    {'name': 'Leg Press', 'equipment': 'Machine', 'type': 'Legs'},
-    {'name': 'Lat Pulldown', 'equipment': 'Cable', 'type': 'Back'},
-    {'name': 'Chest Fly', 'equipment': 'Cable', 'type': 'Chest'},
-    {'name': 'Leg Extension', 'equipment': 'Machine', 'type': 'Legs'},
-    {'name': 'Leg Curl', 'equipment': 'Machine', 'type': 'Legs'},
-    {'name': 'Calf Raise', 'equipment': 'Machine', 'type': 'Legs'},
-    {'name': 'Plank', 'equipment': 'Body Weight', 'type': 'Core'},
-    {'name': 'Russian Twist', 'equipment': 'Body Weight', 'type': 'Core'},
-    {'name': 'Crunch', 'equipment': 'Body Weight', 'type': 'Core'},
-    {'name': 'Leg Raise', 'equipment': 'Body Weight', 'type': 'Core'},
-    {'name': 'Lunge', 'equipment': 'Body Weight', 'type': 'Legs'},
-    {
-      'name': 'Side Lateral Raise',
-      'equipment': 'Dumbbell',
-      'type': 'Shoulders'
-    },
+  // List of all body parts/types for filtering
+  final List<String> _bodyParts = [
+    'All',
+    'Chest',
+    'Back',
+    'Legs',
+    'Arms',
+    'Shoulders',
+    'Core'
   ];
 
-  // Equipment options for dropdown
+  // Equipment options for filter
+  final List<String> _equipmentTypes = [
+    'All',
+    'Barbell',
+    'Dumbbell',
+    'Machine',
+    'Cable',
+    'Body Weight',
+    'Kettlebell',
+    'Resistance Band',
+    'Other'
+  ];
+
+  // Equipment options for adding custom exercise
   final List<String> _equipmentOptions = [
     'Barbell',
     'Dumbbell',
@@ -55,12 +55,28 @@ class _ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
     'None'
   ];
 
-  String _selectedEquipment = 'None';
-
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
+    _loadExercisesFromJson();
+  }
+
+  void _loadExercisesFromJson() {
+    try {
+      // Parse the JSON string into a map
+      final Map<String, dynamic> data = json.decode(exercisesJson);
+
+      // Get the exercises list from the map
+      final List<dynamic> exercisesList = data['exercises'];
+
+      // Convert the dynamic list to the required format
+      _exercises =
+          exercisesList.map((exercise) => exercise as Map<String, dynamic>).toList();
+    } catch (e) {
+      debugPrint('Error loading exercises: $e');
+      _exercises = []; // Fallback to empty list
+    }
   }
 
   @override
@@ -68,7 +84,6 @@ class _ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     _customExerciseController.dispose();
-    _equipmentController.dispose();
     super.dispose();
   }
 
@@ -78,21 +93,39 @@ class _ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
     });
   }
 
-  List<Map<String, String>> get _filteredExercises {
-    if (_searchQuery.isEmpty) {
-      return _exercises;
+  List<Map<String, dynamic>> get _filteredExercises {
+    List<Map<String, dynamic>> result = _exercises;
+
+    // Filter by body part if not set to "All"
+    if (_selectedBodyPart != 'All') {
+      result = result.where((exercise) {
+        return exercise['type'] == _selectedBodyPart;
+      }).toList();
     }
 
-    return _exercises.where((exercise) {
-      return exercise['name']!.toLowerCase().contains(_searchQuery) ||
-          exercise['equipment']!.toLowerCase().contains(_searchQuery) ||
-          exercise['type']!.toLowerCase().contains(_searchQuery);
-    }).toList();
+    // Filter by equipment if not set to "All"
+    if (_selectedEquipment != 'All') {
+      result = result.where((exercise) {
+        return exercise['equipment'] == _selectedEquipment;
+      }).toList();
+    }
+
+    // Then apply text search filter
+    if (_searchQuery.isNotEmpty) {
+      result = result.where((exercise) {
+        return exercise['name'].toString().toLowerCase().contains(_searchQuery) ||
+            (exercise['description'] != null &&
+                exercise['description'].toString().toLowerCase().contains(_searchQuery));
+      }).toList();
+    }
+
+    return result;
   }
 
   void _showAddCustomExerciseDialog() {
     _customExerciseController.clear();
-    _selectedEquipment = 'None';
+    String selectedEquipment = 'None';
+    String selectedType = 'Chest';
 
     showDialog(
       context: context,
@@ -111,7 +144,25 @@ class _ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedEquipment,
+              value: selectedType,
+              decoration: const InputDecoration(
+                labelText: 'Body Part',
+              ),
+              items: _bodyParts.where((part) => part != 'All').map((String type) {
+                return DropdownMenuItem<String>(
+                  value: type,
+                  child: Text(type),
+                );
+              }).toList(),
+              onChanged: (String? value) {
+                if (value != null) {
+                  selectedType = value;
+                }
+              },
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: selectedEquipment,
               decoration: const InputDecoration(
                 labelText: 'Equipment',
               ),
@@ -123,9 +174,7 @@ class _ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
               }).toList(),
               onChanged: (String? value) {
                 if (value != null) {
-                  setState(() {
-                    _selectedEquipment = value;
-                  });
+                  selectedEquipment = value;
                 }
               },
             ),
@@ -143,8 +192,9 @@ class _ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                 Navigator.pop(context);
                 Navigator.pop(context, {
                   'name': exerciseName,
-                  'equipment':
-                      _selectedEquipment == 'None' ? '' : _selectedEquipment,
+                  'equipment': selectedEquipment == 'None' ? '' : selectedEquipment,
+                  'type': selectedType,
+                  'description': 'Custom exercise'
                 });
               }
             },
@@ -161,31 +211,86 @@ class _ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
       appBar: AppBar(
         title: const Text('Select Exercise'),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search exercises...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
+          preferredSize: const Size.fromHeight(110),
+          child: Column(
+            children: [
+              // Search bar
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search exercises...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                  ),
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
               ),
-            ),
+
+              // Body part filter
+              SizedBox(
+                height: 40,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  children: _bodyParts.map((bodyPart) {
+                    final isSelected = _selectedBodyPart == bodyPart;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ChoiceChip(
+                        label: Text(bodyPart),
+                        selected: isSelected,
+                        selectedColor: _getColorForType(bodyPart).withOpacity(0.7),
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedBodyPart = bodyPart;
+                          });
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+
+              // Equipment filter
+              SizedBox(
+                height: 40,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  children: _equipmentTypes.map((equipment) {
+                    final isSelected = _selectedEquipment == equipment;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ChoiceChip(
+                        label: Text(equipment),
+                        selected: isSelected,
+                        selectedColor: Colors.blue.withOpacity(0.7),
+                        onSelected: (selected) {
+                          setState(() {
+                            _selectedEquipment = equipment;
+                          });
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -212,13 +317,14 @@ class _ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
               itemBuilder: (context, index) {
                 final exercise = _filteredExercises[index];
                 return ListTile(
-                  title: Text(exercise['name']!),
-                  subtitle:
-                      Text('${exercise['equipment']} • ${exercise['type']}'),
+                  title: Text(exercise['name']),
+                  subtitle: Text(
+                    '${exercise['equipment']} • ${exercise['type']}',
+                  ),
                   leading: CircleAvatar(
-                    backgroundColor: _getColorForType(exercise['type']!),
+                    backgroundColor: _getColorForType(exercise['type']),
                     child: Text(
-                      exercise['name']![0],
+                      exercise['name'][0],
                       style: const TextStyle(color: Colors.white),
                     ),
                   ),
@@ -226,7 +332,20 @@ class _ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                     Navigator.pop(context, {
                       'name': exercise['name'],
                       'equipment': exercise['equipment'],
+                      'type': exercise['type'],
+                      'description': exercise['description'],
                     });
+                  },
+                  // Show description on long press or with an expansion panel
+                  onLongPress: () {
+                    if (exercise['description'] != null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(exercise['description']),
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                    }
                   },
                 );
               },
@@ -253,6 +372,8 @@ class _ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
         return Colors.purple;
       case 'core':
         return Colors.teal;
+      case 'all':
+        return Colors.grey.shade700;
       default:
         return Colors.grey;
     }

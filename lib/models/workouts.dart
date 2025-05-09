@@ -31,6 +31,22 @@ class Workout {
       'duration': duration,
     };
   }
+
+  Workout copyWith({
+    int? id,
+    String? name,
+    String? date,
+    int? duration,
+    List<Exercise>? exercises,
+  }) {
+    return Workout(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      date: date ?? this.date,
+      duration: duration ?? this.duration,
+      exercises: exercises ?? this.exercises,
+    );
+  }
 }
 
 class Exercise {
@@ -71,11 +87,11 @@ class Exercise {
 class ExerciseSet {
   final int id;
   final int exerciseId;
-  final int setNumber;
-  final double weight;
-  final int reps;
-  final int restTime; // Rest time in seconds
-  final bool completed;
+  late final int setNumber;
+  double weight;
+  int reps;
+  int restTime; // Rest time in seconds
+  bool completed;
 
   ExerciseSet({
     required this.id,
@@ -109,5 +125,25 @@ class ExerciseSet {
       'restTime': restTime,
       'completed': completed ? 1 : 0,
     };
+  }
+
+  ExerciseSet copyWith({
+    int? id,
+    int? exerciseId,
+    int? setNumber,
+    double? weight,
+    int? reps,
+    int? restTime,
+    bool? completed,
+  }) {
+    return ExerciseSet(
+      id: id ?? this.id,
+      exerciseId: exerciseId ?? this.exerciseId,
+      setNumber: setNumber ?? this.setNumber,
+      weight: weight ?? this.weight,
+      reps: reps ?? this.reps,
+      restTime: restTime ?? this.restTime,
+      completed: completed ?? this.completed,
+    );
   }
 }
