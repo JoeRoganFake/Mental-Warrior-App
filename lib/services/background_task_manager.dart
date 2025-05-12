@@ -13,6 +13,7 @@ class BackgroundTaskIds {
   static const int pendingTasksId = 2;
 }
 
+@pragma('vm:entry-point')
 class BackgroundTaskManager {
   static const String isolateName = 'background_task_port';
 

@@ -2,7 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
-import 'package:mental_warior/pages/exercise_selection_page.dart';
+import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
+import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
 
 class WorkoutSessionPage extends StatefulWidget {
   final int workoutId;
@@ -201,6 +202,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
     if (result != null && result is Map<String, dynamic>) {
       final exerciseName = result['name'] as String;
       final equipment = result['equipment'] as String? ?? '';
+      final apiId = result['apiId'] as String? ?? ''; // Get API ID from the selection result
 
       setState(() {
         _isLoading = true;
@@ -213,6 +215,15 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
           exerciseName,
           equipment,
         );
+        
+        // Store the API ID in the exercise name with a special marker
+        if (apiId.isNotEmpty) {
+          await _workoutService.updateExercise(
+            exerciseId, 
+            "$exerciseName ##API_ID:$apiId##", // Store API ID in the name with a special marker
+            equipment
+          );
+        }
 
         await _workoutService.addSet(
           exerciseId,
@@ -608,7 +619,22 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
   }
 
   void _editExercise(Exercise exercise) {
-    final nameController = TextEditingController(text: exercise.name);
+    // Extract the API ID if it exists
+    final String exerciseName = exercise.name;
+    final RegExp apiIdRegex = RegExp(r'##API_ID:([^#]+)##');
+    final Match? match = apiIdRegex.firstMatch(exerciseName);
+    
+    String cleanName = exerciseName;
+    String apiId = '';
+    
+    if (match != null) {
+      // Extract the API ID
+      apiId = match.group(1) ?? '';
+      // Remove the API ID marker from display name
+      cleanName = exerciseName.replaceAll('##API_ID:$apiId##', '');
+    }
+
+    final nameController = TextEditingController(text: cleanName);
     final equipmentController = TextEditingController(text: exercise.equipment);
 
     showDialog(
@@ -663,14 +689,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-            ),
-            onPressed: () {
+            ),            onPressed: () {
               final newName = nameController.text.trim();
               final newEquipment = equipmentController.text.trim();
 
+              // Add back the API ID marker if it was present
+              final String finalName = newName + (apiId.isNotEmpty ? "##API_ID:$apiId##" : "");
+
               if (newName.isNotEmpty) {
                 Navigator.pop(context);
-                _updateExercise(exercise.id, newName, newEquipment);
+                _updateExercise(exercise.id, finalName, newEquipment);
               }
             },
             child: Text('Save'),
@@ -809,7 +837,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: _textPrimaryColor),
           onPressed: () => Navigator.of(context).pop(),
-          tooltip: '', // Empty tooltip to prevent tooltip creation
         ),
         title: Text(
           'Workout Session',
@@ -1093,104 +1120,127 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
             // Exercise header
             Padding(
               padding: EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  // Exercise icon and name
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: _primaryColor.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            Icons.fitness_center,
-                            color: _primaryColor,
-                            size: 20,
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            exercise.name,
-                            style: TextStyle(
-                              color: _textPrimaryColor,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+              child: InkWell(                onTap: () {
+                  // Check if the exercise name contains an API ID marker
+                  final String exerciseName = exercise.name;
+                  final RegExp apiIdRegex = RegExp(r'##API_ID:([^#]+)##');
+                  final Match? match = apiIdRegex.firstMatch(exerciseName);
+                  
+                  String apiId = '';
+                  
+                  if (match != null) {
+                    // Extract the API ID
+                    apiId = match.group(1) ?? '';
+                  }
+                  
+                  // Navigate to the detail page with the API ID if available, otherwise use the local ID
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ExerciseDetailPage(
+                        exerciseId: apiId.isNotEmpty ? apiId : exercise.id.toString(),
+                      ),
+                    ),
+                  );
+                },
+                child: Row(
+                  children: [
+                    // Exercise icon and name
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: _primaryColor.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                            overflow: TextOverflow.ellipsis,
+                            child: Icon(
+                              Icons.fitness_center,
+                              color: _primaryColor,
+                              size: 20,
+                            ),
+                          ),
+                          SizedBox(width: 12),                          Expanded(
+                            child: Text(
+                              // Clean the name to remove API ID marker if present
+                              exercise.name.replaceAll(RegExp(r'##API_ID:[^#]+##'), ''),
+                              style: TextStyle(
+                                color: _textPrimaryColor,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Status indicator
+                    if (exercise.sets.isNotEmpty)
+                      Container(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: allSetsCompleted
+                              ? _successColor.withOpacity(0.2)
+                              : _textSecondaryColor.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          allSetsCompleted ? 'Completed' : 'In Progress',
+                          style: TextStyle(
+                            color: allSetsCompleted
+                                ? _successColor
+                                : _textSecondaryColor,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
 
-                  // Status indicator
-                  if (exercise.sets.isNotEmpty)
-                    Container(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: allSetsCompleted
-                            ? _successColor.withOpacity(0.2)
-                            : _textSecondaryColor.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(16),
+                    // Options menu
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert, color: _textSecondaryColor),
+                      enabled: !widget.readOnly,
+                      offset: Offset(0, 0),
+                      color: Colors.black,
+                      elevation: 8,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text(
-                        allSetsCompleted ? 'Completed' : 'In Progress',
-                        style: TextStyle(
-                          color: allSetsCompleted
-                              ? _successColor
-                              : _textSecondaryColor,
-                          fontWeight: FontWeight.w500,
-                          fontSize: 12,
+                      onSelected: (String value) {
+                        if (value == 'edit') {
+                          _editExercise(exercise);
+                        } else if (value == 'delete') {
+                          _confirmDeleteExercise(exercise);
+                        }
+                      },
+                      itemBuilder: (BuildContext context) =>
+                          <PopupMenuEntry<String>>[
+                        PopupMenuItem<String>(
+                          value: 'edit',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.edit, color: _primaryColor),
+                            title: Text('Edit Exercise',
+                                style: TextStyle(color: _textPrimaryColor)),
+                          ),
                         ),
-                      ),
+                        PopupMenuItem<String>(
+                          value: 'delete',
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.delete, color: _dangerColor),
+                            title: Text('Delete Exercise',
+                                style: TextStyle(color: _textPrimaryColor)),
+                          ),
+                        ),
+                      ], // changed from `},`
                     ),
-
-                  // Options menu
-                  PopupMenuButton<String>(
-                    icon: Icon(Icons.more_vert, color: _textSecondaryColor),
-                    enabled: !widget.readOnly,
-                    offset: Offset(
-                        0, 0), // This forces the menu to appear at the button
-                    color: Colors.black, // Set background color to black
-                    elevation: 8,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    onSelected: (String value) {
-                      if (value == 'edit') {
-                        _editExercise(exercise);
-                      } else if (value == 'delete') {
-                        _confirmDeleteExercise(exercise);
-                      }
-                    },
-                    itemBuilder: (BuildContext context) =>
-                        <PopupMenuEntry<String>>[
-                      PopupMenuItem<String>(
-                        value: 'edit',
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.edit, color: _primaryColor),
-                          title: Text('Edit Exercise',
-                              style: TextStyle(color: _textPrimaryColor)),
-                        ),
-                      ),
-                      PopupMenuItem<String>(
-                        value: 'delete',
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: Icon(Icons.delete, color: _dangerColor),
-                          title: Text('Delete Exercise',
-                              style: TextStyle(color: _textPrimaryColor)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
 

@@ -16,7 +16,7 @@ import 'dart:isolate';
 import 'package:mental_warior/pages/meditation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:mental_warior/services/background_task_manager.dart';
-import 'package:mental_warior/pages/workout_page.dart';
+import 'package:mental_warior/pages/workout/workout_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});

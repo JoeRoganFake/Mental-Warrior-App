@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/exercise_selection_page.dart';
@@ -28,7 +27,6 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
   int _elapsedSeconds = 0;
   Timer? _timer;
   Timer? _restTimer;
-  bool _isRestTimerActive = false;
   int _restTimeRemaining = 0;
   final TextEditingController _nameController = TextEditingController();
 
@@ -158,7 +156,6 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
   void _startRestTimer(int seconds) {
     _cancelRestTimer();
     setState(() {
-      _isRestTimerActive = true;
       _restTimeRemaining = seconds;
     });
 
@@ -175,9 +172,7 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
       } else {
         timer.cancel();
         if (mounted) {
-          setState(() {
-            _isRestTimerActive = false;
-          });
+          setState(() {});
         }
       }
     });
@@ -189,7 +184,6 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
       _restTimer = null;
     }
     setState(() {
-      _isRestTimerActive = false;
       _restTimeRemaining = 0;
     });
   }
@@ -275,7 +269,7 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
       );
 
       // If we have the new set ID, create a local Set object and add it to our state
-      if (newSetId != null && mounted) {
+      if (mounted) {
         final newSet = ExerciseSet(
           id: newSetId,
           exerciseId: exerciseId,
@@ -574,54 +568,6 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
         );
       }
     }
-  }
-
-  void _showExerciseOptions(Exercise exercise, BuildContext context) {
-    final RenderBox renderBox = context.findRenderObject() as RenderBox;
-    final position = renderBox.localToGlobal(Offset.zero);
-    final size = renderBox.size;
-
-    showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx, // Left position
-        position.dy + size.height, // Top position - right below the button
-        0, // Right position
-        0, // Bottom position
-      ),
-      elevation: 8,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: _surfaceColor,
-      items: [
-        PopupMenuItem(
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.edit, color: _primaryColor),
-            title: Text('Edit Exercise',
-                style: TextStyle(color: _textPrimaryColor)),
-          ),
-          onTap: () {
-            // Wait for menu to close before showing dialog
-            Future.delayed(Duration.zero, () => _editExercise(exercise));
-          },
-        ),
-        PopupMenuItem(
-          child: ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.delete, color: _dangerColor),
-            title: Text('Delete Exercise',
-                style: TextStyle(color: _textPrimaryColor)),
-          ),
-          onTap: () {
-            // Wait for menu to close before showing dialog
-            Future.delayed(
-                Duration.zero, () => _confirmDeleteExercise(exercise));
-          },
-        ),
-      ],
-    );
   }
 
   void _editExercise(Exercise exercise) {

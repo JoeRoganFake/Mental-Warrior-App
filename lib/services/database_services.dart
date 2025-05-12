@@ -975,6 +975,21 @@ class WorkoutService {
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
   }
 
+  // Add updateExercise method to WorkoutService
+  Future<void> updateExercise(int exerciseId, String name, String equipment) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _exerciseTableName,
+      {
+        _exerciseNameColumnName: name,
+        _exerciseEquipmentColumnName: equipment,
+      },
+      where: "$_exerciseIdColumnName = ?",
+      whereArgs: [exerciseId],
+    );
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
+
   // Get all workouts with their exercises and sets
   Future<List<Workout>> getWorkouts() async {
     final db = await DatabaseService.instance.database;

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mental_warior/models/workouts.dart';
-import 'package:mental_warior/pages/workout_session_page.dart';
+import 'package:mental_warior/pages/workout/workout_session_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/widgets/workout_week_chart.dart';
 
@@ -382,7 +382,6 @@ class WorkoutPageState extends State<WorkoutPage> {
       floatingActionButton: FloatingActionButton(
         onPressed: _startNewWorkout,
         child: const Icon(Icons.add),
-        tooltip: 'Start New Workout',
       ),
     );
   }
