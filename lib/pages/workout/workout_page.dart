@@ -5,6 +5,7 @@ import 'package:mental_warior/pages/workout/workout_session_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/widgets/workout_week_chart.dart';
 
+
 class WorkoutPage extends StatefulWidget {
   const WorkoutPage({super.key});
 
@@ -206,7 +207,6 @@ class WorkoutPageState extends State<WorkoutPage> {
       );
     }
   }
-
   String _formatDuration(int seconds) {
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;
@@ -219,6 +219,24 @@ class WorkoutPageState extends State<WorkoutPage> {
       return '$seconds sec';
     }
   }
+  
+  String _calculateTotalVolume(Workout workout) {
+    double totalVolume = 0;
+    int totalPrs = 0;
+
+    for (var exercise in workout.exercises) {
+      for (var set in exercise.sets) {
+        // Calculate volume (weight * reps)
+        totalVolume += set.weight * set.reps;
+
+        // Count PRs if we had that data
+        // if (set.isPR) totalPrs++;
+      }
+    }
+
+    // Format it like in the image
+    return '${totalVolume.toStringAsFixed(0)} kg ${totalPrs > 0 ? '• $totalPrs PRs' : ''}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -228,70 +246,89 @@ class WorkoutPageState extends State<WorkoutPage> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _workouts.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.fitness_center,
-                        size: 64,
-                        color: Colors.grey,
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'No workouts yet',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Tap the + button to create your first workout',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        icon: const Icon(Icons.add),
-                        label: const Text('Start Workout'),
-                        onPressed: _startNewWorkout,
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 24,
-                            vertical: 12,
-                          ),
-                        ),
-                      ),
-                    ],
+          : RefreshIndicator(
+              onRefresh: _loadWorkouts,
+              child: ListView(
+                children: [
+                  // Weekly Workout Chart - always show this
+                  WorkoutWeekChart(
+                    workouts: _workouts,
+                    onChangeGoal: _showChangeGoalDialog,
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadWorkouts,
-                  child: ListView(
-                    children: [
-                      // Weekly Workout Chart
-                      WorkoutWeekChart(
-                        workouts: _workouts,
-                        onChangeGoal: _showChangeGoalDialog,
-                      ),
 
-                      // Workouts List
+                  // Show message when no workouts
+                  if (_workouts.isEmpty)
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(height: 40),
+                          const Icon(
+                            Icons.fitness_center,
+                            size: 64,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'No workouts yet',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Tap the + button to create your first workout',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.add),
+                            label: const Text('Start Workout'),
+                            onPressed: _startNewWorkout,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 40),
+                        ],
+                      ),
+                    ), // Workouts List
+                  if (_workouts.isNotEmpty)
                       ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: _workouts.length,
                         itemBuilder: (context, index) {
                           final workout = _workouts[index];
+                          
+                        // Parse date for better formatting
+                        DateTime workoutDate;
+                        try {
+                          workoutDate =
+                              DateFormat('yyyy-MM-dd').parse(workout.date);
+                        } catch (_) {
+                          workoutDate = DateTime.now();
+                        } // Format date like in the image
+                        final formattedDate = DateFormat('EEEE, MMMM d, yyyy')
+                            .format(workoutDate);
+                        DateFormat('h:mm a').format(workoutDate);
 
                           return Card(
                             margin: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 8,
                             ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          color: Colors.black,
                             child: InkWell(
                               onTap: () => _viewWorkoutDetails(workout.id),
                               child: Padding(
@@ -303,72 +340,158 @@ class WorkoutPageState extends State<WorkoutPage> {
                                       mainAxisAlignment:
                                           MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Text(
+                                      Expanded(
+                                        child: Text(
                                           workout.name,
                                           style: const TextStyle(
                                             fontSize: 18,
                                             fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
                                           ),
                                         ),
                                         IconButton(
-                                          icon:
-                                              const Icon(Icons.delete_outline),
-                                          onPressed: () =>
-                                              _deleteWorkout(workout.id),
+                                        icon: const Icon(Icons.delete_outline,
+                                            color: Colors.white70),
+                                        onPressed: () =>
+                                            _deleteWorkout(workout.id),
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.calendar_today,
-                                            size: 16),
-                                        const SizedBox(width: 8),
-                                        Text(workout.date),
-                                        const SizedBox(width: 16),
-                                        const Icon(Icons.timer, size: 16),
-                                        const SizedBox(width: 8),
-                                        Text(_formatDuration(workout.duration)),
-                                      ],
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    formattedDate,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.white70,
                                     ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      'Exercises: ${workout.exercises.length}',
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                      ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text(
+                                    "Sets",
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.white70,
                                     ),
+                                  ),
                                     const SizedBox(height: 8),
-                                    if (workout.exercises.isNotEmpty)
-                                      Wrap(
-                                        spacing: 8,
-                                        children: workout.exercises
-                                                .take(3)
-                                                .map((exercise) {
-                                              return Chip(
-                                                label: Text(
-                                                  exercise.name,
-                                                  style: const TextStyle(
-                                                      fontSize: 12),
-                                                ),
-                                                backgroundColor:
-                                                    Colors.grey[200],
-                                              );
-                                            }).toList() +
-                                            (workout.exercises.length > 3
-                                                ? [
-                                                    Chip(
-                                                      label: Text(
-                                                        '+${workout.exercises.length - 3} more',
-                                                        style: const TextStyle(
-                                                            fontSize: 12),
+                                    
+                                  // Exercise sets and details - similar to the image
+                                  if (workout.exercises.isNotEmpty)
+                                    Column(
+                                      children:
+                                          workout.exercises.map((exercise) {
+                                        // Calculate total sets and best set
+                                        String bestSet = '';
+                                        double bestWeight = 0;
+                                        int bestReps = 0;
+
+                                        for (var set in exercise.sets) {
+                                          if (set.weight > bestWeight ||
+                                              (set.weight == bestWeight &&
+                                                  set.reps > bestReps)) {
+                                            bestWeight = set.weight;
+                                            bestReps = set.reps;
+                                            bestSet = bestWeight > 0
+                                                ? '${bestWeight.toStringAsFixed(bestWeight.truncateToDouble() == bestWeight ? 0 : 1)} kg × $bestReps'
+                                                : '$bestReps reps';
+                                          }
+                                        }
+
+                                        return Padding(
+                                          padding: const EdgeInsets.only(
+                                              bottom: 12.0),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                flex: 3,
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      exercise.name.replaceAll(
+                                                          RegExp(
+                                                              r'##API_ID:[^#]+##'),
+                                                          ''),
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w500,
                                                       ),
-                                                      backgroundColor:
-                                                          Colors.grey[200],
                                                     ),
-                                                  ]
-                                                : []),
+                                                    // Show set details
+                                                    ...exercise.sets.map((set) {
+                                                      return Text(
+                                                        set.weight > 0
+                                                            ? "${set.weight.toStringAsFixed(set.weight.truncateToDouble() == set.weight ? 0 : 1)} kg × ${set.reps}"
+                                                            : "${set.reps} reps",
+                                                        style: const TextStyle(
+                                                          color: Colors.white70,
+                                                          fontSize: 12,
+                                                        ),
+                                                      );
+                                                    }), // Limit to first 2 sets
+                                                  ],
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                flex: 2,
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.end,
+                                                  children: [
+                                                    const Text(
+                                                      "Best set",
+                                                      style: TextStyle(
+                                                        color: Colors.white70,
+                                                        fontSize: 12,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      bestSet,
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                    
+                                    const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.timer,
+                                              size: 16, color: Colors.white70),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            _formatDuration(workout.duration),
+                                            style: const TextStyle(
+                                                color: Colors.white70),
+                                          ),
+                                        ],
                                       ),
+
+                                      // Volume calculation (total weight × reps)
+                                      Text(
+                                        _calculateTotalVolume(workout),
+                                        style: const TextStyle(
+                                            color: Colors.white70),
+                                      ),
+                                    ],
+                                  ),
                                   ],
                                 ),
                               ),
@@ -378,11 +501,7 @@ class WorkoutPageState extends State<WorkoutPage> {
                       ),
                     ],
                   ),
-                ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _startNewWorkout,
-        child: const Icon(Icons.add),
-      ),
+            ),
     );
   }
 }

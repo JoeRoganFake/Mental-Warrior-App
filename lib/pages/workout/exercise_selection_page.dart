@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/data/exercises_data.dart';
+import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
 
 class ExerciseSelectionPage extends StatefulWidget {
   const ExerciseSelectionPage({super.key});
@@ -16,9 +17,13 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   String _searchQuery = '';
   String _selectedBodyPart = 'All';
   String _selectedEquipment = 'All';
-  late List<Map<String, dynamic>> _exercises = [];
-  late List<String> _bodyParts;
-  late List<String> _equipmentTypes;
+  List<Map<String, dynamic>> _exercises = [];
+  List<String> _bodyParts = [
+    'All'
+  ]; // Initialize with 'All' to avoid LateInitializationError
+  List<String> _equipmentTypes = [
+    'All'
+  ]; // Initialize with 'All' to avoid LateInitializationError
 
   // Equipment options for adding custom exercise
   final List<String> _equipmentOptions = [
@@ -51,15 +56,20 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
           .join(' ');
       _exercises = exercisesList.map((e) {
         final m = e as Map<String, dynamic>;
-        final rawBody = (m['bodyPart'] as String?) ?? '';
-        final rawEquip = (m['equipment'] as String?) ?? '';
+        final primaryMuscle =
+            ((m['primaryMuscles'] as List?)?.isNotEmpty ?? false)
+                ? (m['primaryMuscles'] as List).first as String
+                : '';
+        final rawEquip = (m['equipment'] as String?) ?? 'None';
         return {
-          'name': m['name'] ?? '',
-          'type': capitalizeWords(rawBody),
+          'name': m['name'] ?? 'None',
+          'type': capitalizeWords(primaryMuscle),
           'equipment': capitalizeWords(rawEquip),
           'description': (m['instructions'] as List<dynamic>? ?? []).join('\n'),
           'id': m['id'] ?? '',
-          'imageUrl': m['gifUrl'] ?? '',
+          'imageUrl': (m['images'] as List?)?.isNotEmpty ?? false
+              ? 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/${(m['images'] as List).first}'
+              : '',
           'secondaryMuscles': m['secondaryMuscles'] ?? [],
         };
       }).toList();
@@ -70,7 +80,12 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
       _equipmentTypes = ['All', ...equipSet.toList()..sort()];
     } catch (e) {
       debugPrint('Error loading local exercises: $e');
-      _exercises = [];
+      setState(() {
+        _exercises = [];
+        // Ensure we have default values even if loading fails
+        _bodyParts = ['All'];
+        _equipmentTypes = ['All'];
+      });
     }
   }
 
@@ -149,7 +164,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
             DropdownButtonFormField<String>(
               value: selectedType,
               decoration: const InputDecoration(
-                labelText: 'Body Part',
+                labelText: 'Primary Muscle',
               ),
               items:
                   _bodyParts.where((part) => part != 'All').map((String type) {
@@ -197,7 +212,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                 Navigator.pop(context, {
                   'name': exerciseName,
                   'equipment':
-                      selectedEquipment == 'None' ? '' : selectedEquipment,
+                      selectedEquipment == 'None' ? 'None' : selectedEquipment,
                   'type': selectedType,
                   'description': 'Custom exercise'
                 });
@@ -247,7 +262,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                 ),
               ),
 
-              // Body part filter
+              // Primary muscle filter
               SizedBox(
                 height: 40,
                 child: ListView(
@@ -323,17 +338,55 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
               itemCount: _filteredExercises.length,
               itemBuilder: (context, index) {
                 final exercise = _filteredExercises[index];
-                return ListTile(
-                  title: Text(exercise['name'] ?? 'Unnamed Exercise'),
-                  subtitle: Text(
-                    '${exercise['equipment'] ?? 'No Equipment'} • ${exercise['type'] ?? 'No Type'}',
+                return Card(
+                  margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  elevation: 1,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  leading: CircleAvatar(
-                    backgroundColor:
-                        _getColorForType(exercise['type'] ?? 'No Type'),
-                    child: Text(
-                      (exercise['name'] ?? 'X')[0],
-                      style: const TextStyle(color: Colors.white),
+                  child: ListTile(
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    title: Text(
+                      exercise['name'] ?? 'Unnamed Exercise',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                      '${exercise['equipment'] ?? 'No Equipment'} • ${exercise['type'] ?? 'No Type'}',
+                    ),
+                    leading: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            _getColorForType(exercise['type'] ?? 'No Type'),
+                            _getColorForType(exercise['type'] ?? 'No Type')
+                                .withOpacity(0.7),
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                _getColorForType(exercise['type'] ?? 'No Type')
+                                    .withOpacity(0.3),
+                            blurRadius: 4,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          (exercise['name'] ?? 'X')[0],
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                          ),
+                        ),
                     ),
                   ),
                   onTap: () {
@@ -343,10 +396,10 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                       'type': exercise['type'] ?? 'No Type',
                       'description':
                           exercise['description'] ?? 'No description available',
-                      'apiId': exercise['id'] ?? '', // Add the API ID from exercises_data.dart
+                        'apiId': exercise['id'] ??
+                            '', // Add the API ID from exercises_data.dart
                     });
-                  },
-                  // Show description on long press or with an expansion panel
+                    }, // Show description on long press or with an expansion panel
                   onLongPress: () {
                     if (exercise['description'] != null) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -356,7 +409,33 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                         ),
                       );
                     }
-                  },
+                    },
+                    trailing: exercise['id'] != null
+                        ? Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: IconButton(
+                              icon: Icon(
+                                Icons.info_outline,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                              tooltip: 'View exercise details',
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ExerciseDetailPage(
+                                      exerciseId: exercise['id'],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          )
+                        : null,
+                  ),
                 );
               },
             ),
@@ -378,15 +457,34 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
       case 'back':
         return Colors.blue;
       case 'legs':
+      case 'quadriceps':
+      case 'hamstrings':
+      case 'calves':
+      case 'glutes':
         return Colors.green;
       case 'arms':
+      case 'biceps':
+      case 'triceps':
+      case 'forearms':
         return Colors.orange;
       case 'shoulders':
+      case 'delts':
         return Colors.purple;
       case 'core':
+      case 'abdominals':
+      case 'abs':
         return Colors.teal;
       case 'all':
         return Colors.grey.shade700;
+      case 'neck':
+        return Colors.brown;
+      case 'adductors':
+        return Colors.lightGreen;
+      case 'traps':
+      case 'lats':
+        return Colors.indigo;
+      case 'cardio':
+        return Colors.red[300]!;
       default:
         return Colors.grey;
     }

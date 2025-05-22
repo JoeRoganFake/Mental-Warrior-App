@@ -976,7 +976,8 @@ class WorkoutService {
   }
 
   // Add updateExercise method to WorkoutService
-  Future<void> updateExercise(int exerciseId, String name, String equipment) async {
+  Future<void> updateExercise(
+      int exerciseId, String name, String equipment) async {
     final db = await DatabaseService.instance.database;
     await db.update(
       _exerciseTableName,
@@ -1079,7 +1080,6 @@ class WorkoutService {
     return Workout.fromMap(
         workoutMaps.first as Map<String, dynamic>, exercises);
   }
-
   // Delete a workout and all related exercises and sets
   Future<void> deleteWorkout(int workoutId) async {
     final db = await DatabaseService.instance.database;
@@ -1089,6 +1089,51 @@ class WorkoutService {
       whereArgs: [workoutId],
     );
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
+  
+  // Delete an exercise and all its sets
+  Future<void> deleteExercise(int exerciseId) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete(
+      _exerciseTableName,
+      where: "$_exerciseIdColumnName = ?",
+      whereArgs: [exerciseId],
+    );
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
+
+  // Get all exercises for a specific workout
+  Future<List<Exercise>> getExercisesForWorkout(int workoutId) async {
+    final db = await DatabaseService.instance.database;
+
+    // Get exercises for this workout
+    final exerciseMaps = await db.query(
+      _exerciseTableName,
+      where: "$_exerciseWorkoutIdColumnName = ?",
+      whereArgs: [workoutId],
+    );
+
+    List<Exercise> exercises = [];
+
+    for (var exerciseMap in exerciseMaps) {
+      final exerciseId = exerciseMap[_exerciseIdColumnName] as int;
+
+      // Get sets for this exercise
+      final setMaps = await db.query(
+        _setTableName,
+        where: "$_setExerciseIdColumnName = ?",
+        whereArgs: [exerciseId],
+        orderBy: "$_setNumberColumnName ASC",
+      );
+
+      List<ExerciseSet> sets = setMaps
+          .map((setMap) => ExerciseSet.fromMap(setMap as Map<String, dynamic>))
+          .toList();
+      exercises
+          .add(Exercise.fromMap(exerciseMap as Map<String, dynamic>, sets));
+    }
+
+    return exercises;
   }
 }
 

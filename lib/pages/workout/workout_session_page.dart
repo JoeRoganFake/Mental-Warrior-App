@@ -4,6 +4,7 @@ import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
+import 'package:mental_warior/pages/workout/rest_timer_page.dart';
 
 class WorkoutSessionPage extends StatefulWidget {
   final int workoutId;
@@ -29,7 +30,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
   Timer? _timer;
   Timer? _restTimer;
   int _restTimeRemaining = 0;
+  int? _currentRestSetId;
   final TextEditingController _nameController = TextEditingController();
+  final Map<int, TextEditingController> _weightControllers = {};
+  final Map<int, TextEditingController> _repsControllers = {};
+  
 
   // Theme colors
   final Color _backgroundColor = Color(0xFF1A1B1E); // Dark background
@@ -43,6 +48,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
 
   // Defae
   final int _defaultRestTime = 90; // 1:30 min
+
+  // Shared rest timer state
+  final ValueNotifier<int> _restRemainingNotifier = ValueNotifier(0);
+  final ValueNotifier<bool> _restPausedNotifier = ValueNotifier(false);
+  int _originalRestTime = 0;
 
   @override
   void initState() {
@@ -58,6 +68,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
     _stopTimer();
     _cancelRestTimer();
     _nameController.dispose();
+    _weightControllers.values.forEach((c) => c.dispose());
+    _repsControllers.values.forEach((c) => c.dispose());
     super.dispose();
   }
 
@@ -154,27 +166,24 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
     return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
-  void _startRestTimer(int seconds) {
+  /// Starts a rest timer for a specific set and tracks its id
+  void _startRestTimerForSet(int setId, int seconds) {
     _cancelRestTimer();
     setState(() {
+      _currentRestSetId = setId;
       _restTimeRemaining = seconds;
+      _originalRestTime = seconds;
+      _restPausedNotifier.value = false;
+      _restRemainingNotifier.value = seconds;
     });
-
     _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      if (_restTimeRemaining > 0) {
-        _restTimeRemaining--;
-        // Only rebuild UI when necessary
-        setState(() {});
+      if (!mounted || _restPausedNotifier.value) return;
+      if (_restRemainingNotifier.value > 0) {
+        _restRemainingNotifier.value--;
+        setState(() => _restTimeRemaining = _restRemainingNotifier.value);
       } else {
         timer.cancel();
-        if (mounted) {
-          setState(() {});
-        }
+        setState(() => _currentRestSetId = null);
       }
     });
   }
@@ -186,7 +195,33 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
     }
     setState(() {
       _restTimeRemaining = 0;
+      _currentRestSetId = null;
+      _restPausedNotifier.value = false;
+      _restRemainingNotifier.value = 0;
     });
+  }
+  
+  void _togglePauseRest() {
+    if (_restPausedNotifier.value) {
+      // resume
+      _restPausedNotifier.value = false;
+    } else {
+      // pause
+      _restPausedNotifier.value = true;
+    }
+  }
+
+  void _incrementRest() {
+    _restRemainingNotifier.value += 15;
+    setState(() => _restTimeRemaining = _restRemainingNotifier.value);
+  }
+
+  void _decrementRest() {
+    final newVal = (_restRemainingNotifier.value - 15)
+        .clamp(0, _restRemainingNotifier.value);
+    _restRemainingNotifier.value = newVal;
+    setState(() => _restTimeRemaining = newVal);
+    if (newVal == 0) _cancelRestTimer();
   }
 
   void _addExercise() async {
@@ -202,7 +237,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
     if (result != null && result is Map<String, dynamic>) {
       final exerciseName = result['name'] as String;
       final equipment = result['equipment'] as String? ?? '';
-      final apiId = result['apiId'] as String? ?? ''; // Get API ID from the selection result
+      final apiId = result['apiId'] as String? ??
+          ''; // Get API ID from the selection result
 
       setState(() {
         _isLoading = true;
@@ -215,20 +251,19 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
           exerciseName,
           equipment,
         );
-        
+
         // Store the API ID in the exercise name with a special marker
         if (apiId.isNotEmpty) {
           await _workoutService.updateExercise(
-            exerciseId, 
-            "$exerciseName ##API_ID:$apiId##", // Store API ID in the name with a special marker
-            equipment
-          );
+              exerciseId,
+              "$exerciseName ##API_ID:$apiId##", // Store API ID in the name with a special marker
+              equipment);
         }
 
         await _workoutService.addSet(
           exerciseId,
           1, // Set number
-          0.0, // Default weight
+          0, // Default weight
           0, // Default reps
           _defaultRestTime, // Default rest time
         );
@@ -296,7 +331,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
       final newSetId = await _workoutService.addSet(
         exerciseId,
         setNumber,
-        0.0, // Default weight
+        0, // Default weight
         0, // Default reps
         _defaultRestTime, // Default rest time
       );
@@ -307,7 +342,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
           id: newSetId,
           exerciseId: exerciseId,
           setNumber: setNumber,
-          weight: 0.0,
+          weight: 0,
           reps: 0,
           restTime: _defaultRestTime,
           completed: false,
@@ -399,7 +434,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
       {
         'weight': weight,
         'reps': reps,
-        'rest_time': restTime,
+        'restTime': restTime,
       },
       where: 'id = ?',
       whereArgs: [setId],
@@ -408,115 +443,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
         !WorkoutService.workoutsUpdatedNotifier.value;
   }
 
-  void _editSet(int exerciseId, ExerciseSet set) {
-    final weightController = TextEditingController(text: set.weight.toString());
-    final repsController = TextEditingController(text: set.reps.toString());
-    final restTimeController =
-        TextEditingController(text: set.restTime.toString());
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: _surfaceColor,
-        title: Text('Edit Set ${set.setNumber}',
-            style: TextStyle(color: _textPrimaryColor)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: weightController,
-                keyboardType: TextInputType.number,
-                style: TextStyle(color: _textPrimaryColor),
-                decoration: InputDecoration(
-                  labelText: 'Weight (kg)',
-                  labelStyle: TextStyle(color: _textSecondaryColor),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide:
-                        BorderSide(color: _primaryColor.withOpacity(0.6)),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: _primaryColor),
-                  ),
-                ),
-              ),
-              SizedBox(height: 12),
-              TextField(
-                controller: repsController,
-                keyboardType: TextInputType.number,
-                style: TextStyle(color: _textPrimaryColor),
-                decoration: InputDecoration(
-                  labelText: 'Reps',
-                  labelStyle: TextStyle(color: _textSecondaryColor),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide:
-                        BorderSide(color: _primaryColor.withOpacity(0.6)),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: _primaryColor),
-                  ),
-                ),
-              ),
-              SizedBox(height: 12),
-              TextField(
-                controller: restTimeController,
-                keyboardType: TextInputType.number,
-                style: TextStyle(color: _textPrimaryColor),
-                decoration: InputDecoration(
-                  labelText: 'Rest Time (seconds)',
-                  labelStyle: TextStyle(color: _textSecondaryColor),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide:
-                        BorderSide(color: _primaryColor.withOpacity(0.6)),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: _primaryColor),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: TextStyle(color: _textSecondaryColor)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _primaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            onPressed: () async {
-              // Update data without waiting for database
-              final weight =
-                  double.tryParse(weightController.text) ?? set.weight;
-              final reps = int.tryParse(repsController.text) ?? set.reps;
-              final restTime =
-                  int.tryParse(restTimeController.text) ?? set.restTime;
-
-              // Close dialog immediately to improve responsiveness
-              Navigator.pop(context);
-
-              // Then update database in background
-              await _updateSetData(set.id, weight, reps, restTime);
-
-              // No need to reload the entire workout as we're updating local state in _updateSetData
-            },
-            child: Text('Save'),
-          ),
-        ],
-      ),
-    ).then((_) {
-      // Properly dispose controllers when dialog is closed
-      weightController.dispose();
-      repsController.dispose();
-      restTimeController.dispose();
-    });
-  }
 
   Future<void> _deleteSet(int exerciseId, int setId) async {
     // Find the exercise and set in our local state
@@ -623,10 +549,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
     final String exerciseName = exercise.name;
     final RegExp apiIdRegex = RegExp(r'##API_ID:([^#]+)##');
     final Match? match = apiIdRegex.firstMatch(exerciseName);
-    
+
     String cleanName = exerciseName;
     String apiId = '';
-    
+
     if (match != null) {
       // Extract the API ID
       apiId = match.group(1) ?? '';
@@ -689,12 +615,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-            ),            onPressed: () {
+            ),
+            onPressed: () {
               final newName = nameController.text.trim();
               final newEquipment = equipmentController.text.trim();
 
               // Add back the API ID marker if it was present
-              final String finalName = newName + (apiId.isNotEmpty ? "##API_ID:$apiId##" : "");
+              final String finalName =
+                  newName + (apiId.isNotEmpty ? "##API_ID:$apiId##" : "");
 
               if (newName.isNotEmpty) {
                 Navigator.pop(context);
@@ -856,7 +784,306 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              onPressed: () {
+              onPressed: () async {
+                // Check for empty sets (no weight or reps) and collect them
+                Map<int, List<int>> emptySetsByExercise =
+                    {}; // exerciseId -> list of setIds
+                int totalSets = 0;
+                int emptySets = 0;
+
+                for (var exercise in _workout!.exercises) {
+                  for (var set in exercise.sets) {
+                    totalSets++;
+                    final wText = _weightControllers[set.id]?.text ?? '';
+                    final rText = _repsControllers[set.id]?.text ?? '';
+
+                    if ((wText.isEmpty || wText == '0') ||
+                        (rText.isEmpty || rText == '0')) {
+                      emptySets++;
+                      if (!emptySetsByExercise.containsKey(exercise.id)) {
+                        emptySetsByExercise[exercise.id] = [];
+                      }
+                      emptySetsByExercise[exercise.id]!.add(set.id);
+                    }
+                  }
+                }
+
+                // If all sets are empty, discard the entire workout
+                if (emptySets == totalSets && totalSets > 0) {
+                  bool confirmDiscard = await showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          backgroundColor: _surfaceColor,
+                          title: Text('Empty Workout',
+                              style: TextStyle(color: _textPrimaryColor)),
+                          content: Text(
+                            'All sets in this workout are empty (missing weight or reps). The entire workout will be discarded.',
+                            style: TextStyle(color: _textSecondaryColor),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: Text('Go Back',
+                                  style: TextStyle(color: _textSecondaryColor)),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _dangerColor,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => Navigator.pop(context, true),
+                              child: Text('Discard Workout'),
+                            ),
+                          ],
+                        ),
+                      ) ??
+                      false;
+
+                  if (confirmDiscard) {
+                    // Delete the workout and return to previous screen
+                    await _workoutService.deleteWorkout(widget.workoutId);
+                    _stopTimer();
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Empty workout discarded'),
+                        backgroundColor: _primaryColor,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    return;
+                  } else {
+                    return; // User chose to go back and fill in sets
+                  }
+                }                // Check for any issues: empty sets or uncompleted sets
+                else {
+                  // First identify uncompleted sets (sets with weight and reps but not marked as completed)
+                  Map<int, List<int>> uncompletedSetsByExercise = {}; // exerciseId -> list of setIds
+                  
+                  for (var exercise in _workout!.exercises) {
+                    for (var set in exercise.sets) {
+                      // Only check sets that aren't already identified as empty
+                      if (!(emptySetsByExercise.containsKey(exercise.id) && 
+                            emptySetsByExercise[exercise.id]!.contains(set.id))) {
+                        
+                        // Check if set has weight and reps but is not marked as completed
+                        final wText = _weightControllers[set.id]?.text ?? '';
+                        final rText = _repsControllers[set.id]?.text ?? '';
+                        final hasData = (wText.isNotEmpty && wText != '0') && 
+                                        (rText.isNotEmpty && rText != '0');
+                        
+                        if (hasData && !set.completed) {
+                          if (!uncompletedSetsByExercise.containsKey(exercise.id)) {
+                            uncompletedSetsByExercise[exercise.id] = [];
+                          }
+                          uncompletedSetsByExercise[exercise.id]!.add(set.id);
+                        }
+                      }
+                    }
+                  }
+
+                  // Prepare data for dialog
+                  bool hasEmptySets = emptySets > 0;
+                  bool hasUncompletedSets = uncompletedSetsByExercise.isNotEmpty;
+                  String dialogTitle = '';
+                  List<Widget> dialogContent = [];
+                  
+                  if (hasEmptySets && hasUncompletedSets) {
+                    dialogTitle = 'Sets Need Attention';
+                  } else if (hasEmptySets) {
+                    dialogTitle = 'Empty Sets Detected';
+                  } else if (hasUncompletedSets) {
+                    dialogTitle = 'Uncompleted Sets Detected';
+                  }
+
+                  // Build content for dialog
+                  if (hasEmptySets) {
+                    // Build list of exercises with empty sets
+                    List<Exercise> exercisesWithEmptySets = [];
+                    for (var exercise in _workout!.exercises) {
+                      if (emptySetsByExercise.containsKey(exercise.id)) {
+                        exercisesWithEmptySets.add(exercise);
+                      }
+                    }
+
+                    dialogContent.add(
+                      Text(
+                        'The following exercises have empty sets (missing weight or reps):',
+                        style: TextStyle(color: _textSecondaryColor),
+                      )
+                    );
+                    dialogContent.add(SizedBox(height: 10));
+                    
+                    for (var exercise in exercisesWithEmptySets) {
+                      dialogContent.add(
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 4),
+                          child: Text(
+                            '• ${exercise.name.replaceAll(RegExp(r'##API_ID:[^#]+##'), '')}',
+                            style: TextStyle(
+                                color: _textPrimaryColor,
+                                fontWeight: FontWeight.w500),
+                          ),
+                        )
+                      );
+                    }
+                    
+                    dialogContent.add(SizedBox(height: 10));
+                    dialogContent.add(
+                      Text(
+                        'Empty sets will be discarded.',
+                        style: TextStyle(color: _textSecondaryColor),
+                      )
+                    );
+                  }
+                  
+                  if (hasEmptySets && hasUncompletedSets) {
+                    dialogContent.add(SizedBox(height: 16));
+                    dialogContent.add(Divider(color: _textSecondaryColor.withOpacity(0.2)));
+                    dialogContent.add(SizedBox(height: 16));
+                  }
+
+                  if (hasUncompletedSets) {
+                    // Count total uncompleted sets
+                    int totalUncompletedSets = 0;
+                    uncompletedSetsByExercise.forEach((_, sets) => totalUncompletedSets += sets.length);
+                    
+                    // Build list of exercises with uncompleted sets
+                    List<Exercise> exercisesWithUncompletedSets = [];
+                    for (var exercise in _workout!.exercises) {
+                      if (uncompletedSetsByExercise.containsKey(exercise.id)) {
+                        exercisesWithUncompletedSets.add(exercise);
+                      }
+                    }
+
+                    dialogContent.add(
+                      Text(
+                        'You have $totalUncompletedSets set${totalUncompletedSets > 1 ? 's' : ''} with data but not marked as completed:',
+                        style: TextStyle(color: _textSecondaryColor),
+                      )
+                    );
+                    dialogContent.add(SizedBox(height: 10));
+                    
+                    for (var exercise in exercisesWithUncompletedSets) {
+                      dialogContent.add(
+                        Padding(
+                          padding: EdgeInsets.symmetric(vertical: 4),
+                          child: Text(
+                            '• ${exercise.name.replaceAll(RegExp(r'##API_ID:[^#]+##'), '')} (${uncompletedSetsByExercise[exercise.id]!.length} set${uncompletedSetsByExercise[exercise.id]!.length > 1 ? 's' : ''})',
+                            style: TextStyle(
+                                color: _textPrimaryColor,
+                                fontWeight: FontWeight.w500),
+                          ),
+                        )
+                      );
+                    }
+                    
+                    dialogContent.add(SizedBox(height: 10));
+                    dialogContent.add(
+                      Text(
+                        'All uncompleted sets will be automatically completed when finishing.',
+                        style: TextStyle(color: _textSecondaryColor.withOpacity(0.8), fontStyle: FontStyle.italic),
+                      )
+                    );
+                  }
+
+                  // Show the combined dialog
+                  bool continueWithWorkout = await showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: _surfaceColor,
+                      title: Text(dialogTitle, style: TextStyle(color: _textPrimaryColor)),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: dialogContent,
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: Text('Go Back', style: TextStyle(color: _textSecondaryColor)),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primaryColor,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () => Navigator.pop(context, true),
+                          child: Text('Finish Workout'),
+                        ),
+                      ],
+                    ),
+                  ) ?? false;
+
+                  if (!continueWithWorkout) {
+                    return; // User chose to go back
+                  }
+
+                  // Process empty sets
+                  if (hasEmptySets) {
+                    // Delete all empty sets
+                    for (var exerciseId in emptySetsByExercise.keys) {
+                      for (var setId in emptySetsByExercise[exerciseId]!) {
+                        await _workoutService.deleteSet(setId);
+                      }
+
+                      // If all sets in an exercise were deleted, delete the exercise too
+                      var exercise = _workout!.exercises
+                          .firstWhere((e) => e.id == exerciseId);
+                      if (emptySetsByExercise[exerciseId]!.length ==
+                          exercise.sets.length) {
+                        await _workoutService.deleteExercise(exerciseId);
+                      }
+                    }
+                  }
+
+                  // Process uncompleted sets
+                  if (hasUncompletedSets) {
+                    // Mark all uncompleted sets as completed automatically
+                    for (var exerciseId in uncompletedSetsByExercise.keys) {
+                      for (var setId in uncompletedSetsByExercise[exerciseId]!) {
+                        await _updateSetComplete(setId, true);
+                      }
+                    }
+                  }
+
+                  // Save any inline edits for non-empty sets
+                  for (var exercise in _workout!.exercises) {
+                    for (var set in exercise.sets) {
+                      // Skip empty sets as they've already been deleted
+                      if (emptySetsByExercise.containsKey(exercise.id) &&
+                          emptySetsByExercise[exercise.id]!.contains(set.id)) {
+                        continue;
+                      }
+
+                      final wText = _weightControllers[set.id]?.text ?? '';
+                      final newWeight = double.tryParse(wText) ?? set.weight;
+                      final rText = _repsControllers[set.id]?.text ?? '';
+                      final newReps = int.tryParse(rText) ?? set.reps;
+                      await _updateSetData(
+                          set.id, newWeight, newReps, set.restTime);
+                    }
+                  }
+
+                  // Check if any exercises remain after deleting all empty sets
+                  final remainingExercises = await _workoutService
+                      .getExercisesForWorkout(widget.workoutId);
+                  if (remainingExercises.isEmpty) {
+                    // No exercises left, delete the workout
+                    await _workoutService.deleteWorkout(widget.workoutId);
+                    _stopTimer();
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Empty workout discarded'),
+                        backgroundColor: _primaryColor,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                    return;
+                  }
+                }
+                
                 _stopTimer();
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -959,59 +1186,28 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
                   child: _workout!.exercises.isEmpty
                       ? _buildEmptyExercisesView()
                       : ListView.builder(
-                          padding: EdgeInsets.only(top: 8, bottom: 80),
-                          itemCount: _workout!.exercises.length,
+                          padding: EdgeInsets.only(top: 8),
+                          itemCount: _workout!.exercises.length + 1,
                           itemBuilder: (context, index) {
-                            return _buildExerciseCard(
-                                _workout!.exercises[index]);
+                            if (index < _workout!.exercises.length) {
+                              return _buildExerciseCard(
+                                  _workout!.exercises[index]);
+                            } else {
+                              return Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Center(
+                                  child: TextButton.icon(
+                                    icon: Icon(Icons.add, color: _primaryColor),
+                                    label: Text('Add Exercise',
+                                        style: TextStyle(color: _primaryColor)),
+                                    onPressed: _addExercise,
+                                  ),
+                                ),
+                              );
+                            }
                           },
                         ),
                 ),
-
-                // Add exercise button (fixed position)
-                if (!widget.readOnly)
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: _backgroundColor,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 8,
-                          offset: Offset(0, -3),
-                        ),
-                      ],
-                    ),
-                    child: SafeArea(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed: _addExercise,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.add),
-                            SizedBox(width: 8),
-                            Text(
-                              'Add Exercise',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             ),
       floatingActionButton: !widget.readOnly &&
@@ -1077,17 +1273,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
           ),
           SizedBox(height: 24),
           if (!widget.readOnly)
-            ElevatedButton.icon(
-              icon: Icon(Icons.add),
-              label: Text('Add Your First Exercise'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _primaryColor,
-                foregroundColor: Colors.white,
-                padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
+            TextButton.icon(
+              icon: Icon(Icons.add, color: _primaryColor),
+              label: Text('Add Your First Exercise',
+                  style: TextStyle(color: _primaryColor)),
               onPressed: _addExercise,
             ),
         ],
@@ -1096,6 +1285,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
   }
 
   Widget _buildExerciseCard(Exercise exercise) {
+    // Determine if this is a default (API) exercise
+    final bool isDefaultExercise =
+        RegExp(r'##API_ID:[^#]+##').hasMatch(exercise.name);
+
     final bool allSetsCompleted =
         exercise.sets.isNotEmpty && exercise.sets.every((set) => set.completed);
 
@@ -1120,25 +1313,27 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
             // Exercise header
             Padding(
               padding: EdgeInsets.all(16),
-              child: InkWell(                onTap: () {
+              child: InkWell(
+                onTap: () {
                   // Check if the exercise name contains an API ID marker
                   final String exerciseName = exercise.name;
                   final RegExp apiIdRegex = RegExp(r'##API_ID:([^#]+)##');
                   final Match? match = apiIdRegex.firstMatch(exerciseName);
-                  
+
                   String apiId = '';
-                  
+
                   if (match != null) {
                     // Extract the API ID
                     apiId = match.group(1) ?? '';
                   }
-                  
+
                   // Navigate to the detail page with the API ID if available, otherwise use the local ID
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => ExerciseDetailPage(
-                        exerciseId: apiId.isNotEmpty ? apiId : exercise.id.toString(),
+                        exerciseId:
+                            apiId.isNotEmpty ? apiId : exercise.id.toString(),
                       ),
                     ),
                   );
@@ -1161,10 +1356,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
                               size: 20,
                             ),
                           ),
-                          SizedBox(width: 12),                          Expanded(
+                          SizedBox(width: 12),
+                          Expanded(
                             child: Text(
                               // Clean the name to remove API ID marker if present
-                              exercise.name.replaceAll(RegExp(r'##API_ID:[^#]+##'), ''),
+                              exercise.name
+                                  .replaceAll(RegExp(r'##API_ID:[^#]+##'), ''),
                               style: TextStyle(
                                 color: _textPrimaryColor,
                                 fontSize: 18,
@@ -1201,48 +1398,79 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
                       ),
 
                     // Options menu
-                    PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert, color: _textSecondaryColor),
-                      enabled: !widget.readOnly,
-                      offset: Offset(0, 0),
-                      color: Colors.black,
-                      elevation: 8,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      onSelected: (String value) {
-                        if (value == 'edit') {
-                          _editExercise(exercise);
-                        } else if (value == 'delete') {
-                          _confirmDeleteExercise(exercise);
-                        }
-                      },
-                      itemBuilder: (BuildContext context) =>
-                          <PopupMenuEntry<String>>[
-                        PopupMenuItem<String>(
-                          value: 'edit',
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.edit, color: _primaryColor),
-                            title: Text('Edit Exercise',
-                                style: TextStyle(color: _textPrimaryColor)),
-                          ),
+                    // Show options menu only for non-default exercises
+                    if (!widget.readOnly)
+                      PopupMenuButton<String>(
+                        icon: Icon(Icons.more_vert, color: _textSecondaryColor),
+                        enabled: true,
+                        offset: Offset(0, 0),
+                        color: Colors.black,
+                        elevation: 8,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        PopupMenuItem<String>(
-                          value: 'delete',
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.delete, color: _dangerColor),
-                            title: Text('Delete Exercise',
-                                style: TextStyle(color: _textPrimaryColor)),
-                          ),
-                        ),
-                      ], // changed from `},`
-                    ),
+                        onSelected: (String value) {
+                          if (value == 'edit') {
+                            _editExercise(exercise);
+                          } else if (value == 'delete') {
+                            _confirmDeleteExercise(exercise);
+                          } else if (value == 'set_rest') {
+                            _showSetRestDialog(exercise);
+                          }
+                        },
+                        itemBuilder: (BuildContext context) {
+                          return <PopupMenuEntry<String>>[
+                            if (!isDefaultExercise)
+                              PopupMenuItem<String>(
+                                value: 'edit',
+                                child: ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading:
+                                      Icon(Icons.edit, color: _primaryColor),
+                                  title: Text('Edit Exercise',
+                                      style:
+                                          TextStyle(color: _textPrimaryColor)),
+                                ),
+                              ),
+                            PopupMenuItem<String>(
+                              value: 'set_rest',
+                              child: ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading:
+                                    Icon(Icons.timer, color: _primaryColor),
+                                title: Text('Set Rest Time',
+                                    style: TextStyle(color: _textPrimaryColor)),
+                              ),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'delete',
+                              child: ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading:
+                                    Icon(Icons.delete, color: _dangerColor),
+                                title: Text('Delete Exercise',
+                                    style: TextStyle(color: _textPrimaryColor)),
+                              ),
+                            ),
+                          ];
+                        },
+                      )
+                    else
+                      SizedBox(width: 40),
                   ],
                 ),
               ),
             ),
+
+            // Show exercise rest time if sets exist
+            if (exercise.sets.isNotEmpty)
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Text(
+                  'Rest time: ${exercise.sets.first.restTime}s',
+                  style: TextStyle(color: _textSecondaryColor, fontSize: 12),
+                ),
+              ),
 
             // Sets table header
             if (exercise.sets.isNotEmpty)
@@ -1252,29 +1480,21 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
                   children: [
                     SizedBox(width: 40),
                     Expanded(
-                      flex: 2,
-                      child: Text(
-                        'WEIGHT',
-                        style: TextStyle(
-                          color: _textSecondaryColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                        flex: 2,
+                        child: Text('WEIGHT',
+                            style: TextStyle(
+                                color: _textSecondaryColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center)),
                     Expanded(
-                      flex: 2,
-                      child: Text(
-                        'REPS',
-                        style: TextStyle(
-                          color: _textSecondaryColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                        flex: 2,
+                        child: Text('REPS',
+                            style: TextStyle(
+                                color: _textSecondaryColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center)),
                     SizedBox(width: 44),
                   ],
                 ),
@@ -1289,7 +1509,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
                 }),
               ),
 
-            // Add set button
+            // Add set button (only for non-default exercises)
             if (!widget.readOnly)
               Padding(
                 padding: EdgeInsets.all(16),
@@ -1320,6 +1540,32 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
   }
 
   Widget _buildSetItem(Exercise exercise, ExerciseSet set) {
+    // initialize controllers if absent
+    _weightControllers.putIfAbsent(set.id, () {
+      // Show initial weight only if greater than zero
+      String initialWeightText = '';
+      if (set.weight > 0) {
+        initialWeightText = (set.weight % 1 == 0)
+            ? set.weight.toInt().toString()
+            : set.weight.toString();
+      }
+      return TextEditingController(text: initialWeightText);
+    });
+    _repsControllers.putIfAbsent(set.id, () {
+      // Show initial reps only if greater than zero
+      String initialRepsText = '';
+      if (set.reps > 0) {
+        initialRepsText = set.reps.toString();
+      }
+      return TextEditingController(text: initialRepsText);
+    });
+
+    // Determine if both fields have values to allow completion
+    final String weightTextStr = _weightControllers[set.id]?.text ?? '';
+    final String repsTextStr = _repsControllers[set.id]?.text ?? '';
+    final bool canCompleteButton =
+        weightTextStr.isNotEmpty && repsTextStr.isNotEmpty;
+
     return RepaintBoundary(
       child: Dismissible(
         key: Key('set_${set.id}'),
@@ -1344,110 +1590,223 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
           _deleteSet(exercise.id, set.id);
         },
         child: InkWell(
-          onTap: widget.readOnly ? null : () => _editSet(exercise.id, set),
+        onTap: null,
           child: Container(
             padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: _textSecondaryColor.withOpacity(0.1),
-                  width: 1,
-                ),
-              ),
+                    color: _textSecondaryColor.withOpacity(0.1), width: 1)),
             ),
             child: Column(children: [
-              Row(
-                children: [
-                  // Set number
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: set.completed
-                          ? _successColor.withOpacity(0.15)
-                          : _primaryColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${set.setNumber}',
-                      style: TextStyle(
-                        color: set.completed ? _successColor : _primaryColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+            Row(children: [
+              // Set number
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: set.completed
+                      ? _successColor.withOpacity(0.15)
+                      : _primaryColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  '${set.setNumber}',
+                  style: TextStyle(
+                    color: set.completed ? _successColor : _primaryColor,
+                    fontWeight: FontWeight.bold,
                   ),
+                ),
+              ),
 
-                  // Weight value
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      height: 40,
-                      margin: EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: _inputBgColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '${set.weight} kg',
-                        style: TextStyle(
-                          color: _textPrimaryColor,
-                          fontWeight: FontWeight.w500,
+              // Weight and Reps columns (align with headers)
+              Expanded(
+                flex: 2,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8.0),
+                  child: TextField(
+                    controller: _weightControllers[set.id],
+                    keyboardType:
+                        TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(
+                        color: _textPrimaryColor, fontWeight: FontWeight.w500),
+                    decoration: InputDecoration(
+                      contentPadding: EdgeInsets.symmetric(vertical: 8),
+                      isDense: true,
+                      filled: true,
+                      fillColor: _inputBgColor,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none),
+                      // Use suffix widget with padding to avoid cramped edge
+                      suffix: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8.0),
+                        child: Text(
+                          'kg',
+                          style: TextStyle(color: _textSecondaryColor),
                         ),
                       ),
                     ),
+                    textAlign: TextAlign.center,
+                    onSubmitted: (value) {
+                      final weight = double.tryParse(value) ?? set.weight;
+                      _updateSetData(set.id, weight, set.reps, set.restTime);
+                    },
                   ),
-
-                  // Reps value
-                  Expanded(
-                    flex: 2,
-                    child: Container(
-                      height: 40,
-                      margin: EdgeInsets.symmetric(horizontal: 8),
-                      decoration: BoxDecoration(
-                        color: _inputBgColor,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '${set.reps}',
-                        style: TextStyle(
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8.0),
+                  child: TextField(
+                    controller: _repsControllers[set.id],
+                    keyboardType: TextInputType.number,
+                    style: TextStyle(
                           color: _textPrimaryColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
+                          fontWeight: FontWeight.w500),
+                    decoration: InputDecoration(
+                      contentPadding: EdgeInsets.symmetric(vertical: 8),
+                      isDense: true,
+                      filled: true,
+                      fillColor: _inputBgColor,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none),
                     ),
+                    textAlign: TextAlign.center,
+                    onSubmitted: (value) {
+                      final reps = int.tryParse(value) ?? set.reps;
+                      _updateSetData(set.id, set.weight, reps, set.restTime);
+                    },
                   ),
-
-                  // Complete button
-                  Container(
-                    width: 44,
-                    height: 40,
-                    child: widget.readOnly
-                        ? set.completed
+                ),
+              ),
+              // Complete button
+              Container(
+                width: 44,
+                height: 40,
+                child: widget.readOnly
+                    ? set.completed
+                        ? Icon(Icons.check_circle, color: _successColor)
+                        : Icon(Icons.circle_outlined,
+                            color: _textSecondaryColor)                    : IconButton(
+                        icon: set.completed
                             ? Icon(Icons.check_circle, color: _successColor)
                             : Icon(Icons.circle_outlined,
-                                color: _textSecondaryColor)
-                        : IconButton(
-                            icon: set.completed
-                                ? Icon(Icons.check_circle, color: _successColor)
-                                : Icon(Icons.circle_outlined,
-                                    color: _textSecondaryColor),
-                            onPressed: () {
+                                color: canCompleteButton
+                                    ? _textSecondaryColor
+                                    : _textSecondaryColor.withOpacity(0.3)),
+                        tooltip: canCompleteButton
+                            ? (set.completed ? 'Mark as incomplete' : 'Mark as completed')
+                            : 'Enter weight and reps to complete',
+                        onPressed: canCompleteButton
+                            ? () {
+                                final willComplete = !set.completed;
                               _toggleSetCompletion(
-                                  exercise.id, set.id, !set.completed);
-                              if (!set.completed) {
-                                _startRestTimer(set.restTime);
+                                    exercise.id, set.id, willComplete);
+                                if (willComplete) {
+                                  // Start rest when completing
+                                  _startRestTimerForSet(set.id, set.restTime);
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => RestTimerPage(
+                                        originalDuration: _originalRestTime,
+                                        remaining: _restRemainingNotifier,
+                                        isPaused: _restPausedNotifier,
+                                        onPause: _togglePauseRest,
+                                        onIncrement: _incrementRest,
+                                        onDecrement: _decrementRest,
+                                        onSkip: _cancelRestTimer,
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  // Cancel rest when undoing
+                                  _cancelRestTimer();
+                                }
                               }
-                            },
-                          ),
+                            : null,
+                      ), // close IconButton
+              ),
+            ]),
+            // Show countdown under set when active
+            if (_currentRestSetId == set.id && _restTimeRemaining > 0)
+              GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => RestTimerPage(
+                        originalDuration: _originalRestTime,
+                        remaining: _restRemainingNotifier,
+                        isPaused: _restPausedNotifier,
+                        onPause: _togglePauseRest,
+                        onIncrement: _incrementRest,
+                        onDecrement: _decrementRest,
+                        onSkip: _cancelRestTimer,
+                      ),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Rest: ${_formatTime(_restTimeRemaining)}',
+                    style: TextStyle(color: _primaryColor),
                   ),
-                ],
+                ),
               ),
             ]),
           ),
         ),
+    )); // close RepaintBoundary
+  }
+
+  /// Show dialog to set a custom rest time for all sets in an exercise
+  void _showSetRestDialog(Exercise exercise) {
+    final controller = TextEditingController(
+      text: (exercise.sets.isNotEmpty
+              ? exercise.sets.first.restTime
+              : _defaultRestTime)
+          .toString(),
+    );
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _surfaceColor,
+        title:
+            Text('Set Rest Time', style: TextStyle(color: _textPrimaryColor)),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          style: TextStyle(color: _textPrimaryColor),
+          decoration: InputDecoration(
+            labelText: 'Rest Time (seconds)',
+            labelStyle: TextStyle(color: _textSecondaryColor),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              controller.dispose();
+            },
+            child: Text('Cancel', style: TextStyle(color: _textSecondaryColor)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+            onPressed: () async {
+              final rest = int.tryParse(controller.text) ?? _defaultRestTime;
+              Navigator.pop(context);
+              controller.dispose();
+              for (var set in exercise.sets) {
+                await _updateSetData(set.id, set.weight, set.reps, rest);
+              }
+            },
+            child: Text('Save'),
+          ),
+        ],
       ),
     );
   }
