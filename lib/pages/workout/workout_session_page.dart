@@ -68,8 +68,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
     _stopTimer();
     _cancelRestTimer();
     _nameController.dispose();
-    _weightControllers.values.forEach((c) => c.dispose());
-    _repsControllers.values.forEach((c) => c.dispose());
+    for (var c in _weightControllers.values) {
+      c.dispose();
+    }
+    for (var c in _repsControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -260,11 +264,13 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
               equipment);
         }
 
+        // Add a set with null/empty values that will be displayed as empty fields in UI
+        // The database needs some value, but we'll use the `_buildSetItem` logic to show empty fields
         await _workoutService.addSet(
           exerciseId,
           1, // Set number
-          0, // Default weight
-          0, // Default reps
+          0, // Weight - will be displayed as empty
+          0, // Reps - will be displayed as empty
           _defaultRestTime, // Default rest time
         );
 
@@ -327,12 +333,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
     }
 
     try {
-      // Add set to database
+      // Add set to database - store empty fields as null in database
       final newSetId = await _workoutService.addSet(
         exerciseId,
         setNumber,
-        0, // Default weight
-        0, // Default reps
+        0, // Initial weight (we'll show empty field in UI)
+        0, // Initial reps (we'll show empty field in UI)
         _defaultRestTime, // Default rest time
       );
 
@@ -342,8 +348,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
           id: newSetId,
           exerciseId: exerciseId,
           setNumber: setNumber,
-          weight: 0,
-          reps: 0,
+          weight: 0, // This will be displayed as empty field
+          reps: 0, // This will be displayed as empty field
           restTime: _defaultRestTime,
           completed: false,
         );
@@ -410,6 +416,34 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
     int reps,
     int restTime,
   ) async {
+    // Validate that weight is >= 0 (can be decimal) and reps is >= 0 (must be integer)
+    // No need to block zero values as per new requirements
+    if (weight < 0 || reps < 0) {
+      // If invalid values, don't update the database
+      if (mounted) {
+        // Reset controller values if needed
+        for (var exercise in _workout!.exercises) {
+          for (var set in exercise.sets) {
+            if (set.id == setId) {
+              if (weight < 0) {
+                _weightControllers[set.id]?.text = set.weight >= 0
+                    ? ((set.weight % 1 == 0)
+                        ? set.weight.toInt().toString()
+                        : set.weight.toString())
+                    : '';
+              }
+              if (reps < 0) {
+                _repsControllers[set.id]?.text =
+                    set.reps >= 0 ? set.reps.toString() : '';
+              }
+              break;
+            }
+          }
+        }
+      }
+      return;
+    }
+    
     // First, update the local state to avoid UI freeze
     if (mounted) {
       setState(() {
@@ -785,20 +819,33 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
                 ),
               ),
               onPressed: () async {
-                // Check for empty sets (no weight or reps) and collect them
+                // Check for empty sets (no weight or reps) and illegal values and collect them
                 Map<int, List<int>> emptySetsByExercise =
                     {}; // exerciseId -> list of setIds
                 int totalSets = 0;
                 int emptySets = 0;
-
                 for (var exercise in _workout!.exercises) {
                   for (var set in exercise.sets) {
                     totalSets++;
                     final wText = _weightControllers[set.id]?.text ?? '';
                     final rText = _repsControllers[set.id]?.text ?? '';
+                    
+                    // Parse the values to check
+                    final double? weight = double.tryParse(wText);
+                    final int? repsInt = int.tryParse(rText);
+                    final double? repsDouble = double.tryParse(rText);
+                    // Check for illegal values:
+                    // 1. Null values (empty fields)
+                    // 2. Negative weights or reps
+                    // 3. Non-integer reps (decimal reps)
+                    bool hasIllegalValues = weight == null ||
+                        repsInt == null || // Empty fields
+                        (weight < 0) || // Negative weight
+                        (repsInt < 0) || // Negative reps
+                        (repsDouble != null &&
+                            repsDouble != repsInt.toDouble()); // Decimal reps
 
-                    if ((wText.isEmpty || wText == '0') ||
-                        (rText.isEmpty || rText == '0')) {
+                    if (hasIllegalValues) {
                       emptySets++;
                       if (!emptySetsByExercise.containsKey(exercise.id)) {
                         emptySetsByExercise[exercise.id] = [];
@@ -865,12 +912,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
                       // Only check sets that aren't already identified as empty
                       if (!(emptySetsByExercise.containsKey(exercise.id) && 
                             emptySetsByExercise[exercise.id]!.contains(set.id))) {
-                        
-                        // Check if set has weight and reps but is not marked as completed
+                        // Check if set has valid weight and reps but is not marked as completed
                         final wText = _weightControllers[set.id]?.text ?? '';
                         final rText = _repsControllers[set.id]?.text ?? '';
-                        final hasData = (wText.isNotEmpty && wText != '0') && 
-                                        (rText.isNotEmpty && rText != '0');
+                        // Parse values to check - now allowing for zero values
+                        final double? weight = double.tryParse(wText);
+                        final int? reps = int.tryParse(rText);
+                        final hasData = weight != null &&
+                            weight >= 0 &&
+                            reps != null &&
+                            reps >= 0;
                         
                         if (hasData && !set.completed) {
                           if (!uncompletedSetsByExercise.containsKey(exercise.id)) {
@@ -1538,7 +1589,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
       ),
     );
   }
-
   Widget _buildSetItem(Exercise exercise, ExerciseSet set) {
     // initialize controllers if absent
     _weightControllers.putIfAbsent(set.id, () {
@@ -1558,13 +1608,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
         initialRepsText = set.reps.toString();
       }
       return TextEditingController(text: initialRepsText);
-    });
-
-    // Determine if both fields have values to allow completion
+    }); // Determine if both fields have valid values (now allowing zero values) to enable the completion button
     final String weightTextStr = _weightControllers[set.id]?.text ?? '';
     final String repsTextStr = _repsControllers[set.id]?.text ?? '';
+    final double? weightValue = double.tryParse(weightTextStr);
+    final int? repsValue = int.tryParse(repsTextStr);
     final bool canCompleteButton =
-        weightTextStr.isNotEmpty && repsTextStr.isNotEmpty;
+        weightValue != null &&
+        weightValue >= 0 &&
+        repsValue != null &&
+        repsValue >= 0;
 
     return RepaintBoundary(
       child: Dismissible(
@@ -1650,8 +1703,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
                     ),
                     textAlign: TextAlign.center,
                     onSubmitted: (value) {
-                      final weight = double.tryParse(value) ?? set.weight;
-                      _updateSetData(set.id, weight, set.reps, set.restTime);
+                      final weight = double.tryParse(value);
+                      if (weight != null && weight >= 0) {
+                        _updateSetData(set.id, weight, set.reps, set.restTime);
+                      } else {
+                        // Reset to previous valid value if negative or invalid, or empty if no valid value
+                        _weightControllers[set.id]!.text = set.weight > 0
+                            ? ((set.weight % 1 == 0)
+                                ? set.weight.toInt().toString()
+                                : set.weight.toString())
+                            : '';
+                      }
                     },
                   ),
                 ),
@@ -1677,8 +1739,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage> {
                     ),
                     textAlign: TextAlign.center,
                     onSubmitted: (value) {
-                      final reps = int.tryParse(value) ?? set.reps;
-                      _updateSetData(set.id, set.weight, reps, set.restTime);
+                      final reps = int.tryParse(value);
+                      if (reps != null && reps >= 0) {
+                        _updateSetData(set.id, set.weight, reps, set.restTime);
+                      } else {
+                        // Reset to previous valid value if negative or invalid, or empty if no valid value
+                        _repsControllers[set.id]!.text =
+                            set.reps > 0 ? set.reps.toString() : '';
+                      }
                     },
                   ),
                 ),
