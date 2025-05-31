@@ -16,6 +16,8 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
   Map<String, dynamic>? _exercise;
   int _currentImageIndex = 0;
   final PageController _pageController = PageController();
+  List<dynamic>? _exercisesList;
+  bool _didInitialLoad = false;
 
   @override
   void dispose() {
@@ -23,31 +25,161 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
     super.dispose();
   }
   
+  // Helper method to find exercises by name
+  void _tryFindExerciseByName(List<dynamic> list, String nameToFind) {
+    // First, try exact matches
+    for (var e in list.cast<Map<String, dynamic>>()) {
+      final String? name = e['name'] as String?;
+      if (name != null && name.toLowerCase() == nameToFind.toLowerCase()) {
+        _exercise = e;
+        return;
+      }
+    }
+
+    // If no exact match, try contains
+    for (var e in list.cast<Map<String, dynamic>>()) {
+      final String? name = e['name'] as String?;
+      if (name != null &&
+          (nameToFind.toLowerCase().contains(name.toLowerCase()) ||
+              name.toLowerCase().contains(nameToFind.toLowerCase()))) {
+        _exercise = e;
+        return;
+      }
+    }
+
+    // If still not found, try removing any API ID markers from the name
+    final nameWithoutApiId =
+        nameToFind.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+    if (nameWithoutApiId != nameToFind) {
+      _tryFindExerciseByName(list, nameWithoutApiId);
+    }
+  }
+    
   @override
   void initState() {
     super.initState();
-    // Load local exercise data from JSON
-    final List<dynamic> list = json.decode(exercisesJson) as List<dynamic>;
+    // Just load the JSON data in initState, but don't try to access any context
+    _exercisesList = json.decode(exercisesJson) as List<dynamic>;
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Only process once when dependencies are first available
+    if (!_didInitialLoad) {
+      _loadExerciseData();
+      _didInitialLoad = true;
+    }
+  }
+  
+  void _loadExerciseData() {
+    if (_exercisesList == null) return;
+    
+    final List<dynamic> list = _exercisesList!;
     try {
-      final String currentExerciseId =
-          widget.exerciseId.trim(); // Trim passed ID
-      _exercise = list.cast<Map<String, dynamic>>().firstWhere(
-        (e) {
-          final String? idFromData =
-              e['id'] as String?; // Safely cast and access ID
-          return idFromData != null &&
-              idFromData.trim() == currentExerciseId; // Trim and compare
-        },
-        orElse: () => <String, dynamic>{}, // Return an empty map if not found
-      );
-      if (_exercise!.isEmpty) {
-        _exercise =
-            null; // if the map is empty (exercise not found), set to null
+      final String currentExerciseId = widget.exerciseId.trim(); // Trim passed ID
+      
+      // Debug information
+      print('Looking for exercise with ID: "$currentExerciseId"');
+
+      // Special handling for negative IDs (temporary exercises)
+      if (currentExerciseId.startsWith('-')) {
+        print('Negative ID detected, this is a temporary exercise');
+        
+        // Now we can safely access route arguments in didChangeDependencies
+        final Map<String, dynamic>? args = 
+            ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+            
+        if (args != null) {
+          // First try to use the exerciseName if available
+          if (args.containsKey('exerciseName')) {
+            final String exerciseName = args['exerciseName'] as String;
+            print('Got exercise name from route args: $exerciseName');
+            
+            // Try to find by name
+            _tryFindExerciseByName(list, exerciseName);
+            
+            // If found by name, return early
+            if (_exercise != null && !_exercise!.isEmpty) {
+              print('Found exercise by name: ${_exercise!['name']}');
+              return;
+            }
+          }
+          
+          // If name didn't work, try equipment as a fallback filter
+          if (args.containsKey('exerciseEquipment') && 
+              args['exerciseEquipment'] != null && 
+              args['exerciseEquipment'].toString().isNotEmpty) {
+            
+            final String equipment = args['exerciseEquipment'] as String;
+            print('Trying to find exercise with equipment: $equipment');
+            
+            // Find first exercise with matching equipment
+            for (var e in list.cast<Map<String, dynamic>>()) {
+              if (e['equipment'] != null && 
+                  (e['equipment'] as String).toLowerCase() == equipment.toLowerCase()) {
+                _exercise = e;
+                print('Found exercise by equipment: ${_exercise!['name']}');
+                return;
+              }
+            }
+          }
+        }
+        
+        // Use a default exercise as fallback
+        _exercise = list.cast<Map<String, dynamic>>().firstWhere(
+          (e) => e['name'] != null && (e['name'] as String).contains('Push-up'), 
+          orElse: () => list.cast<Map<String, dynamic>>().first
+        );
+        
+        print('Using a default exercise: ${_exercise?['name']}');
+        return;
+      }
+      
+      // Check if the passed ID is an API ID with markers
+      if (currentExerciseId.contains('##API_ID:')) {
+        // Extract the actual API ID from the marker
+        final RegExp apiIdRegex = RegExp(r'##API_ID:([^#]+)##');
+        final Match? match = apiIdRegex.firstMatch(currentExerciseId);
+        final String extractedApiId = match?.group(1)?.trim() ?? currentExerciseId;
+        
+        print('Extracted API ID: "$extractedApiId"');
+        
+        // Try to find exercise with the extracted API ID
+        _exercise = list.cast<Map<String, dynamic>>().firstWhere(
+          (e) {
+            final String? idFromData = e['id'] as String?;
+            return idFromData != null && idFromData.trim() == extractedApiId;
+          },
+          orElse: () => <String, dynamic>{},
+        );
+      } else {
+        // Normal ID lookup
+        _exercise = list.cast<Map<String, dynamic>>().firstWhere(
+          (e) {
+            final String? idFromData = e['id'] as String?;
+            // Try both direct comparison and string conversion for flexibility
+            return idFromData != null && 
+                (idFromData.trim() == currentExerciseId || 
+                 idFromData.trim() == currentExerciseId.replaceAll('"', ''));
+          },
+          orElse: () => <String, dynamic>{},
+        );
+      }
+      
+      // If exercise not found, try again looking for name matches
+      if (_exercise == null || _exercise!.isEmpty) {
+        _tryFindExerciseByName(list, currentExerciseId);
+      }
+      
+      if (_exercise != null && _exercise!.isEmpty) {
+        print('Exercise not found in JSON data for ID: $currentExerciseId');
+        _exercise = null; // if the map is empty (exercise not found), set to null
       }
     } catch (e) {
+      print('Error finding exercise ${widget.exerciseId}: $e');
       _exercise = null; // Catch any error during parsing or lookup
-      // For debugging, you might want to print the error:
-      // print('Error finding exercise ${widget.exerciseId}: $e');
     }
   }
 
@@ -63,9 +195,35 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
                   ? exercise!['name']
                       .toString()
                       .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
-                  : 'Exercise Details')),
-      body: exercise == null
-          ? const Center(child: Text('Exercise not found.'))
+                      .trim()
+                  : 'Exercise Details')),      body: exercise == null
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Exercise not found',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'This might be a custom or temporary exercise',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Exercise ID: ${widget.exerciseId}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.arrow_back),
+                    label: const Text('Go Back'),
+                  ),
+                ],
+              ),
+            )
           : SingleChildScrollView(
               padding: const EdgeInsets.all(16),
               child: Column(

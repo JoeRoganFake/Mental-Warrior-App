@@ -422,12 +422,20 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                                 color: Theme.of(context).primaryColor,
                               ),
                               tooltip: 'View exercise details',
-                              onPressed: () {
-                                Navigator.push(
+                              onPressed: () {                                Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => ExerciseDetailPage(
-                                      exerciseId: exercise['id'],
+                                      exerciseId:
+                                          exercise['id'].toString().trim(),
+                                    ),
+                                    settings: RouteSettings(
+                                      arguments: {
+                                        'exerciseName': exercise['name'],
+                                        'exerciseEquipment':
+                                            exercise['equipment'] ?? '',
+                                        'isTemporary': false, // These are API exercises, not temporary
+                                      },
                                     ),
                                   ),
                                 );

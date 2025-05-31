@@ -17,6 +17,7 @@ import 'package:mental_warior/pages/meditation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:mental_warior/services/background_task_manager.dart';
 import 'package:mental_warior/pages/workout/workout_page.dart';
+import 'package:mental_warior/widgets/active_workout_bar.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -111,6 +112,16 @@ class HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
+      // Add the ActiveWorkoutBar at the bottom of the screen
+      // It will automatically show only when a workout is active
+      bottomSheet: ValueListenableBuilder<Map<String, dynamic>?>(
+        valueListenable: WorkoutService.activeWorkoutNotifier,
+        builder: (context, activeWorkout, child) {
+          return activeWorkout != null
+              ? const ActiveWorkoutBar()
+              : const SizedBox.shrink();
+        },
+      ),
       floatingActionButton: _currentIndex == 0
           ? FloatingActionButton(
               splashColor: Colors.blue,

@@ -1,20 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/models/workouts.dart';
+import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
 import 'package:mental_warior/services/database_services.dart';
-import 'package:mental_warior/pages/exercise_selection_page.dart';
 
 class WorkoutSessionPage extends StatefulWidget {
   final int workoutId;
   final bool readOnly;
 
   const WorkoutSessionPage({
-    Key? key,
+    super.key,
     required this.workoutId,
     this.readOnly = false,
-  }) : super(key: key);
+  });
 
   @override
+  // ignore: library_private_types_in_public_api
   _WorkoutSessionPageState createState() => _WorkoutSessionPageState();
 }
 
@@ -400,6 +401,7 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
                   labelStyle: TextStyle(color: _textSecondaryColor),
                   enabledBorder: UnderlineInputBorder(
                     borderSide:
+                        // ignore: deprecated_member_use
                         BorderSide(color: _primaryColor.withOpacity(0.6)),
                   ),
                   focusedBorder: UnderlineInputBorder(
@@ -417,6 +419,7 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
                   labelStyle: TextStyle(color: _textSecondaryColor),
                   enabledBorder: UnderlineInputBorder(
                     borderSide:
+                        // ignore: deprecated_member_use
                         BorderSide(color: _primaryColor.withOpacity(0.6)),
                   ),
                   focusedBorder: UnderlineInputBorder(
@@ -434,6 +437,7 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
                   labelStyle: TextStyle(color: _textSecondaryColor),
                   enabledBorder: UnderlineInputBorder(
                     borderSide:
+                        // ignore: deprecated_member_use
                         BorderSide(color: _primaryColor.withOpacity(0.6)),
                   ),
                   focusedBorder: UnderlineInputBorder(
@@ -503,7 +507,7 @@ class _WorkoutSessionPageState extends State<WorkoutSessionPage> {
 
         // Since we can't directly modify the setNumber (it's final), we need to
         // create new set objects with updated set numbers
-        if (exercise.sets.length > 0) {
+        if (exercise.sets.isNotEmpty) {
           final List<ExerciseSet> updatedSets = [];
 
           // Create new set objects with correct numbers

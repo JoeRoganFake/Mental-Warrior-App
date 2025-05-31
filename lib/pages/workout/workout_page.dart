@@ -4,6 +4,7 @@ import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/pages/workout/workout_session_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/widgets/workout_week_chart.dart';
+import 'package:mental_warior/utils/functions.dart';
 
 
 class WorkoutPage extends StatefulWidget {
@@ -148,26 +149,73 @@ class WorkoutPageState extends State<WorkoutPage> {
       },
     );
   }
-
   Future<void> _startNewWorkout() async {
-    // Create a new workout
+    // Check if there's an active workout already
+    if (WorkoutService.activeWorkoutNotifier.value != null) {
+      // Show confirmation dialog
+      bool shouldContinue = await showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              return AlertDialog(
+                backgroundColor: const Color(0xFF26272B),
+                title: const Text('Active Workout Found',
+                    style: TextStyle(color: Colors.white)),
+                content: const Text(
+                  'You already have an active workout. Starting a new workout will discard the current one. Do you want to continue?',
+                  style: TextStyle(color: Colors.white70),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.pop(context, false), // Don't continue
+                    child: const Text('Cancel',
+                        style: TextStyle(color: Colors.white70)),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: () => Navigator.pop(
+                        context, true), // Continue with new workout
+                    child: const Text('Discard & Start New'),
+                  ),
+                ],
+              );
+            },
+          ) ??
+          false; // Default to false if dialog is dismissed
+
+      if (!shouldContinue) {
+        return; // Exit if user cancels
+      }
+
+      // Clear the active workout if user wants to proceed
+      WorkoutService.activeWorkoutNotifier.value = null;
+    }
+
+    // Create a new temporary workout with a unique ID (not saved to database yet)
     final now = DateTime.now();
     final dateStr = DateFormat('yyyy-MM-dd').format(now);
-
     try {
-      final workoutId = await _workoutService.addWorkout(
-        'New Workout',
+      // Get time-based greeting (Morning/Afternoon/Evening)
+      final greeting = Functions().getTimeOfDayDescription();
+      
+      // Create temporary workout in memory, not in database
+      final tempWorkoutId = _workoutService.createTemporaryWorkout(
+        '$greeting Workout',
         dateStr,
         0, // Initial duration is 0
       );
 
-      // Navigate to the workout session page
+      // Navigate to the workout session page with the temporary ID
       await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => WorkoutSessionPage(
-            workoutId: workoutId,
+            workoutId: tempWorkoutId,
             readOnly: false,
+            isTemporary: true, // Indicate this is a temporary workout
           ),
         ),
       );
@@ -254,9 +302,7 @@ class WorkoutPageState extends State<WorkoutPage> {
                   WorkoutWeekChart(
                     workouts: _workouts,
                     onChangeGoal: _showChangeGoalDialog,
-                  ),
-
-                  // Show message when no workouts
+                  ), // Show message when no workouts
                   if (_workouts.isEmpty)
                     Center(
                       child: Column(
@@ -287,7 +333,8 @@ class WorkoutPageState extends State<WorkoutPage> {
                           const SizedBox(height: 24),
                           ElevatedButton.icon(
                             icon: const Icon(Icons.add),
-                            label: const Text('Start Workout'),
+                            label: Text(
+                                'Start ${Functions().getTimeOfDayDescription()} Workout'),
                             onPressed: _startNewWorkout,
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
@@ -299,26 +346,31 @@ class WorkoutPageState extends State<WorkoutPage> {
                           const SizedBox(height: 40),
                         ],
                       ),
-                    ), // Workouts List
+                    ),
+
+                  // Workouts List - only show when there are workouts
                   if (_workouts.isNotEmpty)
+                    Column(
+                      children: [
                       ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: _workouts.length,
                         itemBuilder: (context, index) {
                           final workout = _workouts[index];
-                          
-                        // Parse date for better formatting
-                        DateTime workoutDate;
-                        try {
-                          workoutDate =
-                              DateFormat('yyyy-MM-dd').parse(workout.date);
-                        } catch (_) {
-                          workoutDate = DateTime.now();
-                        } // Format date like in the image
-                        final formattedDate = DateFormat('EEEE, MMMM d, yyyy')
-                            .format(workoutDate);
-                        DateFormat('h:mm a').format(workoutDate);
+
+                            // Parse date for better formatting
+                            DateTime workoutDate;
+                            try {
+                              workoutDate =
+                                  DateFormat('yyyy-MM-dd').parse(workout.date);
+                            } catch (_) {
+                              workoutDate = DateTime.now();
+                            } // Format date like in the image
+                            final formattedDate =
+                                DateFormat('EEEE, MMMM d, yyyy')
+                                    .format(workoutDate);
+                            DateFormat('h:mm a').format(workoutDate);
 
                           return Card(
                             margin: const EdgeInsets.symmetric(
@@ -499,9 +551,30 @@ class WorkoutPageState extends State<WorkoutPage> {
                           );
                         },
                       ),
+                        // Add "Start New Workout" button below the list when workouts exist
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 24,
+                          ),
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.add),
+                            label: Text(
+                                'Start ${Functions().getTimeOfDayDescription()} Workout'),
+                            onPressed: _startNewWorkout,
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                              backgroundColor: Theme.of(context).primaryColor,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
-            ),
-    );
+                ]),
+              ));
   }
 }

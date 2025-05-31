@@ -5,6 +5,7 @@ import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/models/books.dart';
 import 'package:mental_warior/models/categories.dart';
 import 'package:mental_warior/models/workouts.dart';
+import 'package:mental_warior/utils/functions.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter/material.dart';
@@ -813,6 +814,14 @@ class PendingTaskService {
 class WorkoutService {
   static final ValueNotifier<bool> workoutsUpdatedNotifier =
       ValueNotifier(false);
+  
+  // Add a ValueNotifier to track temporary workouts
+  static final ValueNotifier<Map<int, dynamic>> tempWorkoutsNotifier =
+      ValueNotifier({});
+
+  // Add a ValueNotifier to track the active workout
+  static final ValueNotifier<Map<String, dynamic>?> activeWorkoutNotifier =
+      ValueNotifier(null);
 
   // Table & column names
   final String _workoutTableName = "workouts";
@@ -888,9 +897,108 @@ class WorkoutService {
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
     return workoutId;
   }
+  
+  // Create a temporary workout that's not saved to database yet
+  int createTemporaryWorkout(String name, String date, int duration) {
+    // Generate a negative ID to avoid conflicts with database IDs
+    final tempId = -(DateTime.now().millisecondsSinceEpoch);
 
+    // Store workout data in memory
+    final tempWorkouts = tempWorkoutsNotifier.value;
+    tempWorkouts[tempId] = {
+      'name': name,
+      'date': date,
+      'duration': duration,
+      'exercises': <Map<String, dynamic>>[],
+    };
+
+    // Notify listeners
+    tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+
+    return tempId;
+  }
+
+  // Save a temporary workout to the database
+  Future<int> saveTemporaryWorkout(int tempId) async {
+    final tempWorkouts = tempWorkoutsNotifier.value;
+    if (!tempWorkouts.containsKey(tempId)) {
+      throw Exception('Temporary workout not found');
+    }
+
+    final workout = tempWorkouts[tempId];
+
+    // Save workout to database
+    final workoutId =
+        await addWorkout(workout['name'], workout['date'], workout['duration']);
+
+    // Save exercises and sets
+    for (final exercise in workout['exercises']) {
+      final exerciseId =
+          await addExercise(workoutId, exercise['name'], exercise['equipment']);
+
+      for (final set in exercise['sets']) {
+        await addSet(exerciseId, set['setNumber'], set['weight'], set['reps'],
+            set['restTime']);
+      }
+    }
+
+    // Remove temporary workout from memory
+    tempWorkouts.remove(tempId);
+    tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+
+    return workoutId;
+  }
+
+  // Discard a temporary workout
+  void discardTemporaryWorkout(int tempId) {
+    final tempWorkouts = tempWorkoutsNotifier.value;
+    if (tempWorkouts.containsKey(tempId)) {
+      tempWorkouts.remove(tempId);
+      tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+    }
+  }
+
+  // Check if a workout ID is temporary
+  bool isTemporaryWorkout(int workoutId) {
+    return workoutId < 0;
+  }
   // Add a new exercise to a workout
   Future<int> addExercise(int workoutId, String name, String equipment) async {
+    // Handle temporary workouts
+    if (isTemporaryWorkout(workoutId)) {
+      // Generate a negative ID for the temporary exercise
+      final tempExerciseId = -(DateTime.now().millisecondsSinceEpoch);
+
+      // Add exercise to temporary workout in memory
+      final tempWorkouts = tempWorkoutsNotifier.value;
+      if (!tempWorkouts.containsKey(workoutId)) {
+        // Create workout if it doesn't exist
+        // Get time-based greeting (Morning/Afternoon/Evening)
+        final greeting = Functions().getTimeOfDayDescription();
+        tempWorkouts[workoutId] = {
+          'name': '$greeting Workout',
+          'date': DateTime.now().toString().split(' ')[0], // YYYY-MM-DD
+          'duration': 0,
+          'exercises': [],
+        };
+      }
+
+      // Add the exercise
+      tempWorkouts[workoutId]['exercises'].add({
+        'id': tempExerciseId,
+        'name': name,
+        'equipment': equipment,
+        'sets': [],
+      });
+
+      // Update the notifier to trigger UI refresh
+      tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+      workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+
+      return tempExerciseId;
+    }
+
+    // Normal database workflow
     final db = await DatabaseService.instance.database;
     final exerciseId = await db.insert(
       _exerciseTableName,
@@ -903,10 +1011,49 @@ class WorkoutService {
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
     return exerciseId;
   }
-
   // Add a new set to an exercise
   Future<int> addSet(int exerciseId, int setNumber, double weight, int reps,
       int restTime) async {
+    // Handle temporary workouts
+    if (exerciseId < 0) {
+      // Negative IDs are temporary
+      // Generate a negative ID for the temporary set
+      final tempSetId = -(DateTime.now().millisecondsSinceEpoch);
+
+      // Find the workout containing this exercise
+      final tempWorkouts = tempWorkoutsNotifier.value;
+      for (var workoutId in tempWorkouts.keys) {
+        final exercises = tempWorkouts[workoutId]['exercises'];
+        for (int i = 0; i < exercises.length; i++) {
+          if (exercises[i]['id'] == exerciseId) {
+            // Found the exercise, add the set
+            if (!exercises[i].containsKey('sets')) {
+              exercises[i]['sets'] = [];
+            }
+
+            exercises[i]['sets'].add({
+              'id': tempSetId,
+              'setNumber': setNumber,
+              'weight': weight,
+              'reps': reps,
+              'restTime': restTime,
+              'completed': false,
+            });
+
+            // Update the notifier to trigger UI refresh
+            tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+            workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+
+            return tempSetId;
+          }
+        }
+      }
+
+      // If we got here, we couldn't find the exercise
+      throw Exception('Exercise not found');
+    }
+
+    // Normal database workflow
     final db = await DatabaseService.instance.database;
     final setId = await db.insert(
       _setTableName,
@@ -922,9 +1069,16 @@ class WorkoutService {
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
     return setId;
   }
-
   // Delete a set
   Future<void> deleteSet(int setId) async {
+    // Handle temporary sets (negative IDs)
+    if (setId < 0) {
+      // For temporary workouts, we're handling this in the UI layer
+      // by modifying the tempWorkoutsNotifier directly
+      return;
+    }
+
+    // Normal database operation for permanent sets
     final db = await DatabaseService.instance.database;
     await db.delete(
       _setTableName,
@@ -1090,9 +1244,16 @@ class WorkoutService {
     );
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
   }
-  
   // Delete an exercise and all its sets
   Future<void> deleteExercise(int exerciseId) async {
+    // Handle temporary exercises (negative IDs)
+    if (exerciseId < 0) {
+      // For temporary workouts, we're handling this in the UI layer
+      // by modifying the tempWorkoutsNotifier directly
+      return;
+    }
+
+    // Normal database operation for permanent exercises
     final db = await DatabaseService.instance.database;
     await db.delete(
       _exerciseTableName,
@@ -1104,9 +1265,48 @@ class WorkoutService {
 
   // Get all exercises for a specific workout
   Future<List<Exercise>> getExercisesForWorkout(int workoutId) async {
-    final db = await DatabaseService.instance.database;
+    // If this is a temporary workout, get from memory
+    if (isTemporaryWorkout(workoutId)) {
+      final tempWorkouts = tempWorkoutsNotifier.value;
+      if (!tempWorkouts.containsKey(workoutId)) {
+        return [];
+      }
 
-    // Get exercises for this workout
+      final workout = tempWorkouts[workoutId];
+      List<Exercise> exercises = [];
+
+      for (var exerciseData in workout['exercises']) {
+        List<ExerciseSet> sets = [];
+        int exerciseId =
+            -(DateTime.now().millisecondsSinceEpoch + exercises.length);
+
+        for (var setData in exerciseData['sets']) {
+          final setId = -(DateTime.now().millisecondsSinceEpoch + sets.length);
+          sets.add(ExerciseSet(
+            id: setId,
+            exerciseId: exerciseId,
+            setNumber: setData['setNumber'],
+            weight: setData['weight'],
+            reps: setData['reps'],
+            restTime: setData['restTime'],
+            completed: setData['completed'] ?? false,
+          ));
+        }
+
+        exercises.add(Exercise(
+          id: exerciseId,
+          workoutId: workoutId,
+          name: exerciseData['name'],
+          equipment: exerciseData['equipment'],
+          sets: sets,
+        ));
+      }
+
+      return exercises;
+    }
+
+    // Otherwise get from database
+    final db = await DatabaseService.instance.database;
     final exerciseMaps = await db.query(
       _exerciseTableName,
       where: "$_exerciseWorkoutIdColumnName = ?",
