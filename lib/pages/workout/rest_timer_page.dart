@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 /// Full-screen rest timer with circular countdown indicator
-/// Enhanced version with better UI, haptic feedback, and visuals
 class RestTimerPage extends StatelessWidget {
   final int originalDuration;
   final ValueNotifier<int> remaining;
@@ -11,13 +9,8 @@ class RestTimerPage extends StatelessWidget {
   final VoidCallback onIncrement;
   final VoidCallback onDecrement;
   final VoidCallback onSkip;
-  
-  // Colors for the timer UI
-  final Color _primaryColor = const Color(0xFF3F8EFC);
-  final Color _successColor = const Color(0xFF4CAF50);
-  
   const RestTimerPage({
-    Key? key,
+    super.key,
     required this.originalDuration,
     required this.remaining,
     required this.isPaused,
@@ -25,251 +18,188 @@ class RestTimerPage extends StatelessWidget {
     required this.onIncrement,
     required this.onDecrement,
     required this.onSkip,
-  }) : super(key: key);
+  });
+
   @override
   Widget build(BuildContext context) {
+    const primaryColor = Color(0xFF3F8EFC);
+    final bgGradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color(0xFF1A1B1E),
+        Color(0xFF26272B),
+      ],
+    );
+
     return Scaffold(
-      backgroundColor: Colors.black87,
+      backgroundColor: Color(0xFF1A1B1E),
       body: SafeArea(
-        child: Center(
+        child: Container(
+          decoration: BoxDecoration(gradient: bgGradient),
           child: ValueListenableBuilder<int>(
             valueListenable: remaining,
             builder: (context, value, child) {
-              // Calculate progress with a minimum of 0
-              final progress = value <= 0 ? 0.0 : value / originalDuration;
-
-              // Format the time
+              final progress = value / originalDuration;
               Duration format(int sec) => Duration(seconds: sec);
               final minutes = format(value).inMinutes;
               final secs = format(value).inSeconds % 60;
-              // Determine if timer is done
-              final bool isTimerDone = value <= 0;
-
-              // Add vibration feedback when timer completes
-              if (isTimerDone && value == 0) {
-                // This ensures the vibration only happens once
-                Future.microtask(() {
-                  HapticFeedback.heavyImpact();
-                });
-              }
               
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+              final timeColor = value <= 0
+                  ? Color(0xFF4CAF50) // Green when finished
+                  : value <= 10
+                      ? Color(0xFFE53935) // Red when almost done
+                      : Colors.white; // White normally
+              
+              return Stack(
                 children: [
-                  // Timer Title with animation if done
-                  AnimatedSwitcher(
-                    duration: Duration(milliseconds: 500),
-                    transitionBuilder:
-                        (Widget child, Animation<double> animation) {
-                      return FadeTransition(
-                        opacity: animation,
-                        child: ScaleTransition(
-                          scale: animation,
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: Text(
-                      isTimerDone ? 'Rest Complete!' : 'Rest Time',
-                      key: ValueKey<bool>(isTimerDone),
-                      style: TextStyle(
-                        fontSize: isTimerDone ? 28 : 24,
-                        fontWeight:
-                            isTimerDone ? FontWeight.bold : FontWeight.normal,
-                        color: isTimerDone ? _successColor : Colors.white,
-                      ),
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  
-                  // Timer display
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.black45,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(
-                      '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}',
-                      style: TextStyle(
-                        fontSize: 64,
-                        fontWeight: FontWeight.bold,
-                        color: isTimerDone ? _successColor : Colors.white,
-                      ),
+                  // Back button
+                  Positioned(
+                    top: 16,
+                    left: 16,
+                    child: IconButton(
+                      icon: Icon(Icons.arrow_back, color: Colors.white70),
+                      onPressed: () => Navigator.pop(context),
                     ),
                   ),
 
-                  // Status message when timer completes
-                  if (value <= 0)
-                    Padding(
-                      padding: EdgeInsets.symmetric(
-                          vertical: 12.0, horizontal: 16.0),
-                      child: Text(
-                        'Time\'s up! Press Done or Return to Workout when ready.',
-                        style: TextStyle(
-                          color: _successColor,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    )
-                  else
-                    SizedBox(height: 48),
-
-                  // Controls - larger buttons with better spacing
-                  Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Row(
+                  Center(
+                    child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // +15s button
-                        ElevatedButton(
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            onIncrement();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black45,
-                            padding: EdgeInsets.all(16),
-                            shape: CircleBorder(),
+                        Text(
+                          value <= 0 ? 'Time\'s Up!' : 'Rest Time',
+                          style: TextStyle(
+                            fontSize: 28,
+                            color: timeColor,
+                            fontWeight: FontWeight.bold,
                           ),
-                          child:
-                              Icon(Icons.add, color: _primaryColor, size: 28),
                         ),
-                        SizedBox(width: 16),
+                        SizedBox(height: 24),
 
-                        // Pause/Resume button
-                        ValueListenableBuilder<bool>(
-                          valueListenable: isPaused,
-                          builder: (_, paused, __) => ElevatedButton(
-                            onPressed: () {
-                              HapticFeedback.mediumImpact();
-                              onPause();
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  paused ? _primaryColor : Colors.black45,
-                              padding: EdgeInsets.all(16),
-                              shape: CircleBorder(),
-                            ),
-                            child: Icon(paused ? Icons.play_arrow : Icons.pause,
-                                color: paused ? Colors.white : _primaryColor,
-                                size: 28),
-                          ),
-                        ),
-                        SizedBox(width: 16),
-
-                        // -15s button
-                        ElevatedButton(
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            onDecrement();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black45,
-                            padding: EdgeInsets.all(16),
-                            shape: CircleBorder(),
-                          ),
-                          child: Icon(Icons.remove,
-                              color: _primaryColor, size: 28),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // Circular progress indicator
-                  Container(
-                    width: 250,
-                    height: 250,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: isTimerDone
-                              ? _successColor.withOpacity(0.3)
-                              : _primaryColor.withOpacity(0.2),
-                          blurRadius: 20,
-                          spreadRadius: 5,
-                        ),
-                      ],
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Background circle
+                        // Timer display
                         Container(
-                          width: 240,
-                          height: 240,
+                          width: 260,
+                          height: 260,
                           decoration: BoxDecoration(
-                            color: Colors.black45,
                             shape: BoxShape.circle,
+                            color: Colors.black26,
+                          ),
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              SizedBox(
+                                width: 240,
+                                height: 240,
+                                child: CircularProgressIndicator(
+                                  value: progress,
+                                  strokeWidth: 16,
+                                  backgroundColor: Colors.white10,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    value <= 0
+                                        ? Color(0xFF4CAF50)
+                                        : value <= 10
+                                            ? Color(0xFFE53935)
+                                            : primaryColor,
+                                  ),
+                                ),
+                              ),
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    '${minutes.toString().padLeft(2, '0')}:${secs.toString().padLeft(2, '0')}',
+                                    style: TextStyle(
+                                      fontSize: 64,
+                                      color: timeColor,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 2,
+                                    ),
+                                  ),
+                                  if (value > 0)
+                                    Text(
+                                      'remaining',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
-
-                        // Progress indicator
-                        SizedBox(
-                          width: 240,
-                          height: 240,
-                          child: CircularProgressIndicator(
-                            value: progress,
-                            strokeWidth: 12,
-                            backgroundColor: Colors.white12,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                isTimerDone ? _successColor : _primaryColor),
+                        SizedBox(height: 40),
+                        
+                        if (value <= 0)
+                          Column(
+                            children: [
+                              Text(
+                                'Ready to continue?',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Color(0xFF4CAF50),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 32,
+                                    vertical: 16,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  Navigator.of(context).pop();
+                                },
+                                icon: Icon(Icons.check_circle),
+                                label: Text('Continue Workout'),
+                              ),
+                            ],
+                          )
+                        else
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _TimerControlButton(
+                                icon: Icons.remove,
+                                onPressed: onDecrement,
+                              ),
+                              SizedBox(width: 24),
+                              ValueListenableBuilder<bool>(
+                                valueListenable: isPaused,
+                                builder: (_, paused, __) => _TimerControlButton(
+                                  icon: paused ? Icons.play_arrow : Icons.pause,
+                                  highlighted: true,
+                                  onPressed: onPause,
+                                ),
+                              ),
+                              SizedBox(width: 24),
+                              _TimerControlButton(
+                                icon: Icons.add,
+                                onPressed: onIncrement,
+                              ),
+                            ],
                           ),
-                        ),
-
-                        // Center icon
-                        Icon(
-                          isTimerDone ? Icons.check_circle : Icons.timer,
-                          size: 64,
-                          color: isTimerDone ? _successColor : _primaryColor,
-                        ),
+                          
+                        SizedBox(height: 32),
+                        if (value > 0)
+                          TextButton.icon(
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
+                            onPressed: () {
+                              onSkip();
+                              Navigator.of(context).pop();
+                            },
+                            icon: Icon(Icons.skip_next),
+                            label: Text('Skip Rest'),
+                          ),
                       ],
-                    ),
-                  ),
-                  
-                  SizedBox(height: 32),
-
-                  // Skip/Done button
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      HapticFeedback.mediumImpact();
-                      if (value > 0) {
-                        // Call onSkip to handle proper sound playing and cleanup when skipping
-                        onSkip();
-                      }
-                      // Pop the screen in either case
-                      Navigator.of(context).pop();
-                    },
-                    icon: Icon(
-                      value > 0 ? Icons.fast_forward : Icons.check_circle,
-                      size: 24,
-                    ),
-                    label: Text(
-                      value > 0 ? 'Skip Rest' : 'Done',
-                      style: TextStyle(fontSize: 18),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          isTimerDone ? _successColor : _primaryColor,
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                    ),
-                  ),
-
-                  SizedBox(height: 8),
-
-                  // Return button
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: Text(
-                      'Return to Workout',
-                      style: TextStyle(color: Colors.white70),
                     ),
                   ),
                 ],
@@ -277,6 +207,38 @@ class RestTimerPage extends StatelessWidget {
             },
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _TimerControlButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool highlighted;
+
+  const _TimerControlButton({
+    required this.icon,
+    required this.onPressed,
+    this.highlighted = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: highlighted ? Color(0xFF3F8EFC) : Colors.white10,
+      ),
+      child: IconButton(
+        icon: Icon(
+          icon,
+          color: highlighted ? Colors.white : Colors.white70,
+          size: 32,
+        ),
+        onPressed: onPressed,
       ),
     );
   }

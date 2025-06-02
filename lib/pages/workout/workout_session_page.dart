@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
@@ -76,19 +75,19 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         WorkoutService.activeWorkoutNotifier.value != null) {
       // Store reference to the active workout data before clearing it
       final activeWorkout = WorkoutService.activeWorkoutNotifier.value!;
-
+      
       // Get the current elapsed time from the notifier
       _elapsedSeconds = activeWorkout['duration'] as int;
-
+      
       // Save the workout data for restoration after _loadWorkout completes
       final workoutData = activeWorkout['workoutData'] as Map<String, dynamic>?;
 
       // We're maximizing the workout now, so clear the notifier
       WorkoutService.activeWorkoutNotifier.value = null;
-
+      
       // Start the timer with the restored elapsed seconds
       _startTimer();
-
+      
       // Wait for the workout to be fully loaded before restoring data
       if (workoutData != null) {
         _isRestoringFromMinimized = true; // Flag to track restoration process
@@ -100,27 +99,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       _startTimer();
     }
   }
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       // App is going to background
-      
-      // Save the current workout timer state
+      // Save the current timer state to database
       if (_isTimerRunning) {
         _updateWorkoutDuration();
       }
-
-      // Save rest timer state (we don't pause it when going to background)
-      // The timer will continue to run correctly upon return thanks to our improved implementation
-      // that calculates time based on end time rather than just decrementing
     } else if (state == AppLifecycleState.resumed) {
       // App is coming back to foreground
-
-      // Recalculate workout elapsed time based on real-world time
       if (_isTimerRunning && _workoutStartTime != null) {
+        // Recalculate elapsed time based on real-world time
         final now = DateTime.now();
         final newElapsedSeconds = now.difference(_workoutStartTime!).inSeconds;
 
@@ -130,34 +122,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           });
         }
       }
-
-      // Handle rest timer when app resumes
-      if (_currentRestSetId != null && _restRemainingNotifier.value > 0) {
-        // Force update the UI to show current timer state
-        setState(() {
-          // The timer is already running in the background with proper time calculation
-        });
-
-        // If sound was not playing when timer completed while in background,
-        // check if we should play it now
-        if (_restRemainingNotifier.value <= 0 && _currentRestSetId != null) {
-          _playBoxingBellSound();
-          setState(() {
-            _currentRestSetId = null;
-          });
-        }
-      }
     }
   }
   @override
   void dispose() {
     // Remove lifecycle observer
     WidgetsBinding.instance.removeObserver(this);
-
+    
     // Only stop the timer if we're not minimizing
     // Check if the workout is being minimized (activeWorkoutNotifier has a value)
     bool isMinimizing = WorkoutService.activeWorkoutNotifier.value != null;
-
+    
     // If we're actually closing the workout (not minimizing), stop all timers
     if (!isMinimizing) {
       _stopTimer();
@@ -183,7 +158,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         _workoutService.discardTemporaryWorkout(widget.workoutId);
       }
     }
-
+    
     // Release audio player resources
     _audioPlayer.dispose();
     super.dispose();
@@ -384,81 +359,46 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
-  /// Enhanced boxing bell sound effect with better vibration patterns and dual sounds
+  /// Play the boxing bell sound effect
   Future<void> _playBoxingBellSound() async {
+    // Create a fresh player for each bell to allow replay
+    final player = AudioPlayer();
     try {
-      // Play a sequence of sounds for better attention-grabbing effect
-      // First play the Samsung time-up sound (higher pitched, more attention grabbing)
-      await _audioPlayer.setSource(AssetSource('audio/time_up_samsung.mp3'));
-      await _audioPlayer.setReleaseMode(ReleaseMode.release);
-      await _audioPlayer.setPlayerMode(PlayerMode.lowLatency);
-      await _audioPlayer.setVolume(1.0); // Full volume for the notification
-      await _audioPlayer.resume();
-
-      // Add first vibration pattern (longer, more noticeable)
-      _executeVibrationPattern();
-
-      // Wait a moment and then play the boxing bell sound
-      await Future.delayed(Duration(milliseconds: 600));
-      await _audioPlayer.setSource(AssetSource('audio/BoxingBell.mp3'));
-      await _audioPlayer.resume();
-
-      // Add second vibration pattern after a short delay
-      Future.delayed(Duration(milliseconds: 300), () {
-        _executeVibrationPattern();
-      });
+      await player.setSource(AssetSource('audio/BoxingBell.mp3'));
+      await player.setReleaseMode(ReleaseMode.release);
+      await player.setPlayerMode(PlayerMode.lowLatency);
+      await player.setVolume(0.8);
+      await player.resume();
+      // Dispose after sound completes
+      player.onPlayerComplete.listen((_) => player.dispose());
     } catch (e) {
-      print('Error playing finish sound: $e');
-      // Fallback to simple audio + vibration if sequence fails
-      _playFallbackSound();
+      print('Error playing boxing bell: $e');
+      player.dispose();
     }
   }
   
-  /// Execute a vibration pattern for better physical feedback
-  void _executeVibrationPattern() {
+  /// Play the chime sound effect for set completion
+  Future<void> _playChimeSound() async {
+    // Create a new player per chime to allow multiple replays
+    final player = AudioPlayer();
     try {
-      // Create a more noticeable vibration pattern
-      HapticFeedback.heavyImpact();
-
-      Future.delayed(Duration(milliseconds: 150), () {
-        HapticFeedback.heavyImpact();
-      });
-
-      Future.delayed(Duration(milliseconds: 300), () {
-        HapticFeedback.heavyImpact();
-      });
-
-      // One final stronger vibration
-      Future.delayed(Duration(milliseconds: 600), () {
-        HapticFeedback.vibrate();
-      });
+      await player.setSource(
+          AssetSource('audio/11L-Subtle_mobile_Chime_-1748795262788.mp3'));
+      await player.setReleaseMode(ReleaseMode.release);
+      await player.setPlayerMode(PlayerMode.lowLatency);
+      await player.setVolume(0.8);
+      await player.resume();
+      // Dispose player once playback completes
+      player.onPlayerComplete.listen((_) => player.dispose());
     } catch (e) {
-      // Ignore if vibration not available
+      print('Error playing chime: $e');
+      player.dispose();
     }
   }
-
-  /// Fallback sound method in case the primary method fails
-  void _playFallbackSound() {
-    try {
-      _audioPlayer.setSource(AssetSource('audio/BoxingBell.mp3'));
-      _audioPlayer.setVolume(1.0);
-      _audioPlayer.resume();
-
-      // Simple vibration as fallback
-      HapticFeedback.heavyImpact();
-    } catch (e) {
-      print('Even fallback sound failed: $e');
-    }
-  }
-
   /// Starts a rest timer for a specific set and tracks its id
-  /// Improved version with background tracking and better state management
   void _startRestTimerForSet(int setId, int seconds) {
-    _cancelRestTimer();
-    
-    // Calculate the target end time for accurate timing even if app goes to background
-    final targetEndTime = DateTime.now().add(Duration(seconds: seconds));
-
+    // Cancel any ongoing rest timer without playing boxing bell
+    _cancelRestTimer(playSound: false);
     if (mounted) {
       setState(() {
         _currentRestSetId = setId;
@@ -468,70 +408,37 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         _restRemainingNotifier.value = seconds;
       });
     }
-
-    // Play a subtle notification sound when the timer starts
-    // This helps the user understand the timer has started
-    HapticFeedback.mediumImpact();
-
-    _restTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+    _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       // Skip if not mounted or paused
       if (!mounted || _restPausedNotifier.value) return;
       
-      // Calculate remaining time based on the target end time
-      // This ensures accurate timing even if the app was in background
-      if (!_restPausedNotifier.value) {
-        final now = DateTime.now();
-        final remaining = targetEndTime.difference(now).inSeconds;
-
-        // Update the remaining time
-        if (remaining > 0) {
-          // Only update if the value has changed
-          if (_restRemainingNotifier.value != remaining) {
-            _restRemainingNotifier.value = remaining;
-            if (mounted) {
-              setState(() => _restTimeRemaining = remaining);
-            }
-            
-            // Add subtle haptic feedback when we reach 3 seconds left
-            if (remaining == 3) {
-              HapticFeedback.selectionClick();
-            }
-          }
-        } else if (_restRemainingNotifier.value > 0) {
-          // Timer reached zero
-          _restRemainingNotifier.value = 0;
-          if (mounted) {
-            setState(() => _restTimeRemaining = 0);
-          }
-          
-          // Play the enhanced bell sound sequence when timer finishes
-          _playBoxingBellSound();
-
-          // Reset current set ID
-          if (mounted) {
-            setState(() => _currentRestSetId = null);
-          }
-
-          // Cancel the timer
-          timer.cancel();
+      if (_restRemainingNotifier.value > 0) {
+        _restRemainingNotifier.value--;
+        if (mounted) {
+          setState(() => _restTimeRemaining = _restRemainingNotifier.value);
+        }
+      } else {
+        timer.cancel();
+        // Play the boxing bell sound when timer finishes
+        _playBoxingBellSound();
+        if (mounted) {
+          setState(() => _currentRestSetId = null);
         }
       }
     });
   }
 
-  /// Cancel the rest timer with improved cleanup
-  void _cancelRestTimer() {
+  void _cancelRestTimer({bool playSound = true}) {
     if (_restTimer != null) {
       _restTimer!.cancel();
       _restTimer = null;
       
-      // Only play sound if timer was actually running (remaining > 0)
-      if (_restRemainingNotifier.value > 0) {
-        // Play the enhanced boxing bell sound when manually cancelling/skipping the timer
+      // Play the boxing bell sound only when requested (skipping timer, not when uncompleting a set)
+      if (playSound) {
         _playBoxingBellSound();
       }
     }
-
+    
     if (mounted) {
       setState(() {
         _restTimeRemaining = 0;
@@ -541,76 +448,32 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       });
     }
   }
-
-  /// Toggle pause/resume state with haptic feedback
+  
   void _togglePauseRest() {
-    // Add light haptic feedback
-    HapticFeedback.lightImpact();
-    
     if (_restPausedNotifier.value) {
-      // Resume - calculate new end time based on remaining time
+      // resume
       _restPausedNotifier.value = false;
-      
-      // Re-initialize the timer with the current remaining time
-      if (_restRemainingNotifier.value > 0 && _currentRestSetId != null) {
-        // Restart timer with current remaining time
-        _startRestTimerForSet(_currentRestSetId!, _restRemainingNotifier.value);
-      }
     } else {
-      // Pause
+      // pause
       _restPausedNotifier.value = true;
-      
-      // Cancel the timer but keep the remaining time
-      if (_restTimer != null) {
-        _restTimer!.cancel();
-        _restTimer = null;
-      }
     }
   }
 
-  /// Increment rest time by 15 seconds with haptic feedback
   void _incrementRest() {
-    // Add light haptic feedback
-    HapticFeedback.selectionClick();
-
-    // Add 15 seconds to remaining time
-    final newVal = _restRemainingNotifier.value + 15;
-    _restRemainingNotifier.value = newVal;
-
+    _restRemainingNotifier.value += 15;
     if (mounted) {
-      setState(() => _restTimeRemaining = newVal);
-    }
-    
-    // If timer was active but paused, restart it with new time
-    if (!_restPausedNotifier.value && _currentRestSetId != null) {
-      // Restart timer with updated time
-      _startRestTimerForSet(_currentRestSetId!, newVal);
+      setState(() => _restTimeRemaining = _restRemainingNotifier.value);
     }
   }
 
-  /// Decrement rest time by 15 seconds with haptic feedback
   void _decrementRest() {
-    // Add light haptic feedback
-    HapticFeedback.selectionClick();
-
-    // Reduce time by 15 seconds but not below zero
     final newVal = (_restRemainingNotifier.value - 15)
         .clamp(0, _restRemainingNotifier.value);
     _restRemainingNotifier.value = newVal;
-    
     if (mounted) {
       setState(() => _restTimeRemaining = newVal);
     }
-
-    // If time reaches zero, cancel the timer
-    if (newVal == 0) {
-      _cancelRestTimer();
-    }
-    // If timer is active and not paused, restart with new time
-    else if (!_restPausedNotifier.value && _currentRestSetId != null) {
-      // Restart timer with updated time
-      _startRestTimerForSet(_currentRestSetId!, newVal);
-    }
+    if (newVal == 0) _cancelRestTimer(playSound: true);
   }
 
   void _addExercise() async {
@@ -775,6 +638,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             for (var set in exercise.sets) {
               if (set.id == setId) {
                 set.completed = completed;
+                // Play a sound when completing a set (not when uncompleting)
+                if (completed) {
+                  _playChimeSound();
+                }
                 break;
               }
             }
@@ -1002,7 +869,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               }
             }
           }
-
+          
           if (found) {
             WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
           }
@@ -1284,7 +1151,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   // Helper method to update exercise data from text controllers
   void _updateExerciseDataFromControllers() {
     if (_workout == null) return;
-
+    
     // Update all sets with current values from controllers
     for (final exercise in _workout!.exercises) {
       for (final set in exercise.sets) {
@@ -1295,7 +1162,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             set.weight = double.tryParse(weightText) ?? 0;
           }
         }
-
+        
         if (_repsControllers.containsKey(set.id)) {
           final repsText = _repsControllers[set.id]!.text.trim();
           if (repsText.isNotEmpty) {
@@ -1304,74 +1171,60 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         }
       }
     }
-
+    
     // If this is a temporary workout, update the data in the temp storage as well
     if (widget.isTemporary) {
       _updateTemporaryWorkoutData();
     }
   }
-
+  
   // Helper method to update temporary workout data to ensure consistency
   void _updateTemporaryWorkoutData() {
     if (_workout == null || !widget.isTemporary) return;
-
+    
     final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
     if (!tempWorkouts.containsKey(widget.workoutId)) return;
-
+    
     final workoutData = tempWorkouts[widget.workoutId];
     final exercisesList = workoutData['exercises'] as List;
-
+    
     // Update each exercise
     for (var exercise in _workout!.exercises) {
       // Find the exercise data in the temp storage
-      Map<String, dynamic>? exerciseData;
-      try {
-        exerciseData = exercisesList.firstWhere(
-          (e) => e['id'] == exercise.id,
-        );
-      } catch (e) {
-        // Exercise not found
-        continue;
-      }
-
+      var exerciseData = exercisesList.firstWhere((e) => e['id'] == exercise.id,
+          orElse: () => null);
+      
       // Skip if exercise not found
       if (exerciseData == null) continue;
-
+      
       // Update each set
       for (var set in exercise.sets) {
         var setsList = exerciseData['sets'] as List;
-        Map<String, dynamic>? setData;
-        try {
-          setData = setsList.firstWhere(
-            (s) => s['id'] == set.id,
-          );
-        } catch (e) {
-          // Set not found
-          continue;
-        }
-
+        var setData =
+            setsList.firstWhere((s) => s['id'] == set.id, orElse: () => null);
+        
         // Skip if set not found
         if (setData == null) continue;
-
+        
         // Update weight and reps
         setData['weight'] = set.weight;
         setData['reps'] = set.reps;
         setData['completed'] = set.completed;
       }
     }
-
+    
     // Update the notifier with the modified data to ensure changes persist
     WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
   }
-
+  
   // Helper method to serialize workout data for storage
   Map<String, dynamic> _serializeWorkoutData() {
     final Map<String, dynamic> workoutData = {
       'exercises': [],
     };
-
+    
     if (_workout == null) return workoutData;
-
+    
     // Serialize all exercises and their sets
     for (final exercise in _workout!.exercises) {
       final Map<String, dynamic> exerciseData = {
@@ -1380,7 +1233,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         'equipment': exercise.equipment,
         'sets': [],
       };
-
+      
       // Serialize all sets for this exercise
       for (final set in exercise.sets) {
         final Map<String, dynamic> setData = {
@@ -1392,78 +1245,77 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           'restTime': set.restTime,
           'completed': set.completed,
         };
-
+        
         exerciseData['sets'].add(setData);
       }
-
+      
       workoutData['exercises'].add(exerciseData);
     }
-
+    
     return workoutData;
   }
-
   // Helper method to restore workout data from serialized format
   void _restoreWorkoutData(Map<String, dynamic> workoutData) {
     if (_workout == null || workoutData['exercises'] == null) return;
-
+    
     final List<dynamic> exercisesData = workoutData['exercises'];
-
+    
     // Map to keep track of exercises by ID for quick lookup
     final Map<int, Exercise> exerciseMap = {};
     for (final exercise in _workout!.exercises) {
       exerciseMap[exercise.id] = exercise;
     }
-
+    
     // Update exercise and set data
     for (final exerciseData in exercisesData) {
       final int exerciseId = exerciseData['id'];
-
+      
       // Skip if we don't have this exercise
       if (!exerciseMap.containsKey(exerciseId)) continue;
-
+      
       // Get the exercise reference
       final exercise = exerciseMap[exerciseId]!;
-
+      
       // Map sets by ID for quick lookup
       final Map<int, ExerciseSet> setMap = {};
       for (final set in exercise.sets) {
         setMap[set.id] = set;
       }
-
+      
       // Update set data
       final List<dynamic> setsData = exerciseData['sets'];
       for (final setData in setsData) {
         final int setId = setData['id'];
-
+        
         // Skip if we don't have this set
         if (!setMap.containsKey(setId)) continue;
-
+        
         // Update set data
         final set = setMap[setId]!;
         set.weight = setData['weight'] ?? 0;
         set.reps = setData['reps'] ?? 0;
         set.completed = setData['completed'] ?? false;
-
+        
         // Make sure controllers exist for this set
         if (!_weightControllers.containsKey(setId)) {
           _weightControllers[setId] = TextEditingController();
         }
-
+        
         if (!_repsControllers.containsKey(setId)) {
           _repsControllers[setId] = TextEditingController();
         }
-
+        
         // Update controllers with the restored values
         // Format weight to remove .0 if it's an integer value
         final weightText = (set.weight % 1 == 0)
-            ? set.weight.toInt().toString()
+            ? set.weight.toInt().toString() 
             : set.weight.toString();
         _weightControllers[setId]!.text = set.weight > 0 ? weightText : '';
-
+        
         _repsControllers[setId]!.text = set.reps > 0 ? set.reps.toString() : '';
       }
     }
-
+    
     // Force UI update
     setState(() {});
   }
@@ -1487,10 +1339,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             if (_workout != null && _workout!.exercises.isNotEmpty) {
               // Save all current exercise data from text controllers before minimizing
               _updateExerciseDataFromControllers();
-
+              
               // Create a serialized version of the workout with all exercise data
               final workoutData = _serializeWorkoutData();
-
+              
               // Update the activeWorkoutNotifier with complete workout info
               WorkoutService.activeWorkoutNotifier.value = {
                 'id': widget.workoutId,
@@ -1499,7 +1351,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 'isTemporary': widget.isTemporary,
                 'workoutData': workoutData, // Complete workout data
               };
-
+              
               // Keep the timer running in memory while we're minimized
               // Just close the page, don't stop the timer
               Navigator.of(context).pop();
@@ -1566,7 +1418,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     } else {
                       await _workoutService.deleteWorkout(widget.workoutId);
                     }
-
+                    
                     _stopTimer();
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -2236,23 +2088,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     context,
                     MaterialPageRoute(
                       builder: (_) => ExerciseDetailPage(
-                        exerciseId: apiId.isNotEmpty
-                            ? apiId.trim()
-                            : exercise.name.contains('##API_ID:')
-                                ? exercise
-                                    .name // Pass the name with API ID marker
-                                : exercise.id.toString(),
-                      ),
-                      // Pass additional info that can be used to find the exercise if ID fails
-                      settings: RouteSettings(
-                        arguments: {
-                          'exerciseName': exercise.name
-                              .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
-                              .trim(),
-                          'exerciseEquipment': exercise.equipment,
-                          'exerciseId': exercise.id.toString(),
-                          'isTemporary': exercise.id < 0,
-                        },
+                        exerciseId:
+                            apiId.isNotEmpty ? apiId : exercise.id.toString(),
                       ),
                     ),
                   );
@@ -2659,8 +2496,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                     ),
                                   );
                                 } else {
-                                  // Cancel rest when undoing
-                                  _cancelRestTimer();
+                                  // Cancel rest when undoing, but don't play sound
+                                  _cancelRestTimer(playSound: false);
                                 }
                               }
                             : null,
@@ -2698,44 +2535,157 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         ),
     )); // close RepaintBoundary
   }
-
   /// Show dialog to set a custom rest time for all sets in an exercise
   void _showSetRestDialog(Exercise exercise) {
-    final controller = TextEditingController(
-      text: (exercise.sets.isNotEmpty
-              ? exercise.sets.first.restTime
-              : _defaultRestTime)
-          .toString(),
-    );
+    // Get current rest time in seconds
+    final initialSeconds = exercise.sets.isNotEmpty
+        ? exercise.sets.first.restTime
+        : _defaultRestTime;
+
+    // Create a value notifier to track the current selection
+    final ValueNotifier<int> totalSeconds = ValueNotifier(initialSeconds);
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: _surfaceColor,
         title:
             Text('Set Rest Time', style: TextStyle(color: _textPrimaryColor)),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          style: TextStyle(color: _textPrimaryColor),
-          decoration: InputDecoration(
-            labelText: 'Rest Time (seconds)',
-            labelStyle: TextStyle(color: _textSecondaryColor),
+        content: SizedBox(
+          height: 180,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Minutes : Seconds',
+                style: TextStyle(color: _textSecondaryColor, fontSize: 16),
+              ),
+              SizedBox(height: 16),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Minutes column
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.arrow_drop_up,
+                              color: _primaryColor, size: 36),
+                          onPressed: () {
+                            totalSeconds.value += 60;
+                          },
+                        ),
+                        Container(
+                          width: 60,
+                          height: 50,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: _inputBgColor,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ValueListenableBuilder<int>(
+                            valueListenable: totalSeconds,
+                            builder: (_, value, __) {
+                              final mins =
+                                  (value ~/ 60).toString().padLeft(2, '0');
+                              return Text(
+                                mins,
+                                style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: _textPrimaryColor),
+                              );
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.arrow_drop_down,
+                              color: _primaryColor, size: 36),
+                          onPressed: () {
+                            if (totalSeconds.value >= 60) {
+                              totalSeconds.value -= 60;
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                    SizedBox(width: 16),
+                    Text(':',
+                        style:
+                            TextStyle(fontSize: 24, color: _textPrimaryColor)),
+                    SizedBox(width: 16),
+                    // Seconds column
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.arrow_drop_up,
+                              color: _primaryColor, size: 36),
+                          onPressed: () {
+                            if (totalSeconds.value % 60 < 59) {
+                              totalSeconds.value += 1;
+                            } else {
+                              // Roll over to next minute
+                              totalSeconds.value = totalSeconds.value - 59;
+                            }
+                          },
+                        ),
+                        Container(
+                          width: 60,
+                          height: 50,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: _inputBgColor,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ValueListenableBuilder<int>(
+                            valueListenable: totalSeconds,
+                            builder: (_, value, __) {
+                              final secs =
+                                  (value % 60).toString().padLeft(2, '0');
+                              return Text(
+                                secs,
+                                style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: _textPrimaryColor),
+                              );
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.arrow_drop_down,
+                              color: _primaryColor, size: 36),
+                          onPressed: () {
+                            if (totalSeconds.value % 60 > 0) {
+                              totalSeconds.value -= 1;
+                            } else if (totalSeconds.value >= 60) {
+                              // Roll over from previous minute
+                              totalSeconds.value = totalSeconds.value - 60 + 59;
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
         actions: [
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              controller.dispose();
             },
             child: Text('Cancel', style: TextStyle(color: _textSecondaryColor)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
             onPressed: () async {
-              final rest = int.tryParse(controller.text) ?? _defaultRestTime;
+              final rest = totalSeconds.value;
               Navigator.pop(context);
-              controller.dispose();
               for (var set in exercise.sets) {
                 await _updateSetData(set.id, set.weight, set.reps, rest);
               }
