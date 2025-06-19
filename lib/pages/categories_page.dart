@@ -515,7 +515,7 @@ class _CategoriesPageState extends State<CategoriesPage>
                         icon: Icon(Icons.repeat, color: Colors.grey[400]),
                         label: Text(
                           _showRepeat
-                              ? "Repeats every $_repeatInterval ${_repeatFrequency}${_repeatInterval > 1 ? 's' : ''}"
+                              ? "Repeats every $_repeatInterval $_repeatFrequency${_repeatInterval > 1 ? 's' : ''}"
                               : "Add Repeat",
                           style: TextStyle(
                               color:
@@ -1764,11 +1764,11 @@ class TaskCard extends StatelessWidget {
   final VoidCallback onRefresh;
 
   const TaskCard({
-    Key? key,
+    super.key,
     required this.task,
     required this.onTaskCompleted,
     required this.onRefresh,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

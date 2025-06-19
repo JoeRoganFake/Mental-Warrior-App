@@ -32,14 +32,14 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
     // Listen to changes in the active workout notifier
     WorkoutService.activeWorkoutNotifier.addListener(_handleActiveWorkoutChanged);
   }
-  @override
+    @override
   void dispose() {
     _stopTimer();
     _stopRestTimer();
     WorkoutService.activeWorkoutNotifier.removeListener(_handleActiveWorkoutChanged);
     super.dispose();
   }
-  void _handleActiveWorkoutChanged() {
+    void _handleActiveWorkoutChanged() {
     if (WorkoutService.activeWorkoutNotifier.value != null) {
       // Start or restart the timer if we have an active workout
       if (_timer == null) {
@@ -120,9 +120,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
 
         return GestureDetector(
           onTap: () {
-            // Restore the workout session with current workout data
-            final currentWorkoutData =
-                activeWorkout['workoutData'] as Map<String, dynamic>?;
+            // Restore the workout session
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -131,8 +129,6 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                   readOnly: false,
                   isTemporary: isTemporary,
                   minimized: true, // Indicate this workout was minimized
-                  restoredWorkoutData:
-                      currentWorkoutData, // Pass the workout data
                 ),
               ),
             ).then((_) {
@@ -234,8 +230,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                                           .containsKey('restTimerState') &&
                                       (activeWorkout['workoutData']
                                               ['restTimerState']['isActive'] ??
-                                          false);
-                              if (hasRestTimer) {
+                                          false);                              if (hasRestTimer) {
                                 final restState = activeWorkout['workoutData']
                                     ['restTimerState'];
                                 final int timeRemaining =
@@ -255,51 +250,30 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                                 // If timer is running (not paused) and we have start time,
                                 // calculate elapsed time since timer started
                                 if (!isPaused && startTimeMs != null) {
-                                  final restStartTime =
-                                      DateTime.fromMillisecondsSinceEpoch(
-                                          startTimeMs);
-                                  final elapsed = DateTime.now()
-                                      .difference(restStartTime)
-                                      .inSeconds;
-                                  adjustedTime = (originalTime - elapsed)
-                                      .clamp(0, originalTime);
+                                  final restStartTime = DateTime.fromMillisecondsSinceEpoch(startTimeMs);
+                                  final elapsed = DateTime.now().difference(restStartTime).inSeconds;
+                                  adjustedTime = (originalTime - elapsed).clamp(0, originalTime);
                                 }
 
-                                final String restTimeDisplay = _formatTime(
-                                    adjustedTime); // Show rest timer with set info and orange color
+                                final String restTimeDisplay =
+                                    _formatTime(adjustedTime);
+
+                                // Show rest timer with set info and orange color
                                 String displayText = 'Rest: $restTimeDisplay';
                                 if (setId != null) {
                                   // Try to find exercise and set info for better display
-                                  final exercises = activeWorkout['workoutData']
-                                      ['exercises'] as List?;
+                                  final exercises = activeWorkout['workoutData']['exercises'] as List?;
                                   if (exercises != null) {
                                     for (final exercise in exercises) {
                                       final sets = exercise['sets'] as List?;
                                       if (sets != null) {
                                         final set = sets.firstWhere(
-                                            (s) => s['id'] == setId,
-                                            orElse: () => null);
+                                          (s) => s['id'] == setId, 
+                                          orElse: () => null
+                                        );
                                         if (set != null) {
-                                          final setNumber =
-                                              set['setNumber'] as int? ?? 1;
-                                          final exerciseName =
-                                              exercise['name'] as String? ?? '';
-
-                                          // Clean up exercise name if it has API ID
-                                          String cleanExerciseName =
-                                              exerciseName;
-                                          final RegExp apiIdRegex =
-                                              RegExp(r'##API_ID:[^#]+##');
-                                          cleanExerciseName = cleanExerciseName
-                                              .replaceAll(apiIdRegex, '');
-
-                                          // Show exercise name and set number for better context
-                                          if (cleanExerciseName.length > 15) {
-                                            cleanExerciseName =
-                                                '${cleanExerciseName.substring(0, 12)}...';
-                                          }
-                                          displayText =
-                                              '$cleanExerciseName Set $setNumber: $restTimeDisplay';
+                                          final setNumber = set['setNumber'] as int? ?? 1;
+                                          displayText = 'Set $setNumber Rest: $restTimeDisplay';
                                           break;
                                         }
                                       }
@@ -347,9 +321,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                   // Maximize/continue button
                   TextButton.icon(
                     onPressed: () {
-                      // Restore the workout session with current workout data
-                      final currentWorkoutData =
-                          activeWorkout['workoutData'] as Map<String, dynamic>?;
+                      // Restore the workout session
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -358,8 +330,6 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                             readOnly: false,
                             isTemporary: isTemporary,
                             minimized: true, // Indicate this workout was minimized
-                            restoredWorkoutData:
-                                currentWorkoutData, // Pass the workout data
                           ),
                         ),
                       );
@@ -426,18 +396,18 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
       _restTimer = null;
     }
   }
-
+  
   void _checkAndStartRestTimer() {
     final activeWorkout = WorkoutService.activeWorkoutNotifier.value;
     if (activeWorkout == null) return;
-
+    
     // Check if there's an active rest timer in the workout data
     final workoutData = activeWorkout['workoutData'] as Map<String, dynamic>?;
     if (workoutData?.containsKey('restTimerState') == true) {
       final restState = workoutData!['restTimerState'] as Map<String, dynamic>;
       final bool isActive = restState['isActive'] as bool? ?? false;
       final bool isPaused = restState['isPaused'] as bool? ?? false;
-
+      
       if (isActive && !isPaused) {
         // Start the background rest timer if not already running
         if (_restTimer == null) {
@@ -450,39 +420,39 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
       _stopRestTimer();
     }
   }
-
+  
   void _startBackgroundRestTimer() {
     _stopRestTimer(); // Stop any existing timer
-
+    
     _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final activeWorkout = WorkoutService.activeWorkoutNotifier.value;
       if (activeWorkout == null) {
         timer.cancel();
         return;
       }
-
+      
       final workoutData = activeWorkout['workoutData'] as Map<String, dynamic>?;
       if (workoutData?.containsKey('restTimerState') != true) {
         timer.cancel();
         return;
       }
-
+      
       final restState = workoutData!['restTimerState'] as Map<String, dynamic>;
       final bool isActive = restState['isActive'] as bool? ?? false;
       final bool isPaused = restState['isPaused'] as bool? ?? false;
       final int? startTimeMs = restState['startTime'] as int?;
       final int originalTime = restState['originalTime'] as int? ?? 0;
-
+      
       if (!isActive || isPaused || startTimeMs == null) {
         timer.cancel();
         return;
       }
-
+      
       // Calculate remaining time
       final restStartTime = DateTime.fromMillisecondsSinceEpoch(startTimeMs);
       final elapsed = DateTime.now().difference(restStartTime).inSeconds;
       final timeRemaining = (originalTime - elapsed).clamp(0, originalTime);
-
+      
       if (timeRemaining <= 0) {
         // Timer finished! Play the bell sound and update the workout data
         _playBoxingBellSound();
@@ -492,7 +462,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
       }
     });
   }
-
+  
   Future<void> _playBoxingBellSound() async {
     try {
       // Import audioplayers at the top of the file if not already imported
@@ -501,7 +471,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
       await player.setReleaseMode(ReleaseMode.release);
       await player.setPlayerMode(PlayerMode.lowLatency);
       await player.setVolume(1.0);
-
+      
       // Set audio context for background playback
       await player.setAudioContext(AudioContext(
         android: AudioContextAndroid(
@@ -512,24 +482,22 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
           audioFocus: AndroidAudioFocus.gain,
         ),
       ));
-
+      
       await player.resume();
-      print(
-          "Boxing bell sound played from active workout bar - rest timer completed");
-
+      print("Boxing bell sound played from active workout bar - rest timer completed");
+      
       // Dispose after sound completes
       player.onPlayerComplete.listen((_) => player.dispose());
     } catch (e) {
       print('Error playing boxing bell from active workout bar: $e');
     }
   }
-
+  
   void _clearRestTimerFromWorkoutData() {
     final activeWorkout = WorkoutService.activeWorkoutNotifier.value;
     if (activeWorkout == null) return;
-
-    final workoutData = Map<String, dynamic>.from(
-        activeWorkout['workoutData'] as Map<String, dynamic>? ?? {});
+    
+    final workoutData = Map<String, dynamic>.from(activeWorkout['workoutData'] as Map<String, dynamic>? ?? {});
     if (workoutData.containsKey('restTimerState')) {
       workoutData['restTimerState'] = {
         'isActive': false,
@@ -540,7 +508,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
         'startTime': null,
         'timestamp': DateTime.now().millisecondsSinceEpoch,
       };
-
+      
       // Update the active workout notifier
       WorkoutService.activeWorkoutNotifier.value = {
         ...activeWorkout,

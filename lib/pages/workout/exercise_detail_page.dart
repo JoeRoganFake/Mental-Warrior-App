@@ -66,6 +66,19 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     
+    // Log the route arguments for debugging
+    final Map<String, dynamic>? args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+    print('Route arguments in didChangeDependencies:');
+    if (args != null) {
+      print('  exerciseName: ${args['exerciseName']}');
+      print('  exerciseEquipment: ${args['exerciseEquipment']}');
+      print('  isTemporary: ${args['isTemporary']}');
+    } else {
+      print('  No route arguments available');
+    }
+    
     // Only process once when dependencies are first available
     if (!_didInitialLoad) {
       _loadExerciseData();
@@ -78,18 +91,39 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
     
     final List<dynamic> list = _exercisesList!;
     try {
-      final String currentExerciseId = widget.exerciseId.trim(); // Trim passed ID
+      final String currentExerciseId =
+          widget.exerciseId.trim(); // Trim passed ID
       
       // Debug information
-      print('Looking for exercise with ID: "$currentExerciseId"');
+      print(
+          'Looking for exercise with ID: "$currentExerciseId"'); // Check if we have explicit information about whether this is a temporary exercise
+      final Map<String, dynamic>? args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
-      // Special handling for negative IDs (temporary exercises)
-      if (currentExerciseId.startsWith('-')) {
-        print('Negative ID detected, this is a temporary exercise');
-        
-        // Now we can safely access route arguments in didChangeDependencies
-        final Map<String, dynamic>? args = 
-            ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      final bool isTemporaryFromArgs = args != null &&
+          args.containsKey('isTemporary') &&
+          args['isTemporary'] == true;
+
+      // Also check ID format as a backup detection method
+      bool isNegativeId = false;
+      try {
+        final int idAsInt = int.parse(currentExerciseId);
+        isNegativeId = idAsInt < 0;
+      } catch (e) {
+        // Not a valid integer, so not a negative ID
+        isNegativeId = false;
+      }
+      
+      // Use both sources of information
+      final bool isTemporary = isTemporaryFromArgs || isNegativeId;
+      
+      print('Exercise ID: $currentExerciseId');
+      print('Is temporary from args: $isTemporaryFromArgs');
+      print('Is negative ID: $isNegativeId');
+      print(
+          'Final temporary status: $isTemporary'); // Special handling for temporary exercises
+      if (isTemporary) {
+        print('Temporary exercise detected');
             
         if (args != null) {
           // First try to use the exerciseName if available
@@ -135,10 +169,9 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage> {
         
         print('Using a default exercise: ${_exercise?['name']}');
         return;
-      }
-      
+      } 
       // Check if the passed ID is an API ID with markers
-      if (currentExerciseId.contains('##API_ID:')) {
+      else if (currentExerciseId.contains('##API_ID:')) {
         // Extract the actual API ID from the marker
         final RegExp apiIdRegex = RegExp(r'##API_ID:([^#]+)##');
         final Match? match = apiIdRegex.firstMatch(currentExerciseId);

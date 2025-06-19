@@ -12,7 +12,6 @@ class WorkoutSessionPage extends StatefulWidget {
   final bool readOnly;
   final bool isTemporary;
   final bool minimized;
-  final Map<String, dynamic>? restoredWorkoutData;
 
   const WorkoutSessionPage({
     super.key,
@@ -20,7 +19,6 @@ class WorkoutSessionPage extends StatefulWidget {
     this.readOnly = false,
     this.isTemporary = false,
     this.minimized = false,
-    this.restoredWorkoutData,
   });
 
   @override
@@ -73,31 +71,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // Add app lifecycle observer for better handling of background/foreground transitions
     WidgetsBinding.instance.addObserver(this);
     _loadWorkout(); // If this was a minimized workout being restored
-    if (widget.minimized) {
+    if (widget.minimized &&
+        WorkoutService.activeWorkoutNotifier.value != null) {
       print("Restoring minimized workout");
+      // Store reference to the active workout data before clearing it
+      final activeWorkout = WorkoutService.activeWorkoutNotifier.value!;
       
-      // Use the passed restoredWorkoutData if available, otherwise fall back to activeWorkoutNotifier
-      Map<String, dynamic>? activeWorkout;
-      Map<String, dynamic>? workoutData;
-
-      if (widget.restoredWorkoutData != null) {
-        // Use the passed workout data directly
-        workoutData = widget.restoredWorkoutData;
-        print("Using passed workout data for restoration");
-
-        // Get elapsed time from active workout notifier if still available
-        final notifierWorkout = WorkoutService.activeWorkoutNotifier.value;
-        if (notifierWorkout != null) {
-          _elapsedSeconds = notifierWorkout['duration'] as int;
-        }
-      } else if (WorkoutService.activeWorkoutNotifier.value != null) {
-        // Fall back to getting data from notifier (old behavior)
-        activeWorkout = WorkoutService.activeWorkoutNotifier.value!;
-        _elapsedSeconds = activeWorkout['duration'] as int;
-        workoutData = activeWorkout['workoutData'] as Map<String, dynamic>?;
-      }
-      
+      // Get the current elapsed time from the notifier
+      _elapsedSeconds = activeWorkout['duration'] as int;
       print("Restored elapsed time: $_elapsedSeconds seconds");
+      
+      // Save the workout data for restoration after _loadWorkout completes
+      final workoutData = activeWorkout['workoutData'] as Map<String, dynamic>?;
 
       // We're maximizing the workout now, so clear the notifier
       // Defer clearing the notifier until after first frame
@@ -119,17 +104,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         if (workoutData.containsKey('restTimerState')) {
           final restState =
               workoutData['restTimerState'] as Map<String, dynamic>;
-          final bool isActive = restState['isActive'] as bool? ?? false;
+          final bool isActive = restState['isActive'] as bool;
 
           if (isActive) {
-            final int? setId = restState['setId'] as int?;
+            final int setId = restState['setId'] as int? ?? -1;
             final int timeRemaining = restState['timeRemaining'] as int? ?? 0;
-            final bool isPaused = restState['isPaused'] as bool? ?? false;
             print(
-                "Found active rest timer state to restore - SetID: $setId, Time Remaining: $timeRemaining seconds, Paused: $isPaused");
+                "Found active rest timer state to restore - SetID: $setId, Time Remaining: $timeRemaining seconds");
 
             // Set a flag to prioritize the rest timer restoration
-            if (timeRemaining > 0 && setId != null) {
+            if (timeRemaining > 0) {
               print("Setting high priority for rest timer restoration");
             }
           }
@@ -398,22 +382,27 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 false; // If we're restoring from minimized state, apply the saved data
             if (_isRestoringFromMinimized && _savedWorkoutData != null) {
               print("About to restore workout data after loading");
-              print(
-                  "Saved workout data contains rest timer: ${_savedWorkoutData!.containsKey('restTimerState')}");
+              // Add a slight delay to ensure everything is initialized
+              Future.delayed(Duration(milliseconds: 200), () {
+                print("Restoring workout data after initialization delay");
+                _restoreWorkoutData(_savedWorkoutData!);
 
-              // Restore the data immediately instead of using a delay
-              _restoreWorkoutData(_savedWorkoutData!);
-              
-              // Restart workout timer after restoration
-              if (!_isTimerRunning) {
-                _startTimer();
-              }
+                // Restart workout timer after restoration
+                if (!_isTimerRunning) {
+                  _startTimer();
+                }
 
-              // Reset flags
-              _isRestoringFromMinimized = false;
-              _savedWorkoutData = null;
-              
-              print("Immediate restoration completed");
+                // Force another UI refresh after all restoration is complete
+                Future.delayed(Duration(milliseconds: 100), () {
+                  if (mounted) {
+                    setState(() {});
+                    print("Forced additional UI refresh after restoration");
+                  }
+                });
+                
+                _isRestoringFromMinimized = false;
+                _savedWorkoutData = null;
+              });
             }
           });
         }
@@ -1445,9 +1434,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
     
     // Update the notifier with the modified data to ensure changes persist    WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
-  }
-  
-  // Helper method to serialize workout data for storage  
+  }    // Helper method to serialize workout data for storage  
   Map<String, dynamic> _serializeWorkoutData() {
     final int nowMs = DateTime.now().millisecondsSinceEpoch;
     final Map<String, dynamic> workoutData = {
@@ -1464,10 +1451,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         'timestamp': nowMs,
       },
     };
-    
-    // Debug: Log what we're serializing
-    print(
-        "SERIALIZE DEBUG: Rest timer state - isActive: ${_currentRestSetId != null}, SetId: $_currentRestSetId, TimeRemaining: $_restTimeRemaining");
     
     if (_workout == null) return workoutData;
     
@@ -1515,39 +1498,27 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   }
   // Helper method to restore workout data from serialized format
   void _restoreWorkoutData(Map<String, dynamic> workoutData) {
-    if (_workout == null || workoutData['exercises'] == null)
-      return; // Restore rest timer state if it was active
+    if (_workout == null || workoutData['exercises'] == null) return;
+
+    // Restore rest timer state if it was active
     if (workoutData.containsKey('restTimerState')) {
       final restState = workoutData['restTimerState'] as Map<String, dynamic>;
-      final bool isActive = restState['isActive'] as bool? ?? false;
-      print("RESTORE DEBUG: Rest timer state found - isActive: $isActive");
-
-      if (isActive) {
-        print(
-            "RESTORE DEBUG: Active rest timer detected, proceeding with restoration");
-      } else {
-        print("RESTORE DEBUG: Rest timer was not active, skipping restoration");
-      }
+      final bool isActive = restState['isActive'] as bool;
 
       if (isActive && restState['setId'] != null) {
         final int setId = restState['setId'] as int;
         int timeRemaining = restState['timeRemaining'] as int;
-        final bool isPaused = restState['isPaused'] as bool? ?? false;
-        final int originalTime =
-            restState['originalTime'] as int? ?? timeRemaining;
-        final int? startTimeMs = restState['startTime'] as int?;
-
-        print(
-            "RESTORE DEBUG: SetID: $setId, TimeRemaining: $timeRemaining, IsPaused: $isPaused, OriginalTime: $originalTime");
-
-        // If timer was active (not paused) and we have a start time, adjust for time passed
+        final bool isPaused = restState['isPaused'] as bool;
+        final int originalTime = restState['originalTime'] as int;
+        final int? startTimeMs = restState['startTime']
+            as int?; // If timer was active (not paused) and we have a start time, adjust for time passed
         if (!isPaused && startTimeMs != null) {
           final restStartTime =
               DateTime.fromMillisecondsSinceEpoch(startTimeMs);
           final elapsed = DateTime.now().difference(restStartTime).inSeconds;
           timeRemaining = (originalTime - elapsed).clamp(0, originalTime);
           print(
-              "RESTORE DEBUG: Calculated rest time remaining: $timeRemaining seconds (elapsed: $elapsed)");
+              "Calculated rest time remaining: $timeRemaining seconds (elapsed: $elapsed)");
         } else if (!isPaused && restState.containsKey('timestamp')) {
           // If we don't have startTime but have timestamp, use that as a fallback
           final int timestampMs = restState['timestamp'] as int;
@@ -1557,7 +1528,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           timeRemaining =
               (timeRemaining - elapsedSinceTimestamp).clamp(0, timeRemaining);
           print(
-              "RESTORE DEBUG: Adjusted time remaining based on timestamp: $timeRemaining seconds");
+              "Adjusted time remaining based on timestamp: $timeRemaining seconds");
         }
 
         // If timer completed while minimized, play sound once
@@ -1571,17 +1542,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             _restStartTime = null;
           });
           print("Rest timer completed while minimized");
-        } // Restart the rest timer if it was active and has time remaining
+        }
+        // Restart the rest timer if it was active and has time remaining
         else if (timeRemaining > 0) {
           print(
-              "RESTORE DEBUG: Restoring rest timer with $timeRemaining seconds remaining for set $setId");
+              "Restoring rest timer with $timeRemaining seconds remaining for set $setId");
           // Cancel any existing rest timer first
           _cancelRestTimer(playSound: false);
 
           // Restore rest start time for continuous tracking
           if (startTimeMs != null) {
             _restStartTime = DateTime.fromMillisecondsSinceEpoch(startTimeMs);
-            print("RESTORE DEBUG: Restored rest start time: $_restStartTime");
           }
 
           // Restore all rest timer state
@@ -1593,12 +1564,15 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             _restPausedNotifier.value = isPaused;
           });
 
-          print(
-              "RESTORE DEBUG: Rest timer state set - CurrentSetId: $_currentRestSetId, TimeRemaining: $_restTimeRemaining");
-
-          // Only start the timer if it's not paused
+          // Force UI to update with rest timer
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              // Force a rebuild to ensure the timer UI appears
+              setState(() {});
+              print("Forced UI refresh to show rest timer");
+            }
+          }); // Only start the timer if it's not paused
           if (!isPaused) {
-            print("RESTORE DEBUG: Starting rest timer (not paused)");
             // Create a new timer that updates the UI like the workout timer
             _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
               if (!mounted || _restPausedNotifier.value) return;
@@ -1696,23 +1670,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         _repsControllers[setId]!.text = set.reps > 0 ? set.reps.toString() : '';
       }
     }
-
+    
     // Force UI update
     setState(() {});
-
-    // Final debug check to verify restoration
-    print(
-        "RESTORE DEBUG: Final state check - CurrentRestSetId: $_currentRestSetId, RestTimeRemaining: $_restTimeRemaining, RestTimer: ${_restTimer != null ? 'Active' : 'Null'}");
   }
-
   @override
   Widget build(BuildContext context) {
-    // Debug: Check rest timer state during build
-    if (_currentRestSetId != null) {
-      print(
-          "BUILD DEBUG: Rest timer active - SetId: $_currentRestSetId, TimeRemaining: $_restTimeRemaining");
-    }
-    
     return WillPopScope(
         onWillPop: () async {
           // Don't minimize if in read-only mode, just pop
