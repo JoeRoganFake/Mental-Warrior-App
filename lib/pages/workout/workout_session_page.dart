@@ -72,7 +72,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     super.initState();
     // Add app lifecycle observer for better handling of background/foreground transitions
     WidgetsBinding.instance.addObserver(this);
-    _loadWorkout(); // If this was a minimized workout being restored
+    
+    // If this was a minimized workout being restored, set up restoration data FIRST
     if (widget.minimized) {
       print("Restoring minimized workout");
       
@@ -83,7 +84,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       if (widget.restoredWorkoutData != null) {
         // Use the passed workout data directly
         workoutData = widget.restoredWorkoutData;
-        print("Using passed workout data for restoration");
 
         // Get elapsed time from active workout notifier if still available
         final notifierWorkout = WorkoutService.activeWorkoutNotifier.value;
@@ -97,7 +97,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         workoutData = activeWorkout['workoutData'] as Map<String, dynamic>?;
       }
       
-      print("Restored elapsed time: $_elapsedSeconds seconds");
 
       // We're maximizing the workout now, so clear the notifier
       // Defer clearing the notifier until after first frame
@@ -107,14 +106,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       
       // Start the timer with the restored elapsed seconds
       _startTimer();
-      print("Started timer after workout restoration");
+
       
-      // Wait for the workout to be fully loaded before restoring data
+      // Set up restoration data BEFORE loading the workout
       if (workoutData != null) {
         _isRestoringFromMinimized = true; // Flag to track restoration process
         _savedWorkoutData = workoutData; // Save the data for later use
-        print(
-            "Saved workout data for restoration"); // Check if we need to immediately restore a rest timer
+
+        // Check if we need to immediately restore a rest timer
         // This ensures the rest timer doesn't get interrupted during minimization
         if (workoutData.containsKey('restTimerState')) {
           final restState =
@@ -130,15 +129,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
             // Set a flag to prioritize the rest timer restoration
             if (timeRemaining > 0 && setId != null) {
-              print("Setting high priority for rest timer restoration");
             }
           }
           // Full timer restoration will be handled in _restoreWorkoutData after workout loads
         }
       }
     }
+    
+    // Load the workout AFTER setting up restoration flags
+    _loadWorkout();
+    
     // Otherwise start a new timer if this is not in read-only mode
-    else if (!widget.readOnly) {
+    if (!widget.minimized && !widget.readOnly) {
       _startTimer();
     }
   }
@@ -218,8 +220,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         }
         // If the timer somehow got lost but we're still tracking a rest period, restart it
         if (_restTimer == null && _restTimeRemaining > 0) {
-          print(
-              "Restoring lost rest timer with $_restTimeRemaining seconds remaining");
           // Restart the timer with real-world time tracking
           _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
             if (!mounted || _restPausedNotifier.value) return;
@@ -394,10 +394,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             if (_elapsedSeconds == 0) {
               _elapsedSeconds = workout.duration;
             }
-            _isLoading =
-                false; // If we're restoring from minimized state, apply the saved data
+            _isLoading = false;
+            // If we're restoring from minimized state, apply the saved data
             if (_isRestoringFromMinimized && _savedWorkoutData != null) {
-              print("About to restore workout data after loading");
               print(
                   "Saved workout data contains rest timer: ${_savedWorkoutData!.containsKey('restTimerState')}");
 
@@ -409,11 +408,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 _startTimer();
               }
 
-              // Reset flags
-              _isRestoringFromMinimized = false;
+              // Reset flags AFTER restoration is complete
+              // (the _restoreWorkoutData method will also reset _isRestoringFromMinimized at the end)
               _savedWorkoutData = null;
-              
-              print("Immediate restoration completed");
+
             }
           });
         }
@@ -630,7 +628,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   void _cancelRestTimer({bool playSound = true}) {
     // Don't cancel the rest timer if we're minimizing the app or restoring from minimized
     if (_isMinimizing || _isRestoringFromMinimized) {
-      print("Not canceling rest timer - app is being minimized or restored");
       return;
     }
     
@@ -1443,8 +1440,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         setData['completed'] = set.completed;
       }
     }
-    
-    // Update the notifier with the modified data to ensure changes persist    WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+    // Update the notifier with the modified data to ensure changes persist
+    WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
   }
   
   // Helper method to serialize workout data for storage  
@@ -1512,15 +1509,19 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       'workoutData': workoutData,
       'minimizedAt': DateTime.now().millisecondsSinceEpoch,
     };
-  }
-  // Helper method to restore workout data from serialized format
+  } // Helper method to restore workout data from serialized format
   void _restoreWorkoutData(Map<String, dynamic> workoutData) {
-    if (_workout == null || workoutData['exercises'] == null)
-      return; // Restore rest timer state if it was active
+
+
+    if (_workout == null || workoutData['exercises'] == null) {
+      print("RESTORE DEBUG: Early return - workout or exercises is null");
+      return;
+    }
+
+    // Restore rest timer state if it was active
     if (workoutData.containsKey('restTimerState')) {
       final restState = workoutData['restTimerState'] as Map<String, dynamic>;
       final bool isActive = restState['isActive'] as bool? ?? false;
-      print("RESTORE DEBUG: Rest timer state found - isActive: $isActive");
 
       if (isActive) {
         print(
@@ -1546,8 +1547,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               DateTime.fromMillisecondsSinceEpoch(startTimeMs);
           final elapsed = DateTime.now().difference(restStartTime).inSeconds;
           timeRemaining = (originalTime - elapsed).clamp(0, originalTime);
-          print(
-              "RESTORE DEBUG: Calculated rest time remaining: $timeRemaining seconds (elapsed: $elapsed)");
         } else if (!isPaused && restState.containsKey('timestamp')) {
           // If we don't have startTime but have timestamp, use that as a fallback
           final int timestampMs = restState['timestamp'] as int;
@@ -1575,13 +1574,23 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         else if (timeRemaining > 0) {
           print(
               "RESTORE DEBUG: Restoring rest timer with $timeRemaining seconds remaining for set $setId");
+          
           // Cancel any existing rest timer first
-          _cancelRestTimer(playSound: false);
+          if (_restTimer != null) {
+            _restTimer!.cancel();
+            _restTimer = null;
+          }
 
           // Restore rest start time for continuous tracking
           if (startTimeMs != null) {
             _restStartTime = DateTime.fromMillisecondsSinceEpoch(startTimeMs);
             print("RESTORE DEBUG: Restored rest start time: $_restStartTime");
+          } else {
+            // If we don't have a start time, create one based on the current remaining time
+            _restStartTime = DateTime.now()
+                .subtract(Duration(seconds: originalTime - timeRemaining));
+            print(
+                "RESTORE DEBUG: Created rest start time based on remaining time: $_restStartTime");
           }
 
           // Restore all rest timer state
@@ -1631,10 +1640,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 }
               }
             });
-          }
-
-          // Clear the restoration flag after successful restoration
-          _isRestoringFromMinimized = false;
+            print("RESTORE DEBUG: Rest timer started successfully");
+          } else {
+            print(
+                "RESTORE DEBUG: Rest timer is paused, not starting periodic timer");
+          } // Update the active notifier with restored state
+          _updateActiveNotifier();
+          print(
+              "RESTORE DEBUG: Updated active notifier with restored rest timer state");
         }
       }
     }
@@ -1695,14 +1708,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         
         _repsControllers[setId]!.text = set.reps > 0 ? set.reps.toString() : '';
       }
-    }
-
-    // Force UI update
+    } // Force UI update
     setState(() {});
+
+    // Clear the restoration flag after successful restoration (at the end of the method)
+    _isRestoringFromMinimized = false;
 
     // Final debug check to verify restoration
     print(
         "RESTORE DEBUG: Final state check - CurrentRestSetId: $_currentRestSetId, RestTimeRemaining: $_restTimeRemaining, RestTimer: ${_restTimer != null ? 'Active' : 'Null'}");
+    print("RESTORE DEBUG: Restoration completed and flag cleared");
   }
 
   @override
