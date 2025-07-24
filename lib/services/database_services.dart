@@ -5,6 +5,7 @@ import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/models/books.dart';
 import 'package:mental_warior/models/categories.dart';
 import 'package:mental_warior/models/workouts.dart';
+import 'package:mental_warior/services/foreground_service.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -950,11 +951,27 @@ class WorkoutService {
   }
 
   // Discard a temporary workout
-  void discardTemporaryWorkout(int tempId) {
+  Future<void> discardTemporaryWorkout(int tempId) async {
     final tempWorkouts = tempWorkoutsNotifier.value;
     if (tempWorkouts.containsKey(tempId)) {
       tempWorkouts.remove(tempId);
       tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+      
+      // If this is the currently active workout, stop the service first, then clear it
+      final activeWorkout = activeWorkoutNotifier.value;
+      if (activeWorkout != null && activeWorkout['id'] == tempId) {
+        try {
+          // Stop the service FIRST and wait for it to complete
+          await WorkoutForegroundService.stopWorkoutService();
+          // Only clear the active workout AFTER the service is stopped
+          activeWorkoutNotifier.value = null;
+          await WorkoutForegroundService.clearSavedWorkoutData();
+        } catch (e) {
+          print('Error clearing workout data during discard: $e');
+          // Still clear the active workout even if there was an error
+          activeWorkoutNotifier.value = null;
+        }
+      }
     }
   }
 
@@ -1243,6 +1260,15 @@ class WorkoutService {
       whereArgs: [workoutId],
     );
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+    
+    // If this is the currently active workout, clear it and stop the foreground service
+    final activeWorkout = activeWorkoutNotifier.value;
+    if (activeWorkout != null && activeWorkout['id'] == workoutId) {
+      activeWorkoutNotifier.value = null;
+      WorkoutForegroundService.stopWorkoutService();
+      // Also explicitly clear any saved data
+      WorkoutForegroundService.clearSavedWorkoutData();
+    }
   }
   // Delete an exercise and all its sets
   Future<void> deleteExercise(int exerciseId) async {
@@ -1334,6 +1360,63 @@ class WorkoutService {
     }
 
     return exercises;
+  }
+
+  // Restore saved workout from foreground service data
+  Future<void> restoreSavedWorkout(Map<String, dynamic> savedData) async {
+    try {
+      final startTime = savedData['start_time'] as DateTime;
+      final workoutName = savedData['workout_name'] as String;
+
+      // Calculate the actual elapsed time based on when the workout started
+      final actualElapsedSeconds =
+          DateTime.now().difference(startTime).inSeconds;
+
+      // Get additional saved data
+      final workoutData = savedData['workout_data'] as Map<String, dynamic>?;
+      final workoutId = savedData['workout_id'] as int?;
+      final isTemporary = savedData['is_temporary'] as bool? ?? false;
+
+      // Create active workout data for the notifier
+      final activeWorkoutData = {
+        'id': workoutId ?? -1, // Use saved workout ID or temporary ID
+        'name': workoutName,
+        'startTime': startTime,
+        'duration': actualElapsedSeconds,
+        'isTemporary': isTemporary,
+        'workoutData': workoutData ??
+            <String, dynamic>{}, // Use saved workout data if available
+      };
+
+      // If we have complete workout data, restore to temporary workouts if needed
+      if (isTemporary && workoutData != null && workoutId != null) {
+        // Restore the temporary workout to memory
+        final tempWorkouts =
+            Map<int, Map<String, dynamic>>.from(tempWorkoutsNotifier.value);
+
+        // Create a complete temporary workout structure
+        final tempWorkoutData = {
+          'name': workoutName,
+          'date': DateTime.now().toIso8601String(),
+          'duration': actualElapsedSeconds,
+          'exercises': workoutData['exercises'] ?? [],
+        };
+
+        tempWorkouts[workoutId] = tempWorkoutData;
+        tempWorkoutsNotifier.value = tempWorkouts;
+
+        print(
+            'Restored temporary workout to memory: $workoutName (ID: $workoutId)');
+      }
+
+      // Set the active workout notifier
+      activeWorkoutNotifier.value = activeWorkoutData;
+
+      print(
+          'Restored active workout: $workoutName (${actualElapsedSeconds}s elapsed)');
+    } catch (e) {
+      print('Error restoring saved workout: $e');
+    }
   }
 }
 

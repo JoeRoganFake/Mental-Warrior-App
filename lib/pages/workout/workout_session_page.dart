@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
+import 'package:mental_warior/services/foreground_service.dart';
 import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/rest_timer_page.dart';
@@ -35,6 +36,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   Workout? _workout;
   bool _isLoading = true;
   bool _isTimerRunning = false;
+  bool _isDisposing = false; // Flag to prevent setState during disposal
   int _elapsedSeconds = 0;
   Timer? _timer;
   Timer? _restTimer;
@@ -177,6 +179,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           'workoutData': workoutData,
           'backgroundedAt': DateTime.now().millisecondsSinceEpoch,
         };
+        
+        // Also update the foreground service with the latest workout data
+        if (WorkoutForegroundService.isServiceRunning) {
+          WorkoutForegroundService.startWorkoutService(
+            _workout!.name,
+            startTime: _workoutStartTime,
+            workoutData: workoutData,
+            workoutId: widget.workoutId,
+            isTemporary: widget.isTemporary,
+          );
+        }
       }
     } else if (state == AppLifecycleState.resumed) {
       // App is coming back to foreground
@@ -222,7 +235,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         if (_restTimer == null && _restTimeRemaining > 0) {
           // Restart the timer with real-world time tracking
           _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-            if (!mounted || _restPausedNotifier.value) return;
+            if (!mounted || _isDisposing || _restPausedNotifier.value) return;
 
             if (_restStartTime != null) {
               final elapsed =
@@ -231,18 +244,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   (_originalRestTime - elapsed).clamp(0, _originalRestTime);
 
               if (newTimeRemaining != _restRemainingNotifier.value) {
-                setState(() {
-                  _restRemainingNotifier.value = newTimeRemaining;
-                  _restTimeRemaining = newTimeRemaining;
-                });
-                _updateActiveNotifier();
+                if (mounted && !_isDisposing) {
+                  setState(() {
+                    _restRemainingNotifier.value = newTimeRemaining;
+                    _restTimeRemaining = newTimeRemaining;
+                  });
+                  _updateActiveNotifier();
+                }
               }
 
               if (newTimeRemaining <= 0) {
                 timer.cancel();
                 _restTimer = null;
                 _playBoxingBellSound();
-                if (mounted) {
+                if (mounted && !_isDisposing) {
                   setState(() {
                     _currentRestSetId = null;
                     _restStartTime = null;
@@ -266,6 +281,15 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   
   @override
   void dispose() {
+    // Set disposal flag to prevent any setState calls
+    _isDisposing = true;
+
+    // Cancel timers immediately to prevent callbacks during disposal
+    _timer?.cancel();
+    _timer = null;
+    _restTimer?.cancel();
+    _restTimer = null;
+    
     // Remove lifecycle observer
     WidgetsBinding.instance.removeObserver(this);
     
@@ -273,8 +297,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // Use our explicit flag rather than checking the notifier
     if (!_isMinimizing) {
       print("Dispose: Stopping timers as we're closing the workout");
-      _stopTimer();
-      _cancelRestTimer();
+      // Note: timers already cancelled above, just clean up foreground service
+      WorkoutForegroundService.stopWorkoutService();
     } else {
       // If we're minimizing, make sure we have the latest data for the workout timer
       if (_workoutStartTime != null && _isTimerRunning) {
@@ -301,12 +325,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
     
     // If this was a temporary workout and we're navigating away without saving,
-    // discard the temporary workout
-    if (widget.isTemporary && mounted) {
+    // discard the temporary workout (but not if we're minimizing)
+    if (widget.isTemporary && mounted && !_isMinimizing) {
       // Check if any exercises were added
       bool hasExercises = _workout?.exercises.isNotEmpty ?? false;
 
-      // If nothing was added, just discard it
+      // If nothing was added, just discard it (fire and forget)
       if (!hasExercises) {
         _workoutService.discardTemporaryWorkout(widget.workoutId);
       }
@@ -440,6 +464,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       _isTimerRunning = true;
     });
 
+    // Start the foreground service to keep workout running in background
+    if (_workout != null) {
+      final workoutData = _serializeWorkoutData();
+      WorkoutForegroundService.startWorkoutService(
+        _workout!.name,
+        startTime: _workoutStartTime,
+        workoutData: workoutData,
+        workoutId: widget.workoutId,
+        isTemporary: widget.isTemporary,
+      );
+    }
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       // Calculate elapsed time based on real-world time difference
       // This allows the timer to accurately track time even when the app is in background
@@ -451,8 +487,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         // Update the elapsed seconds based on the actual time difference
         _elapsedSeconds = newElapsedSeconds;
 
-        // Only update UI if the widget is still mounted
-        if (mounted) {
+        // Only update UI if the widget is still mounted and not disposing
+        if (mounted && !_isDisposing) {
           // Update timer display without rebuilding the entire widget
           setState(() {});
           
@@ -470,19 +506,23 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       _timer = null;
     }
 
+    // Stop the foreground service
+    WorkoutForegroundService.stopWorkoutService();
+
     // Before stopping timer, ensure we have the most accurate elapsed time
     if (_workoutStartTime != null) {
       _elapsedSeconds = DateTime.now().difference(_workoutStartTime!).inSeconds;
     }
 
-    if (mounted) {
+    // Only update UI state if widget is still mounted and not being disposed
+    if (mounted && !_isDisposing) {
       setState(() {
         _isTimerRunning = false;
       });
+      
+      // Final update to the workout duration only if still mounted
+      _updateWorkoutDuration();
     }
-
-    // Final update to the workout duration
-    _updateWorkoutDuration();
   }
   void _updateWorkoutDuration() {
     // Update workout duration 
@@ -590,7 +630,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     
     _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       // Skip if not mounted or paused
-      if (!mounted || _restPausedNotifier.value) return;
+      if (!mounted || _isDisposing || _restPausedNotifier.value) return;
       
       // Calculate remaining time based on real-world time difference (like workout timer)
       if (_restStartTime != null) {
@@ -599,12 +639,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             (_originalRestTime - elapsed).clamp(0, _originalRestTime);
 
         if (newTimeRemaining != _restRemainingNotifier.value) {
-          setState(() {
-            _restTimeRemaining = newTimeRemaining;
-            _restRemainingNotifier.value = newTimeRemaining;
-          });
-          // Update shared notifier so minimized bar reflects new time
-          _updateActiveNotifier();
+          if (mounted && !_isDisposing) {
+            setState(() {
+              _restTimeRemaining = newTimeRemaining;
+              _restRemainingNotifier.value = newTimeRemaining;
+            });
+            // Update shared notifier so minimized bar reflects new time
+            _updateActiveNotifier();
+          }
         }
         
         // Check if timer finished
@@ -613,7 +655,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           _restTimer = null;
           // Play the boxing bell sound when timer finishes - this will work even in background
           _playBoxingBellSound();
-          if (mounted) {
+          if (mounted && !_isDisposing) {
             setState(() {
               _currentRestSetId = null;
               _restStartTime = null;
@@ -641,7 +683,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
     }
     
-    if (mounted) {
+    // Only update UI state if widget is still mounted
+    if (mounted && !_isDisposing) {
       setState(() {
         _restTimeRemaining = 0;
         _currentRestSetId = null;
@@ -649,6 +692,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         _restPausedNotifier.value = false;
         _restRemainingNotifier.value = 0;
       });
+      
+      // Update the active workout notifier to reflect the rest timer state change
+      _updateActiveNotifier();
     }
   }
   void _togglePauseRest() {
@@ -1053,6 +1099,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     final setIndex = exercise.sets.indexWhere((s) => s.id == setId);
     if (setIndex == -1) return;
 
+    // Check if this set has an active rest timer and cancel it
+    if (_currentRestSetId == setId) {
+      _cancelRestTimer(playSound: false);
+    }
+
     // Check if this is the last set for this exercise
     final bool isLastSet = exercise.sets.length == 1;
 
@@ -1326,6 +1377,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     );
   }
   Future<void> _deleteExercise(int exerciseId) async {
+    // Check if any sets in this exercise have an active rest timer
+    final exerciseToDelete = _workout!.exercises.firstWhere(
+      (e) => e.id == exerciseId,
+      orElse: () => throw StateError('Exercise not found'),
+    );
+
+    // Cancel rest timer if any set in this exercise has an active rest timer
+    for (final set in exerciseToDelete.sets) {
+      if (_currentRestSetId == set.id) {
+        _cancelRestTimer(playSound: false);
+        break;
+      }
+    }
+    
     // Update UI first
     if (mounted) {
       setState(() {
@@ -1610,7 +1675,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             print("RESTORE DEBUG: Starting rest timer (not paused)");
             // Create a new timer that updates the UI like the workout timer
             _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-              if (!mounted || _restPausedNotifier.value) return;
+              if (!mounted || _isDisposing || _restPausedNotifier.value) return;
 
               if (_restStartTime != null) {
                 final elapsed =
@@ -1619,18 +1684,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     (_originalRestTime - elapsed).clamp(0, _originalRestTime);
 
                 if (newTimeRemaining != _restRemainingNotifier.value) {
-                  setState(() {
-                    _restRemainingNotifier.value = newTimeRemaining;
-                    _restTimeRemaining = newTimeRemaining;
-                  });
-                  _updateActiveNotifier();
+                  if (mounted && !_isDisposing) {
+                    setState(() {
+                      _restRemainingNotifier.value = newTimeRemaining;
+                      _restTimeRemaining = newTimeRemaining;
+                    });
+                    _updateActiveNotifier();
+                  }
                 }
 
                 if (newTimeRemaining <= 0) {
                   timer.cancel();
                   _restTimer = null;
                   _playBoxingBellSound();
-                  if (mounted) {
+                  if (mounted && !_isDisposing) {
                     setState(() {
                       _currentRestSetId = null;
                       _restStartTime = null;
@@ -1735,8 +1802,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             return true; // Allow pop to proceed normally
           }
 
-          // Only minimize active workouts if we have data to save
-          if (_workout != null && _workout!.exercises.isNotEmpty) {
+          // Minimize active workouts regardless of whether they have exercises
+          if (_workout != null) {
             // Set the minimizing flag to prevent timer cancellation in dispose()
             _isMinimizing = true;
 
@@ -1763,6 +1830,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               'minimizedAt': DateTime.now()
                   .millisecondsSinceEpoch, // Track when it was minimized
             };
+            
+            // Update the foreground service with the latest workout data
+            if (WorkoutForegroundService.isServiceRunning) {
+              WorkoutForegroundService.startWorkoutService(
+                _workout!.name,
+                startTime: _workoutStartTime,
+                workoutData: workoutData,
+                workoutId: widget.workoutId,
+                isTemporary: widget.isTemporary,
+              );
+            }
 
             print(
                 "Minimizing workout via system back - saving rest timer state");
@@ -1782,8 +1860,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   Navigator.of(context).pop();
                   return;
                 }
-                // Minimize and keep timers running
-                if (_workout != null && _workout!.exercises.isNotEmpty) {
+                // Minimize and keep timers running for any active workout
+                if (_workout != null) {
                   _isMinimizing = true;
                   _updateExerciseDataFromControllers();
                   final workoutData = _serializeWorkoutData();
@@ -1799,6 +1877,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     'workoutData': workoutData,
                     'minimizedAt': DateTime.now().millisecondsSinceEpoch,
                   };
+                  
+                  // Update the foreground service with the latest workout data
+                  if (WorkoutForegroundService.isServiceRunning) {
+                    WorkoutForegroundService.startWorkoutService(
+                      _workout!.name,
+                      startTime: _workoutStartTime,
+                      workoutData: workoutData,
+                      workoutId: widget.workoutId,
+                      isTemporary: widget.isTemporary,
+                    );
+                  }
                 }
                 Navigator.of(context).pop();
               },

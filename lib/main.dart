@@ -6,6 +6,8 @@ import 'package:mental_warior/pages/splash_screen.dart';
 import 'package:mental_warior/pages/workout/workout_page.dart'; // Added workout page import
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/background_task_manager.dart';
+import 'package:mental_warior/services/notification_service.dart';
+import 'package:mental_warior/services/foreground_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 // Initialize FlutterLocalNotificationsPlugin
@@ -18,6 +20,10 @@ void main() async {
 
   // Initialize the background task manager (handles quotes, habits, and pending tasks)
   await BackgroundTaskManager.initialize();
+
+  // Initialize the notification service for workout notifications
+  await NotificationService.initialize();
+  await NotificationService.requestPermissions();
 
   // Notification Initialization
   const AndroidInitializationSettings initializationSettingsAndroid =
@@ -34,6 +40,12 @@ void main() async {
   // Check for pending tasks on app startup (already integrated in BackgroundTaskManager, but useful on app launch)
   await _checkPendingTasks();
 
+  // Initialize the foreground service for background workout tracking
+  await WorkoutForegroundService.initialize();
+
+  // Check for saved workout data and restore if needed
+  await _checkAndRestoreSavedWorkout();
+
   runApp(MyApp());
 }
 
@@ -45,6 +57,26 @@ Future<void> _checkPendingTasks() async {
     print("✅ Checked pending tasks on app startup");
   } catch (e) {
     print("❌ Error checking pending tasks: $e");
+  }
+}
+
+// Check and restore any saved workout data
+Future<void> _checkAndRestoreSavedWorkout() async {
+  try {
+    // First check if there's already an active workout in memory
+    if (WorkoutService.activeWorkoutNotifier.value != null) {
+      print("ℹ️ Active workout already exists, skipping restoration");
+      return;
+    }
+
+    final savedData = await WorkoutForegroundService.getSavedWorkoutData();
+    if (savedData != null) {
+      final workoutService = WorkoutService();
+      await workoutService.restoreSavedWorkout(savedData);
+      print("✅ Restored saved workout: ${savedData['workout_name']}");
+    }
+  } catch (e) {
+    print("❌ Error restoring saved workout data: $e");
   }
 }
 

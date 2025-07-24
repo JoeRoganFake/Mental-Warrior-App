@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
+import 'package:mental_warior/services/foreground_service.dart';
 import 'package:mental_warior/pages/workout/workout_session_page.dart';
 import 'package:audioplayers/audioplayers.dart';
 
@@ -20,13 +21,19 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
   Timer? _timer;
   Timer? _restTimer; // Add rest timer for background operation
   DateTime? _workoutStartTime;
+  bool _isInitializing = true; // Add flag to track initialization state
   @override
   void initState() {
     super.initState();
-    // Start the timer immediately if we have an active workout
+    // Check if we have an active workout and set initialization state accordingly
     if (WorkoutService.activeWorkoutNotifier.value != null) {
+      // We have an active workout, but need to initialize timer
+      _isInitializing = true;
       _startTimer();
       _checkAndStartRestTimer();
+    } else {
+      // No active workout
+      _isInitializing = false;
     }
     
     // Listen to changes in the active workout notifier
@@ -41,6 +48,9 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
   }
   void _handleActiveWorkoutChanged() {
     if (WorkoutService.activeWorkoutNotifier.value != null) {
+      // Reset initialization flag when we get a new active workout
+      _isInitializing = true;
+      
       // Start or restart the timer if we have an active workout
       if (_timer == null) {
         _startTimer();
@@ -51,6 +61,9 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
       // Stop the timer if there's no active workout
       _stopTimer();
       _stopRestTimer();
+      // Reset to initial state
+      _isInitializing = true;
+      _formattedTime = "00:00";
     }
   }
   
@@ -60,6 +73,10 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
     if (activeWorkout == null) return;
     
     _elapsedSeconds = activeWorkout['duration'] as int;
+    _formattedTime = _formatTime(_elapsedSeconds);
+
+    // Clear initialization flag since we have real data now
+    _isInitializing = false;
     
     // Calculate the start time based on current time minus elapsed seconds
     _workoutStartTime = DateTime.now().subtract(Duration(seconds: _elapsedSeconds));
@@ -115,6 +132,8 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
         if (activeWorkout['duration'] != null && _timer == null) {
           _elapsedSeconds = activeWorkout['duration'] as int;
           _formattedTime = _formatTime(_elapsedSeconds);
+          _isInitializing =
+              false; // We have real data, not initializing anymore
         }
         final isTemporary = activeWorkout['isTemporary'] as bool? ?? false;
 
@@ -316,7 +335,36 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                                   ),
                                 );
                               }
-                              // Default to showing workout duration
+                              // Default to showing workout duration or loading state
+                              if (_isInitializing &&
+                                  _formattedTime == "00:00") {
+                                // Show loading indicator for the brief initialization period
+                                return Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    SizedBox(
+                                      width: 10,
+                                      height: 10,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          _textColor.withOpacity(0.6),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Loading...',
+                                      style: TextStyle(
+                                        color: _textColor.withOpacity(0.6),
+                                        fontSize: 11,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }
                               return Text(
                                 _formattedTime,
                                 style: TextStyle(
@@ -402,6 +450,14 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                               onPressed: () {
                                 // Clear the active workout
                                 WorkoutService.activeWorkoutNotifier.value = null;
+                                // Stop the foreground service and clear its data (fire and forget)
+                                WorkoutForegroundService.stopWorkoutService()
+                                    .then((_) {
+                                  return WorkoutForegroundService
+                                      .clearSavedWorkoutData();
+                                }).catchError((e) {
+                                  print('Error clearing workout data: $e');
+                                });
                                 Navigator.pop(context);
                               },
                               child: const Text('End Workout'),
