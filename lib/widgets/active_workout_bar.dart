@@ -425,15 +425,15 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                     icon: const Icon(Icons.close, size: 20),
                     color: Colors.red,
                     onPressed: () {
-                      // Show confirmation dialog
+                      // Show options dialog for ending or discarding workout
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
                           backgroundColor: const Color(0xFF26272B),
-                          title: Text('End Workout Session?', 
+                          title: Text('Workout Session Options', 
                               style: TextStyle(color: _textColor)),
                           content: Text(
-                            'This will end your current workout. Progress will be saved and can be viewed in your workout history.',
+                            'Choose how you want to handle your current workout:',
                             style: TextStyle(color: _textColor.withOpacity(0.8)),
                           ),
                           actions: [
@@ -444,23 +444,81 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                             ),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () async {
+                                // End workout - save progress
+                                try {
+                                  final activeWorkout = WorkoutService
+                                      .activeWorkoutNotifier.value;
+                                  if (activeWorkout != null) {
+                                    final workoutId =
+                                        activeWorkout['id'] as int;
+                                    final isTemporary =
+                                        activeWorkout['isTemporary'] as bool? ??
+                                            false;
+
+                                    // If it's a temporary workout, save it to the database
+                                    if (isTemporary && workoutId > 0) {
+                                      final workoutService = WorkoutService();
+                                      await workoutService
+                                          .saveTemporaryWorkout(workoutId);
+                                      print(
+                                          '✅ Temporary workout saved permanently');
+                                    }
+                                  }
+
+                                  // Clear active workout from memory
+                                  WorkoutService.activeWorkoutNotifier.value =
+                                      null;
+
+                                  // Stop the foreground service and clear its data
+                                  await WorkoutForegroundService
+                                      .stopWorkoutService();
+                                  await WorkoutForegroundService
+                                      .clearSavedWorkoutData();
+
+                                  print(
+                                      '✅ Workout ended and saved successfully');
+                                } catch (e) {
+                                  print('❌ Error saving workout: $e');
+                                }
+                                Navigator.pop(context);
+                              },
+                              child: const Text('End & Save'),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
                               ),
-                              onPressed: () {
-                                // Clear the active workout
-                                WorkoutService.activeWorkoutNotifier.value = null;
-                                // Stop the foreground service and clear its data (fire and forget)
-                                WorkoutForegroundService.stopWorkoutService()
-                                    .then((_) {
-                                  return WorkoutForegroundService
-                                      .clearSavedWorkoutData();
-                                }).catchError((e) {
-                                  print('Error clearing workout data: $e');
-                                });
+                              onPressed: () async {
+                                // Discard workout - mark for discard and clear active state
+                                try {
+                                  // First mark as discarded
+                                  await WorkoutForegroundService
+                                      .markWorkoutAsDiscarded();
+                                  print('✅ Workout marked as discarded');
+
+                                  // Clear active workout from memory
+                                  WorkoutService.activeWorkoutNotifier.value =
+                                      null;
+                                  
+                                  // Stop the foreground service
+                                  await WorkoutForegroundService
+                                      .stopWorkoutService();
+
+                                  // Do NOT call clearSavedWorkoutData() here - let the restoration process handle it
+                                  // This ensures the discard flag persists until the next app startup
+
+                                  print('✅ Workout discarded successfully');
+                                } catch (e) {
+                                  print('❌ Error discarding workout: $e');
+                                }
                                 Navigator.pop(context);
                               },
-                              child: const Text('End Workout'),
+                              child: const Text('Discard'),
                             ),
                           ],
                         ),

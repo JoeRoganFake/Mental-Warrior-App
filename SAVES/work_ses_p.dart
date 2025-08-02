@@ -379,14 +379,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       Workout? workout;
       // Check if this is a temporary workout
       if (widget.isTemporary) {
-        // If we're restoring from minimized state and have saved workout data, use it directly
-        if (_isRestoringFromMinimized && _savedWorkoutData != null) {
-          final savedExercisesData = _savedWorkoutData!['exercises'] as List?;
+        // Get temporary workout data from memory
+        final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+        if (tempWorkouts.containsKey(widget.workoutId)) {
+          final tempData = tempWorkouts[widget.workoutId];
 
-          // Build exercises list from saved workout data instead of temp storage
+          // Build exercises list from temp workout data
           List<Exercise> exercises = [];
-          if (savedExercisesData != null) {
-            for (var exerciseData in savedExercisesData) {
+          if (tempData.containsKey('exercises') &&
+              tempData['exercises'] is List) {
+            for (var exerciseData in tempData['exercises']) {
               final exerciseId = exerciseData['id'] ??
                   -(DateTime.now().millisecondsSinceEpoch);
 
@@ -420,71 +422,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             }
           }
 
-          // Get basic workout info from temp storage
-          final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
-          final tempData = tempWorkouts[widget.workoutId];
-
-          // Create a Workout object using saved exercise data but temp workout info
+          // Create a Workout object from temporary data
           workout = Workout(
             id: widget.workoutId,
-            name: tempData?['name'] ?? 'Workout',
-            date: tempData?['date'] ?? DateTime.now(),
-            duration: tempData?['duration'] ?? 0,
-            exercises: exercises, // Use exercises from saved data
+            name: tempData['name'],
+            date: tempData['date'],
+            duration: tempData['duration'],
+            exercises: exercises, // Now properly loaded from temp data
           );
-        } else {
-          // Normal temporary workout loading from temp storage
-          final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
-          if (tempWorkouts.containsKey(widget.workoutId)) {
-            final tempData = tempWorkouts[widget.workoutId];
-
-            // Build exercises list from temp workout data
-            List<Exercise> exercises = [];
-            if (tempData.containsKey('exercises') &&
-                tempData['exercises'] is List) {
-              for (var exerciseData in tempData['exercises']) {
-                final exerciseId = exerciseData['id'] ??
-                    -(DateTime.now().millisecondsSinceEpoch);
-
-                // Build sets list for this exercise
-                List<ExerciseSet> sets = [];
-                if (exerciseData.containsKey('sets') &&
-                    exerciseData['sets'] is List) {
-                  for (var setData in exerciseData['sets']) {
-                    final setId = setData['id'] ??
-                        -(DateTime.now().millisecondsSinceEpoch);
-                    sets.add(ExerciseSet(
-                      id: setId,
-                      exerciseId: exerciseId,
-                      setNumber: setData['setNumber'] ?? 1,
-                      weight: setData['weight'] ?? 0,
-                      reps: setData['reps'] ?? 0,
-                      restTime: setData['restTime'] ?? _defaultRestTime,
-                      completed: setData['completed'] ?? false,
-                    ));
-                  }
-                }
-
-                // Add exercise with its sets
-                exercises.add(Exercise(
-                  id: exerciseId,
-                  workoutId: widget.workoutId,
-                  name: exerciseData['name'] ?? 'Exercise',
-                  equipment: exerciseData['equipment'] ?? '',
-                  sets: sets,
-                ));
-              }
-            }
-
-            // Create a Workout object from temporary data
-            workout = Workout(
-              id: widget.workoutId,
-              name: tempData['name'],
-              date: tempData['date'],
-              duration: tempData['duration'],
-              exercises: exercises, // Now properly loaded from temp data
-            );
-          }
         }
       } else {
         // Regular database workout
@@ -518,17 +463,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               print(
                   "Saved workout data exercises count: ${(_savedWorkoutData!['exercises'] as List?)?.length ?? 0}");
 
-              // For temporary workouts, exercises are already loaded from saved data
-              // Only restore rest timer state and initialize controllers with saved values
-              if (widget.isTemporary) {
-                // Initialize controllers with values from saved data
-                _initializeControllersFromSavedData(_savedWorkoutData!);
-                // Only restore rest timer state for temporary workouts
-                _restoreRestTimerOnly(_savedWorkoutData!);
-              } else {
-                // For regular workouts, restore all data including exercises
-                _restoreWorkoutData(_savedWorkoutData!);
-              }
+              // Restore the data immediately instead of using a delay
+              _restoreWorkoutData(_savedWorkoutData!);
               
               // Restart workout timer after restoration
               if (!_isTimerRunning) {
@@ -536,8 +472,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               }
 
               // Reset flags AFTER restoration is complete
+              // (the _restoreWorkoutData method will also reset _isRestoringFromMinimized at the end)
               _savedWorkoutData = null;
-              _isRestoringFromMinimized = false;
+
             }
           });
         }
@@ -1791,9 +1728,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     
 
     
-    if (_workout == null) {
-      return workoutData;
-    }
+    if (_workout == null) return workoutData;
     
     // Serialize all exercises and their sets
     for (final exercise in _workout!.exercises) {
@@ -2081,138 +2016,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     print(
         "RESTORE DEBUG: Final state check - CurrentRestSetId: $_currentRestSetId, RestTimeRemaining: $_restTimeRemaining, RestTimer: ${_restTimer != null ? 'Active' : 'Null'}");
     print("RESTORE DEBUG: Restoration completed and flag cleared");
-  }
-
-  // Helper method to initialize controllers with values from saved workout data
-  void _initializeControllersFromSavedData(Map<String, dynamic> workoutData) {
-    final List<dynamic> exercisesData = workoutData['exercises'] ?? [];
-
-    for (final exerciseData in exercisesData) {
-      final List<dynamic> setsData = exerciseData['sets'] ?? [];
-
-      for (final setData in setsData) {
-        final int setId = setData['id'];
-        final double weight = (setData['weight'] ?? 0).toDouble();
-        final int reps = setData['reps'] ?? 0;
-
-        // Initialize weight controller if it doesn't exist
-        if (!_weightControllers.containsKey(setId)) {
-          _weightControllers[setId] = TextEditingController();
-        }
-
-        // Initialize reps controller if it doesn't exist
-        if (!_repsControllers.containsKey(setId)) {
-          _repsControllers[setId] = TextEditingController();
-        }
-
-        // Set controller values from saved data
-        final weightText =
-            (weight % 1 == 0) ? weight.toInt().toString() : weight.toString();
-        _weightControllers[setId]!.text = weight > 0 ? weightText : '';
-        _repsControllers[setId]!.text = reps > 0 ? reps.toString() : '';
-      }
-    }
-  }
-
-  // Helper method to restore only rest timer state (for temporary workouts with exercises already loaded)
-  void _restoreRestTimerOnly(Map<String, dynamic> workoutData) {
-    print('RESTORE DEBUG: Restoring rest timer only');
-
-    // Restore rest timer state if it was active
-    if (workoutData.containsKey('restTimerState')) {
-      final restState = workoutData['restTimerState'] as Map<String, dynamic>;
-      final bool isActive = restState['isActive'] as bool? ?? false;
-
-      if (isActive && restState['setId'] != null) {
-        final int setId = restState['setId'] as int;
-        int timeRemaining = restState['timeRemaining'] as int;
-        final bool isPaused = restState['isPaused'] as bool? ?? false;
-        final int originalTime =
-            restState['originalTime'] as int? ?? timeRemaining;
-        final int? startTimeMs = restState['startTime'] as int?;
-
-        // If timer was active (not paused) and we have a start time, adjust for time passed
-        if (!isPaused && startTimeMs != null) {
-          final restStartTime =
-              DateTime.fromMillisecondsSinceEpoch(startTimeMs);
-          final elapsed = DateTime.now().difference(restStartTime).inSeconds;
-          timeRemaining = (originalTime - elapsed).clamp(0, originalTime);
-        } else if (!isPaused && restState.containsKey('timestamp')) {
-          final int timestampMs = restState['timestamp'] as int;
-          final int elapsedSinceTimestamp =
-              (DateTime.now().millisecondsSinceEpoch - timestampMs) ~/ 1000;
-          timeRemaining =
-              (timeRemaining - elapsedSinceTimestamp).clamp(0, timeRemaining);
-        }
-
-        // If timer completed while minimized, play sound once
-        if (!isPaused && timeRemaining <= 0) {
-          _playBoxingBellSound();
-          setState(() {
-            _currentRestSetId = null;
-            _restTimeRemaining = 0;
-            _restRemainingNotifier.value = 0;
-            _restStartTime = null;
-          });
-        } else if (timeRemaining > 0) {
-          // Restore rest start time for continuous tracking
-          if (startTimeMs != null) {
-            _restStartTime = DateTime.fromMillisecondsSinceEpoch(startTimeMs);
-          } else {
-            _restStartTime = DateTime.now()
-                .subtract(Duration(seconds: originalTime - timeRemaining));
-          }
-
-          // Restore all rest timer state
-          setState(() {
-            _currentRestSetId = setId;
-            _restTimeRemaining = timeRemaining;
-            _originalRestTime = originalTime;
-            _restRemainingNotifier.value = timeRemaining;
-            _restPausedNotifier.value = isPaused;
-          });
-
-          // Only start the timer if it's not paused
-          if (!isPaused) {
-            _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-              if (!mounted || _isDisposing || _restPausedNotifier.value) return;
-
-              if (_restStartTime != null) {
-                final elapsed =
-                    DateTime.now().difference(_restStartTime!).inSeconds;
-                final newTimeRemaining =
-                    (_originalRestTime - elapsed).clamp(0, _originalRestTime);
-
-                if (newTimeRemaining != _restRemainingNotifier.value) {
-                  if (mounted && !_isDisposing) {
-                    setState(() {
-                      _restTimeRemaining = newTimeRemaining;
-                      _restRemainingNotifier.value = newTimeRemaining;
-                    });
-                    _updateActiveNotifier();
-                  }
-                }
-
-                if (newTimeRemaining <= 0) {
-                  timer.cancel();
-                  _restTimer = null;
-                  _playBoxingBellSound();
-                  if (mounted && !_isDisposing) {
-                    setState(() {
-                      _currentRestSetId = null;
-                      _restStartTime = null;
-                    });
-                  }
-                  _updateActiveNotifier();
-                }
-              }
-            });
-          }
-
-          _updateActiveNotifier();
-        }
-      }
-    }
   }
 
   @override

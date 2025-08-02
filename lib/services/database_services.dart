@@ -31,7 +31,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 4,
+      version: 5, // Increment version for new active workout sessions table
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -45,11 +45,17 @@ class DatabaseService {
         BookService().createbookTable(db);
         CategoryService().createCategoryTable(db);
         WorkoutService().createWorkoutTables(db); // Added workout tables
+        WorkoutService().createActiveWorkoutSessionsTable(
+            db); // Added active sessions table
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 4) {
           // Create workout tables if upgrading from a previous version
           await WorkoutService().createWorkoutTables(db);
+        }
+        if (oldVersion < 5) {
+          // Create active workout sessions table for persistent state storage
+          await WorkoutService().createActiveWorkoutSessionsTable(db);
         }
       },
     );
@@ -846,6 +852,17 @@ class WorkoutService {
   final String _setRestTimeColumnName = "restTime";
   final String _setCompletedColumnName = "completed";
 
+  // Active workout sessions table (for persistent state storage across app restarts)
+  final String _activeWorkoutSessionsTableName = "active_workout_sessions";
+  final String _activeSessionIdColumnName = "id";
+  final String _activeSessionWorkoutIdColumnName = "workout_id";
+  final String _activeSessionWorkoutDataColumnName = "workout_data";
+  final String _activeSessionElapsedSecondsColumnName = "elapsed_seconds";
+  final String _activeSessionStartTimeColumnName = "start_time";
+  final String _activeSessionIsTemporaryColumnName = "is_temporary";
+  final String _activeSessionCreatedAtColumnName = "created_at";
+  final String _activeSessionUpdatedAtColumnName = "updated_at";
+
   // Create tables for workouts, exercises, and sets
   Future<void> createWorkoutTables(Database db) async {
     // Create workout table
@@ -882,6 +899,128 @@ class WorkoutService {
         FOREIGN KEY ($_setExerciseIdColumnName) REFERENCES $_exerciseTableName ($_exerciseIdColumnName) ON DELETE CASCADE
       )
     ''');
+  }
+
+  // Create active workout sessions table for persistent state storage
+  Future<void> createActiveWorkoutSessionsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_activeWorkoutSessionsTableName (
+        $_activeSessionIdColumnName INTEGER PRIMARY KEY,
+        $_activeSessionWorkoutIdColumnName INTEGER NOT NULL,
+        $_activeSessionWorkoutDataColumnName TEXT NOT NULL,
+        $_activeSessionElapsedSecondsColumnName INTEGER NOT NULL,
+        $_activeSessionStartTimeColumnName INTEGER,
+        $_activeSessionIsTemporaryColumnName INTEGER NOT NULL,
+        $_activeSessionCreatedAtColumnName INTEGER NOT NULL,
+        $_activeSessionUpdatedAtColumnName INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  // Save active workout session state to database
+  Future<void> saveActiveWorkoutSession({
+    required int workoutId,
+    required String workoutData,
+    required int elapsedSeconds,
+    required bool isTemporary,
+    DateTime? startTime,
+  }) async {
+    final db = await DatabaseService.instance.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    // First, clear any existing active sessions to ensure only one active session at a time
+    await clearActiveWorkoutSessions();
+
+    await db.insert(
+      _activeWorkoutSessionsTableName,
+      {
+        _activeSessionWorkoutIdColumnName: workoutId,
+        _activeSessionWorkoutDataColumnName: workoutData,
+        _activeSessionElapsedSecondsColumnName: elapsedSeconds,
+        _activeSessionStartTimeColumnName: startTime?.millisecondsSinceEpoch,
+        _activeSessionIsTemporaryColumnName: isTemporary ? 1 : 0,
+        _activeSessionCreatedAtColumnName: now,
+        _activeSessionUpdatedAtColumnName: now,
+      },
+    );
+
+    print(
+        'Active workout session saved to database for workout ID: $workoutId');
+  }
+
+  // Update existing active workout session
+  Future<void> updateActiveWorkoutSession({
+    required int workoutId,
+    required String workoutData,
+    required int elapsedSeconds,
+  }) async {
+    final db = await DatabaseService.instance.database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+
+    final result = await db.update(
+      _activeWorkoutSessionsTableName,
+      {
+        _activeSessionWorkoutDataColumnName: workoutData,
+        _activeSessionElapsedSecondsColumnName: elapsedSeconds,
+        _activeSessionUpdatedAtColumnName: now,
+      },
+      where: '$_activeSessionWorkoutIdColumnName = ?',
+      whereArgs: [workoutId],
+    );
+
+    // If no existing session was updated, create a new one
+    if (result == 0) {
+      await saveActiveWorkoutSession(
+        workoutId: workoutId,
+        workoutData: workoutData,
+        elapsedSeconds: elapsedSeconds,
+        isTemporary: workoutId < 0,
+      );
+    }
+  }
+
+  // Retrieve active workout session
+  Future<Map<String, dynamic>?> getActiveWorkoutSession() async {
+    final db = await DatabaseService.instance.database;
+
+    final result = await db.query(
+      _activeWorkoutSessionsTableName,
+      limit: 1,
+      orderBy: '$_activeSessionUpdatedAtColumnName DESC',
+    );
+
+    if (result.isNotEmpty) {
+      final row = result.first;
+      return {
+        'workoutId': row[_activeSessionWorkoutIdColumnName] as int,
+        'workoutData': row[_activeSessionWorkoutDataColumnName] as String,
+        'elapsedSeconds': row[_activeSessionElapsedSecondsColumnName] as int,
+        'startTime': row[_activeSessionStartTimeColumnName] != null
+            ? DateTime.fromMillisecondsSinceEpoch(
+                row[_activeSessionStartTimeColumnName] as int)
+            : null,
+        'isTemporary': (row[_activeSessionIsTemporaryColumnName] as int) == 1,
+        'createdAt': DateTime.fromMillisecondsSinceEpoch(
+            row[_activeSessionCreatedAtColumnName] as int),
+        'updatedAt': DateTime.fromMillisecondsSinceEpoch(
+            row[_activeSessionUpdatedAtColumnName] as int),
+      };
+    }
+
+    return null;
+  }
+
+  // Clear all active workout sessions
+  Future<void> clearActiveWorkoutSessions() async {
+    final db = await DatabaseService.instance.database;
+    await db.delete(_activeWorkoutSessionsTableName);
+    print('Active workout sessions cleared from database');
+  }
+
+  // Check if there's an active workout session in the database
+  Future<bool> hasActiveWorkoutSession() async {
+    final session = await getActiveWorkoutSession();
+    return session != null;
   }
 
   // Add a new workout
@@ -952,26 +1091,101 @@ class WorkoutService {
 
   // Discard a temporary workout
   Future<void> discardTemporaryWorkout(int tempId) async {
+    print('🗑️ Attempting to discard temporary workout with ID: $tempId');
+    
     final tempWorkouts = tempWorkoutsNotifier.value;
+    final activeWorkout = activeWorkoutNotifier.value;
+
+    // Debug information
+    print('Current temp workouts: ${tempWorkouts.keys.toList()}');
+    print(
+        'Active workout: ${activeWorkout != null ? activeWorkout['id'] : 'null'} (isTemporary: ${activeWorkout?['isTemporary']})');
+
+    // Check if this workout exists in temp workouts (this means it was a temporary workout)
+    bool wasTemporaryWorkout =
+        tempWorkouts.containsKey(tempId) || isTemporaryWorkout(tempId);
+
+    // Check if this is the currently active workout (with improved matching)
+    bool isActiveWorkout = false;
+    if (activeWorkout != null) {
+      // Check if the active workout matches the tempId
+      final activeWorkoutId = activeWorkout['id'];
+      final isTemporaryActive = activeWorkout['isTemporary'] as bool? ?? false;
+
+      // Match by ID or if it's a temporary workout with the same ID
+      isActiveWorkout = (activeWorkoutId == tempId) ||
+          (isTemporaryActive &&
+              isTemporaryWorkout(tempId) &&
+              activeWorkoutId == tempId);
+
+      print(
+          'Active workout match check: activeWorkoutId=$activeWorkoutId, tempId=$tempId, isTemporaryActive=$isTemporaryActive, isActiveWorkout=$isActiveWorkout');
+    }
+
+    // Also check if there's saved data for this specific workout ID in SharedPreferences
+    bool hasSavedData = false;
+    try {
+      final savedData = await WorkoutForegroundService.getSavedWorkoutData();
+      if (savedData != null) {
+        final savedWorkoutId = savedData['workout_id'] as int?;
+        if (savedWorkoutId == tempId) {
+          hasSavedData = true;
+          print('Found saved data for workout ID: $tempId');
+        }
+      }
+    } catch (e) {
+      print('Error checking saved data: $e');
+    }
+
+    // Remove from temporary workouts if it exists
     if (tempWorkouts.containsKey(tempId)) {
       tempWorkouts.remove(tempId);
       tempWorkoutsNotifier.value = Map.from(tempWorkouts);
-      
-      // If this is the currently active workout, stop the service first, then clear it
-      final activeWorkout = activeWorkoutNotifier.value;
-      if (activeWorkout != null && activeWorkout['id'] == tempId) {
-        try {
-          // Stop the service FIRST and wait for it to complete
-          await WorkoutForegroundService.stopWorkoutService();
-          // Only clear the active workout AFTER the service is stopped
+      print('✅ Removed workout from temp workouts');
+    } else {
+      print('⚠️ Workout not found in temp workouts');
+    }
+    
+    // If this is/was a temporary workout OR has saved data, we need to clear everything
+    if (isActiveWorkout || wasTemporaryWorkout || hasSavedData) {
+      print(
+          '🛑 Clearing workout data (isActive: $isActiveWorkout, wasTemporary: $wasTemporaryWorkout, hasSavedData: $hasSavedData)...');
+      try {
+        // Mark workout as discarded FIRST to prevent restoration after hot restart
+        await WorkoutForegroundService.markWorkoutAsDiscarded();
+        print('✅ Marked workout as discarded');
+
+        // Stop the service FIRST and wait for it to complete
+        await WorkoutForegroundService.stopWorkoutService();
+        print('✅ Stopped workout service');
+
+        // Clear the active workout notifier if it's currently active
+        if (isActiveWorkout) {
           activeWorkoutNotifier.value = null;
-          await WorkoutForegroundService.clearSavedWorkoutData();
-        } catch (e) {
-          print('Error clearing workout data during discard: $e');
-          // Still clear the active workout even if there was an error
+          print('✅ Cleared active workout notifier');
+        }
+
+        // Always clear saved data for temporary workouts or if saved data exists
+        await WorkoutForegroundService.clearSavedWorkoutData();
+        print('✅ Cleared saved workout data');
+
+        print('✅ Successfully discarded temporary workout with ID: $tempId');
+      } catch (e) {
+        print('❌ Error clearing workout data during discard: $e');
+        // Still clear the active workout even if there was an error
+        if (isActiveWorkout) {
           activeWorkoutNotifier.value = null;
         }
+        try {
+          await WorkoutForegroundService.clearSavedWorkoutData();
+          print('✅ Cleared saved workout data after error');
+        } catch (clearError) {
+          print('❌ Error clearing saved workout data: $clearError');
+        }
       }
+    } else {
+      print(
+          'ℹ️ Workout is not active, not temporary, and has no saved data - skipping cleanup');
     }
   }
 
@@ -1365,6 +1579,8 @@ class WorkoutService {
   // Restore saved workout from foreground service data
   Future<void> restoreSavedWorkout(Map<String, dynamic> savedData) async {
     try {
+      print('🔄 Restoring saved workout...');
+      
       final startTime = savedData['start_time'] as DateTime;
       final workoutName = savedData['workout_name'] as String;
 
@@ -1376,17 +1592,76 @@ class WorkoutService {
       final workoutData = savedData['workout_data'] as Map<String, dynamic>?;
       final workoutId = savedData['workout_id'] as int?;
       final isTemporary = savedData['is_temporary'] as bool? ?? false;
+      final completeState =
+          savedData['complete_state'] as Map<String, dynamic>?;
+
+      print(
+          'Restoration data: workoutId=$workoutId, isTemporary=$isTemporary, name=$workoutName');
 
       // Create active workout data for the notifier
-      final activeWorkoutData = {
-        'id': workoutId ?? -1, // Use saved workout ID or temporary ID
-        'name': workoutName,
-        'startTime': startTime,
-        'duration': actualElapsedSeconds,
-        'isTemporary': isTemporary,
-        'workoutData': workoutData ??
-            <String, dynamic>{}, // Use saved workout data if available
-      };
+      Map<String, dynamic> activeWorkoutData;
+
+      // If we have complete state, use it for exact restoration
+      if (completeState != null && completeState.containsKey('activeWorkout')) {
+        activeWorkoutData =
+            Map<String, dynamic>.from(completeState['activeWorkout']);
+
+        // Update the duration to account for time passed during app restart
+        final savedTimestamp = completeState['timestamp'] as int?;
+        if (savedTimestamp != null) {
+          final timePassed =
+              (DateTime.now().millisecondsSinceEpoch - savedTimestamp) ~/ 1000;
+          final savedDuration = activeWorkoutData['duration'] as int? ?? 0;
+          activeWorkoutData['duration'] = savedDuration + timePassed;
+        } else {
+          // Fallback to calculated elapsed time
+          activeWorkoutData['duration'] = actualElapsedSeconds;
+        }
+
+        // Ensure we have the correct workout ID and isTemporary flag from saved data
+        if (workoutId != null) {
+          activeWorkoutData['id'] = workoutId;
+        }
+        activeWorkoutData['isTemporary'] = isTemporary;
+
+        // Update rest timer state if it was active
+        final workoutDataFromState =
+            activeWorkoutData['workoutData'] as Map<String, dynamic>?;
+        if (workoutDataFromState?.containsKey('restTimerState') == true) {
+          final restState =
+              workoutDataFromState!['restTimerState'] as Map<String, dynamic>;
+          final bool isActive = restState['isActive'] as bool? ?? false;
+          final bool isPaused = restState['isPaused'] as bool? ?? false;
+
+          if (isActive && !isPaused) {
+            // Update rest timer remaining time based on real time elapsed
+            final restStartTime = restState['startTime'] as int?;
+            final originalTime = restState['originalTime'] as int? ?? 0;
+
+            if (restStartTime != null) {
+              final restElapsed =
+                  (DateTime.now().millisecondsSinceEpoch - restStartTime) ~/
+                      1000;
+              final newTimeRemaining =
+                  (originalTime - restElapsed).clamp(0, originalTime);
+              restState['timeRemaining'] = newTimeRemaining;
+            }
+          }
+        }
+
+        print('✅ Using complete state for exact restoration');
+      } else {
+        // Fallback to basic restoration
+        activeWorkoutData = {
+          'id': workoutId ?? -1, // Use saved workout ID or temporary ID
+          'name': workoutName,
+          'startTime': startTime,
+          'duration': actualElapsedSeconds,
+          'isTemporary': isTemporary,
+          'workoutData': workoutData ??
+              <String, dynamic>{}, // Use saved workout data if available
+        };
+      }
 
       // If we have complete workout data, restore to temporary workouts if needed
       if (isTemporary && workoutData != null && workoutId != null) {
@@ -1398,7 +1673,7 @@ class WorkoutService {
         final tempWorkoutData = {
           'name': workoutName,
           'date': DateTime.now().toIso8601String(),
-          'duration': actualElapsedSeconds,
+          'duration': activeWorkoutData['duration'],
           'exercises': workoutData['exercises'] ?? [],
         };
 
@@ -1406,16 +1681,16 @@ class WorkoutService {
         tempWorkoutsNotifier.value = tempWorkouts;
 
         print(
-            'Restored temporary workout to memory: $workoutName (ID: $workoutId)');
+            '✅ Restored temporary workout to memory: $workoutName (ID: $workoutId)');
       }
 
       // Set the active workout notifier
       activeWorkoutNotifier.value = activeWorkoutData;
 
       print(
-          'Restored active workout: $workoutName (${actualElapsedSeconds}s elapsed)');
+          '✅ Restored active workout: $workoutName (${activeWorkoutData['duration']}s elapsed, ID: ${activeWorkoutData['id'] ?? -1})');
     } catch (e) {
-      print('Error restoring saved workout: $e');
+      print('❌ Error restoring saved workout: $e');
     }
   }
 }

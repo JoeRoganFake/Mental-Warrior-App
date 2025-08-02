@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mental_warior/services/database_services.dart';
 
 // Handler for the foreground task
 @pragma('vm:entry-point')
@@ -42,8 +43,9 @@ class WorkoutForegroundTaskHandler extends TaskHandler {
   @override
   void onRepeatEvent(DateTime timestamp) {
     // Save workout data periodically, but only if not destroyed (either locally or globally)
+    // and if workout is not marked for discard
     if (!_isDestroyed && !WorkoutForegroundService._isDestroying) {
-      _saveWorkoutData();
+      _saveWorkoutData(); // This method now includes discard flag checking
     }
   }
 
@@ -109,6 +111,18 @@ class WorkoutForegroundTaskHandler extends TaskHandler {
     // Don't save if service is being destroyed (either locally or globally)
     if (_isDestroyed || WorkoutForegroundService._isDestroying) {
       return;
+    }
+    
+    // Check if workout was marked for discard - don't save discarded workouts
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final forDiscard = prefs.getBool('workout_for_discard') ?? false;
+      if (forDiscard) {
+        print('⚠️ Workout marked for discard - skipping save operation');
+        return;
+      }
+    } catch (e) {
+      print('❌ Error checking discard flag: $e');
     }
     
     try {
@@ -219,12 +233,23 @@ class WorkoutForegroundService {
   static Future<Map<String, dynamic>?> getSavedWorkoutData() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      
+      // Check if workout was marked for discard
+      final forDiscard = prefs.getBool('workout_for_discard') ?? false;
+      if (forDiscard) {
+        print(
+            '⚠️ Workout was marked for discard, clearing data and returning null');
+        await clearSavedWorkoutData();
+        return null;
+      }
+      
       final startTimeStr = prefs.getString('workout_start_time');
       final workoutName = prefs.getString('workout_name');
       final elapsedSeconds = prefs.getInt('workout_elapsed_seconds');
       final workoutDataStr = prefs.getString('workout_data');
       final workoutId = prefs.getInt('workout_id');
       final isTemporary = prefs.getBool('workout_is_temporary');
+      final completeStateStr = prefs.getString('workout_complete_state');
       
       if (startTimeStr != null && workoutName != null) {
         final result = {
@@ -248,6 +273,16 @@ class WorkoutForegroundService {
           result['is_temporary'] = isTemporary;
         }
         
+        // Add complete state if available for full restoration
+        if (completeStateStr != null) {
+          try {
+            final completeState = jsonDecode(completeStateStr);
+            result['complete_state'] = completeState;
+          } catch (e) {
+            print('Error parsing complete state: $e');
+          }
+        }
+        
         return result;
       }
     } catch (e) {
@@ -258,7 +293,39 @@ class WorkoutForegroundService {
 
   /// Clear saved workout data (useful for discarding workouts)
   static Future<void> clearSavedWorkoutData() async {
-    await _clearWorkoutData();
+    try {
+      print('Clearing saved workout data...');
+      await _clearWorkoutData();
+      print('Successfully cleared saved workout data');
+    } catch (e) {
+      print('Error in clearSavedWorkoutData: $e');
+      // Try to clear manually if the helper method fails
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('workout_start_time');
+        await prefs.remove('workout_name');
+        await prefs.remove('workout_elapsed_seconds');
+        await prefs.remove('workout_data');
+        await prefs.remove('workout_id');
+        await prefs.remove('workout_is_temporary');
+        await prefs.remove('workout_complete_state');
+        await prefs.remove('workout_for_discard');
+        print('Manually cleared saved workout data after error');
+      } catch (manualError) {
+        print('Failed to manually clear workout data: $manualError');
+      }
+    }
+  }
+
+  /// Mark workout as discarded to prevent restoration after hot restart
+  static Future<void> markWorkoutAsDiscarded() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('workout_for_discard', true);
+      print('✅ Marked workout as discarded - flag set to prevent restoration');
+    } catch (e) {
+      print('❌ Error marking workout as discarded: $e');
+    }
   }
 
   static Future<void> _storeWorkoutData(String workoutName, DateTime? startTime, {Map<String, dynamic>? workoutData, int? workoutId, bool? isTemporary}) async {
@@ -281,6 +348,17 @@ class WorkoutForegroundService {
         await prefs.setBool('workout_is_temporary', isTemporary);
       }
       
+      // Save complete workout state from active workout notifier for full restoration
+      final activeWorkout = WorkoutService.activeWorkoutNotifier.value;
+      if (activeWorkout != null) {
+        final completeState = {
+          'activeWorkout': activeWorkout,
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        };
+        await prefs.setString(
+            'workout_complete_state', jsonEncode(completeState));
+      }
+      
       print('Stored workout data: $workoutName starting at $workoutStartTime');
     } catch (e) {
       print('Error storing workout data: $e');
@@ -296,6 +374,9 @@ class WorkoutForegroundService {
       await prefs.remove('workout_data');
       await prefs.remove('workout_id');
       await prefs.remove('workout_is_temporary');
+      await prefs
+          .remove('workout_complete_state'); // Add complete state removal
+      await prefs.remove('workout_for_discard'); // Add discard flag removal
       print('Cleared stored workout data');
     } catch (e) {
       print('Error clearing workout data: $e');
