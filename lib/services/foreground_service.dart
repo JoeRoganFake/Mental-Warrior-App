@@ -85,10 +85,12 @@ class WorkoutForegroundTaskHandler extends TaskHandler {
     if (newElapsedSeconds != _elapsedSeconds) {
       _elapsedSeconds = newElapsedSeconds;
       
-      // Save data every 30 seconds, but only if not destroyed
-      // Note: Main auto-save is now handled by WorkoutSessionPage every 10 seconds
+      // Save data every 60 seconds, but only if not destroyed
+      // Note: Main auto-save is now handled by WorkoutSessionPage every 60 seconds
       // This is just a backup save for when the foreground service is running independently
-      if (!_isDestroyed && !WorkoutForegroundService._isDestroying && _elapsedSeconds % 30 == 0) {
+      if (!_isDestroyed &&
+          !WorkoutForegroundService._isDestroying &&
+          _elapsedSeconds % 60 == 0) {
         _saveWorkoutData();
       }
     }
@@ -144,24 +146,18 @@ class WorkoutForegroundTaskHandler extends TaskHandler {
         String restTimer = "No active rest";
 
         try {
-          // Read workout data from SharedPreferences (foreground service can't access activeWorkoutNotifier)
-          final workoutDataStr = prefs.getString('workout_data');
-          final completeStateStr = prefs.getString('workout_complete_state');
-
           Map<String, dynamic>? workoutData;
           Map<String, dynamic>? activeWorkoutState;
 
           // Try to get complete state first (most up-to-date)
+          final completeStateStr = prefs.getString('workout_complete_state');
           if (completeStateStr != null) {
             try {
-              final completeState =
-                  jsonDecode(completeStateStr) as Map<String, dynamic>;
-              final activeWorkout =
-                  completeState['activeWorkout'] as Map<String, dynamic>?;
+              final completeState = jsonDecode(completeStateStr) as Map<String, dynamic>;
+              final activeWorkout = completeState['activeWorkout'] as Map<String, dynamic>?;
               if (activeWorkout != null) {
                 activeWorkoutState = activeWorkout;
-                workoutData =
-                    activeWorkout['workoutData'] as Map<String, dynamic>?;
+                workoutData = activeWorkout['workoutData'] as Map<String, dynamic>?;
               }
             } catch (e) {
               print('Error parsing complete state: $e');
@@ -169,37 +165,23 @@ class WorkoutForegroundTaskHandler extends TaskHandler {
           }
 
           // Fallback to direct workout data if complete state not available
-          if (workoutData == null && workoutDataStr != null) {
-            try {
-              workoutData = jsonDecode(workoutDataStr) as Map<String, dynamic>;
-            } catch (e) {
-              print('Error parsing workout data: $e');
-            }
-          }
-
-          // 🔍 DEBUG: Show what workout data we parsed
-          print('🔍 FOREGROUND SERVICE PARSED DATA:');
-          print('   - workoutData exists: ${workoutData != null}');
-          print(
-              '   - activeWorkoutState exists: ${activeWorkoutState != null}');
-          if (workoutData != null) {
-            final exercises = workoutData['exercises'] as List?;
-            print('   - exercises in workoutData: ${exercises?.length ?? 0}');
-            if (exercises != null && exercises.isNotEmpty) {
-              print(
-                  '   - first exercise: ${exercises.first['name'] ?? 'No name'}');
+          if (workoutData == null) {
+            final workoutDataStr = prefs.getString('workout_data');
+            if (workoutDataStr != null) {
+              try {
+                workoutData = jsonDecode(workoutDataStr) as Map<String, dynamic>;
+              } catch (e) {
+                print('Error parsing workout data: $e');
+              }
             }
           }
 
           // Extract status information from active workout state
           if (activeWorkoutState != null) {
             final isRunning = activeWorkoutState['isRunning'] as bool? ?? false;
-            final currentRestSetId =
-                activeWorkoutState['currentRestSetId'] as int?;
-            final restTimeRemaining =
-                activeWorkoutState['restTimeRemaining'] as int? ?? 0;
-            final restPaused =
-                activeWorkoutState['restPaused'] as bool? ?? false;
+            final currentRestSetId = activeWorkoutState['currentRestSetId'] as int?;
+            final restTimeRemaining = activeWorkoutState['restTimeRemaining'] as int? ?? 0;
+            final restPaused = activeWorkoutState['restPaused'] as bool? ?? false;
 
             // Set workout status
             workoutStatus = isRunning ? "ACTIVE" : "PAUSED";
@@ -208,33 +190,28 @@ class WorkoutForegroundTaskHandler extends TaskHandler {
             if (currentRestSetId != null && restTimeRemaining > 0) {
               final minutes = restTimeRemaining ~/ 60;
               final seconds = restTimeRemaining % 60;
-              final timeStr =
-                  '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+              final timeStr = '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
               final status = restPaused ? 'PAUSED' : 'RUNNING';
               restTimer = '$timeStr remaining [$status]';
             }
           }
 
-          // Process exercise data
+          // Process exercise data - this should match the _serializeWorkoutData structure
           if (workoutData != null) {
             final exercises = workoutData['exercises'] as List?;
             if (exercises != null && exercises.isNotEmpty) {
               // Get exercise names
-              final exerciseNames =
-                  exercises.map((e) => e['name'] ?? 'Unknown').toList();
-              exerciseInfo =
-                  "${exercises.length} exercises: ${exerciseNames.join(', ')}";
+              final exerciseNames = exercises.map((e) => e['name'] ?? 'Unknown').toList();
+              exerciseInfo = "${exercises.length} exercises: ${exerciseNames.join(', ')}";
 
               // Find current exercise (first incomplete one)
               for (int i = 0; i < exercises.length; i++) {
                 final exercise = exercises[i] as Map<String, dynamic>;
                 final sets = exercise['sets'] as List? ?? [];
-                final incompleteSets =
-                    sets.where((s) => !(s['completed'] ?? false)).toList();
+                final incompleteSets = sets.where((s) => !(s['completed'] ?? false)).toList();
 
                 if (incompleteSets.isNotEmpty) {
-                  currentExercise =
-                      "${exercise['name']} (${sets.length - incompleteSets.length + 1}/${sets.length})";
+                  currentExercise = "${exercise['name']} (${sets.length - incompleteSets.length + 1}/${sets.length})";
                   break;
                 }
               }
@@ -245,8 +222,7 @@ class WorkoutForegroundTaskHandler extends TaskHandler {
               for (final exercise in exercises) {
                 final sets = (exercise['sets'] as List?) ?? [];
                 totalSets += sets.length;
-                completedSets +=
-                    sets.where((s) => s['completed'] ?? false).length;
+                completedSets += sets.where((s) => s['completed'] ?? false).length;
               }
               setsProgress = "$completedSets/$totalSets";
             }
