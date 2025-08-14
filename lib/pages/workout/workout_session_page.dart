@@ -58,7 +58,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   final Color _inputBgColor = Color(0xFF303136); // Input background
 
   // Default rest time
-  final int _defaultRestTime = 90; // 1:30 min  // Timer tracking variables
+  final int _defaultRestTime = 150; // 2:30 min  // Timer tracking variables
   DateTime? _workoutStartTime; // To track real-world time elapsed
   // Shared rest timer state
   final ValueNotifier<int> _restRemainingNotifier = ValueNotifier(0);
@@ -684,8 +684,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             _updateWorkoutDuration();
           }
           
-          // Save complete workout state every 30 seconds for hot restart recovery
-          if (_elapsedSeconds % 30 == 0) {
+          // ⏰ AUTO-SAVE: Save workout data to foreground service every minute as backup
+          if (_elapsedSeconds % 60 == 0) {
             _updateActiveNotifier();
           }
         }
@@ -741,6 +741,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
     }
   }
+
   String _formatTime(int seconds) {
     final duration = Duration(seconds: seconds);
     final minutes = duration.inMinutes;
@@ -1828,6 +1829,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   void _updateActiveNotifier() {
     if (_workout == null) return;
     final workoutData = _serializeWorkoutData();
+
+    
     WorkoutService.activeWorkoutNotifier.value = {
       'id': widget.workoutId,
       'name': _workout!.name,
@@ -1835,7 +1838,15 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       'isTemporary': widget.isTemporary,
       'workoutData': workoutData,
       'minimizedAt': DateTime.now().millisecondsSinceEpoch,
+      'isRunning': _isTimerRunning,
+      'currentRestSetId': _currentRestSetId,
+      'restTimeRemaining': _restTimeRemaining,
+      'restPaused': _restPausedNotifier.value,
     };
+    
+    // Update the foreground service with current workout data
+    // Always store to SharedPreferences for foreground service access
+    WorkoutForegroundService.updateWorkoutData(workoutData);
     
     // Save to persistent storage for app restart recovery
     _saveCompleteWorkoutState();
@@ -3469,6 +3480,13 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       ),
                     ),
                     textAlign: TextAlign.center,
+                    onChanged: (value) {
+                      // Save immediately when user types
+                      final weight = double.tryParse(value);
+                      if (weight != null && weight >= 0) {
+                        _updateSetData(set.id, weight, set.reps, set.restTime);
+                      }
+                    },
                     onSubmitted: (value) {
                       final weight = double.tryParse(value);
                       if (weight != null && weight >= 0) {
@@ -3505,6 +3523,13 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                           borderSide: BorderSide.none),
                     ),
                     textAlign: TextAlign.center,
+                    onChanged: (value) {
+                      // Save immediately when user types
+                      final reps = int.tryParse(value);
+                      if (reps != null && reps >= 0) {
+                        _updateSetData(set.id, set.weight, reps, set.restTime);
+                      }
+                    },
                     onSubmitted: (value) {
                       final reps = int.tryParse(value);
                       if (reps != null && reps >= 0) {

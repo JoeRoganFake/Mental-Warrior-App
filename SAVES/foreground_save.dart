@@ -466,6 +466,22 @@ class WorkoutForegroundService {
       Map<String, dynamic> workoutData) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+
+      // 🔍 DEBUG: Check what data we're storing
+      print('🔄 FOREGROUND SERVICE RECEIVING DATA:');
+      print('   - Workout data keys: ${workoutData.keys.toList()}');
+      print(
+          '   - Exercises count: ${(workoutData['exercises'] as List?)?.length ?? 0}');
+      if (workoutData['exercises'] != null) {
+        final exercises = workoutData['exercises'] as List;
+        if (exercises.isNotEmpty) {
+          print(
+              '   - First exercise name: ${exercises.first['name'] ?? 'No name'}');
+          print(
+              '   - First exercise sets: ${(exercises.first['sets'] as List?)?.length ?? 0}');
+        }
+      }
+
       await prefs.setString('workout_data', jsonEncode(workoutData));
 
       // Also update the complete workout state

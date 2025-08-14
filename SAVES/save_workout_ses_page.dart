@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
+import 'package:mental_warior/services/foreground_service.dart';
 import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/rest_timer_page.dart';
@@ -35,6 +37,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   Workout? _workout;
   bool _isLoading = true;
   bool _isTimerRunning = false;
+  bool _isDisposing = false; // Flag to prevent setState during disposal
   int _elapsedSeconds = 0;
   Timer? _timer;
   Timer? _restTimer;
@@ -55,7 +58,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   final Color _inputBgColor = Color(0xFF303136); // Input background
 
   // Default rest time
-  final int _defaultRestTime = 90; // 1:30 min  // Timer tracking variables
+  final int _defaultRestTime = 150; // 2:30 min  // Timer tracking variables
   DateTime? _workoutStartTime; // To track real-world time elapsed
   // Shared rest timer state
   final ValueNotifier<int> _restRemainingNotifier = ValueNotifier(0);
@@ -98,11 +101,19 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
       
 
-      // We're maximizing the workout now, so clear the notifier
-      // Defer clearing the notifier until after first frame
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        WorkoutService.activeWorkoutNotifier.value = null;
-      });
+      // Only clear the notifier if we're truly maximizing a minimized workout,
+      // not during a hot restart restoration
+      if (widget.restoredWorkoutData != null) {
+        // We're maximizing a minimized workout, so clear the notifier
+        // Defer clearing the notifier until after first frame
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          print(
+              "Clearing activeWorkoutNotifier after maximizing minimized workout");
+          WorkoutService.activeWorkoutNotifier.value = null;
+        });
+      } else {
+        print("Hot restart restoration - keeping activeWorkoutNotifier intact");
+      }
       
       // Start the timer with the restored elapsed seconds
       _startTimer();
@@ -139,8 +150,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // Load the workout AFTER setting up restoration flags
     _loadWorkout();
     
-    // Otherwise start a new timer if this is not in read-only mode
+    // If not minimized and not read-only, check for active session from database
     if (!widget.minimized && !widget.readOnly) {
+      _checkForActiveSessionFromDatabase();
+    } else if (!widget.minimized && !widget.readOnly) {
       _startTimer();
     }
   }
@@ -177,6 +190,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           'workoutData': workoutData,
           'backgroundedAt': DateTime.now().millisecondsSinceEpoch,
         };
+        
+        // Also update the foreground service with the latest workout data
+        if (WorkoutForegroundService.isServiceRunning) {
+          WorkoutForegroundService.startWorkoutService(
+            _workout!.name,
+            startTime: _workoutStartTime,
+            workoutData: workoutData,
+            workoutId: widget.workoutId,
+            isTemporary: widget.isTemporary,
+          );
+        }
       }
     } else if (state == AppLifecycleState.resumed) {
       // App is coming back to foreground
@@ -222,7 +246,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         if (_restTimer == null && _restTimeRemaining > 0) {
           // Restart the timer with real-world time tracking
           _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-            if (!mounted || _restPausedNotifier.value) return;
+            if (!mounted || _isDisposing || _restPausedNotifier.value) return;
 
             if (_restStartTime != null) {
               final elapsed =
@@ -231,18 +255,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   (_originalRestTime - elapsed).clamp(0, _originalRestTime);
 
               if (newTimeRemaining != _restRemainingNotifier.value) {
-                setState(() {
-                  _restRemainingNotifier.value = newTimeRemaining;
-                  _restTimeRemaining = newTimeRemaining;
-                });
-                _updateActiveNotifier();
+                if (mounted && !_isDisposing) {
+                  setState(() {
+                    _restRemainingNotifier.value = newTimeRemaining;
+                    _restTimeRemaining = newTimeRemaining;
+                  });
+                  _updateActiveNotifier();
+                }
               }
 
               if (newTimeRemaining <= 0) {
                 timer.cancel();
                 _restTimer = null;
                 _playBoxingBellSound();
-                if (mounted) {
+                if (mounted && !_isDisposing) {
                   setState(() {
                     _currentRestSetId = null;
                     _restStartTime = null;
@@ -266,6 +292,15 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   
   @override
   void dispose() {
+    // Set disposal flag to prevent any setState calls
+    _isDisposing = true;
+
+    // Cancel timers immediately to prevent callbacks during disposal
+    _timer?.cancel();
+    _timer = null;
+    _restTimer?.cancel();
+    _restTimer = null;
+    
     // Remove lifecycle observer
     WidgetsBinding.instance.removeObserver(this);
     
@@ -273,8 +308,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // Use our explicit flag rather than checking the notifier
     if (!_isMinimizing) {
       print("Dispose: Stopping timers as we're closing the workout");
-      _stopTimer();
-      _cancelRestTimer();
+      // Note: timers already cancelled above, just clean up foreground service
+      WorkoutForegroundService.stopWorkoutService();
+      
+      // Clear the active session from database if we're truly closing the workout
+      _clearActiveSessionFromDatabase();
     } else {
       // If we're minimizing, make sure we have the latest data for the workout timer
       if (_workoutStartTime != null && _isTimerRunning) {
@@ -301,20 +339,35 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
     
     // If this was a temporary workout and we're navigating away without saving,
-    // discard the temporary workout
-    if (widget.isTemporary && mounted) {
+    // discard the temporary workout (but not if we're minimizing)
+    if (widget.isTemporary && mounted && !_isMinimizing) {
       // Check if any exercises were added
       bool hasExercises = _workout?.exercises.isNotEmpty ?? false;
 
-      // If nothing was added, just discard it
+      // If nothing was added, just discard it (fire and forget)
       if (!hasExercises) {
+        print(
+            '🗑️ WorkoutSessionPage: Disposing empty temporary workout with ID: ${widget.workoutId}');
         _workoutService.discardTemporaryWorkout(widget.workoutId);
+      } else {
+        print(
+            'ℹ️ WorkoutSessionPage: Not discarding temporary workout ${widget.workoutId} - has exercises');
       }
     }
     
     // Release audio player resources
     _audioPlayer.dispose();
     super.dispose();
+  }
+
+  // Clear active session from database (when workout is completed or discarded)
+  Future<void> _clearActiveSessionFromDatabase() async {
+    try {
+      await _workoutService.clearActiveWorkoutSessions();
+      print('Active session cleared from database');
+    } catch (e) {
+      print('Error clearing active session: $e');
+    }
   }
 
   void _loadWorkout() async {
@@ -326,16 +379,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       Workout? workout;
       // Check if this is a temporary workout
       if (widget.isTemporary) {
-        // Get temporary workout data from memory
-        final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
-        if (tempWorkouts.containsKey(widget.workoutId)) {
-          final tempData = tempWorkouts[widget.workoutId];
+        // If we're restoring from minimized state and have saved workout data, use it directly
+        if (_isRestoringFromMinimized && _savedWorkoutData != null) {
+          final savedExercisesData = _savedWorkoutData!['exercises'] as List?;
 
-          // Build exercises list from temp workout data
+          // Build exercises list from saved workout data instead of temp storage
           List<Exercise> exercises = [];
-          if (tempData.containsKey('exercises') &&
-              tempData['exercises'] is List) {
-            for (var exerciseData in tempData['exercises']) {
+          if (savedExercisesData != null) {
+            for (var exerciseData in savedExercisesData) {
               final exerciseId = exerciseData['id'] ??
                   -(DateTime.now().millisecondsSinceEpoch);
 
@@ -369,18 +420,77 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             }
           }
 
-          // Create a Workout object from temporary data
+          // Get basic workout info from temp storage
+          final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+          final tempData = tempWorkouts[widget.workoutId];
+
+          // Create a Workout object using saved exercise data but temp workout info
           workout = Workout(
             id: widget.workoutId,
-            name: tempData['name'],
-            date: tempData['date'],
-            duration: tempData['duration'],
-            exercises: exercises, // Now properly loaded from temp data
+            name: tempData?['name'] ?? 'Workout',
+            date: tempData?['date'] ?? DateTime.now(),
+            duration: tempData?['duration'] ?? 0,
+            exercises: exercises, // Use exercises from saved data
           );
+        } else {
+          // Normal temporary workout loading from temp storage
+          final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+          if (tempWorkouts.containsKey(widget.workoutId)) {
+            final tempData = tempWorkouts[widget.workoutId];
+
+            // Build exercises list from temp workout data
+            List<Exercise> exercises = [];
+            if (tempData.containsKey('exercises') &&
+                tempData['exercises'] is List) {
+              for (var exerciseData in tempData['exercises']) {
+                final exerciseId = exerciseData['id'] ??
+                    -(DateTime.now().millisecondsSinceEpoch);
+
+                // Build sets list for this exercise
+                List<ExerciseSet> sets = [];
+                if (exerciseData.containsKey('sets') &&
+                    exerciseData['sets'] is List) {
+                  for (var setData in exerciseData['sets']) {
+                    final setId = setData['id'] ??
+                        -(DateTime.now().millisecondsSinceEpoch);
+                    sets.add(ExerciseSet(
+                      id: setId,
+                      exerciseId: exerciseId,
+                      setNumber: setData['setNumber'] ?? 1,
+                      weight: setData['weight'] ?? 0,
+                      reps: setData['reps'] ?? 0,
+                      restTime: setData['restTime'] ?? _defaultRestTime,
+                      completed: setData['completed'] ?? false,
+                    ));
+                  }
+                }
+
+                // Add exercise with its sets
+                exercises.add(Exercise(
+                  id: exerciseId,
+                  workoutId: widget.workoutId,
+                  name: exerciseData['name'] ?? 'Exercise',
+                  equipment: exerciseData['equipment'] ?? '',
+                  sets: sets,
+                ));
+              }
+            }
+
+            // Create a Workout object from temporary data
+            workout = Workout(
+              id: widget.workoutId,
+              name: tempData['name'],
+              date: tempData['date'],
+              duration: tempData['duration'],
+              exercises: exercises, // Now properly loaded from temp data
+            );
+          }
         }
       } else {
         // Regular database workout
         workout = await _workoutService.getWorkout(widget.workoutId);
+        print(
+            'LOAD DEBUG: Loaded workout from database - exercises count: ${workout?.exercises.length ?? 0}');
       }
 
       if (workout != null) {
@@ -395,13 +505,30 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               _elapsedSeconds = workout.duration;
             }
             _isLoading = false;
+            
+            // Initialize all controllers for all sets after workout is loaded
+            _initializeAllControllers();
+            
             // If we're restoring from minimized state, apply the saved data
             if (_isRestoringFromMinimized && _savedWorkoutData != null) {
               print(
+                  "LOAD DEBUG: Starting restoration - workout has ${_workout!.exercises.length} exercises");
+              print(
                   "Saved workout data contains rest timer: ${_savedWorkoutData!.containsKey('restTimerState')}");
+              print(
+                  "Saved workout data exercises count: ${(_savedWorkoutData!['exercises'] as List?)?.length ?? 0}");
 
-              // Restore the data immediately instead of using a delay
-              _restoreWorkoutData(_savedWorkoutData!);
+              // For temporary workouts, exercises are already loaded from saved data
+              // Only restore rest timer state and initialize controllers with saved values
+              if (widget.isTemporary) {
+                // Initialize controllers with values from saved data
+                _initializeControllersFromSavedData(_savedWorkoutData!);
+                // Only restore rest timer state for temporary workouts
+                _restoreRestTimerOnly(_savedWorkoutData!);
+              } else {
+                // For regular workouts, restore all data including exercises
+                _restoreWorkoutData(_savedWorkoutData!);
+              }
               
               // Restart workout timer after restoration
               if (!_isTimerRunning) {
@@ -409,9 +536,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               }
 
               // Reset flags AFTER restoration is complete
-              // (the _restoreWorkoutData method will also reset _isRestoringFromMinimized at the end)
               _savedWorkoutData = null;
-
+              _isRestoringFromMinimized = false;
             }
           });
         }
@@ -428,6 +554,88 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
     }
   }
+  
+  // Helper method to initialize controllers for all sets in the workout
+  void _initializeAllControllers() {
+    if (_workout == null) return;
+
+    for (final exercise in _workout!.exercises) {
+      for (final set in exercise.sets) {
+        // Initialize weight controller if it doesn't exist
+        if (!_weightControllers.containsKey(set.id)) {
+          String initialWeightText = '';
+          if (set.weight > 0) {
+            initialWeightText = (set.weight % 1 == 0)
+                ? set.weight.toInt().toString()
+                : set.weight.toString();
+          }
+          _weightControllers[set.id] =
+              TextEditingController(text: initialWeightText);
+        }
+
+        // Initialize reps controller if it doesn't exist
+        if (!_repsControllers.containsKey(set.id)) {
+          String initialRepsText = '';
+          if (set.reps > 0) {
+            initialRepsText = set.reps.toString();
+          }
+          _repsControllers[set.id] =
+              TextEditingController(text: initialRepsText);
+        }
+      }
+    }
+  }
+
+  // Check for active workout session from database and restore if found
+  Future<void> _checkForActiveSessionFromDatabase() async {
+    try {
+      final activeSession = await _workoutService.getActiveWorkoutSession();
+
+      if (activeSession != null) {
+        final sessionWorkoutId = activeSession['workoutId'] as int;
+
+        // Only restore if this is the same workout ID
+        if (sessionWorkoutId == widget.workoutId) {
+          print(
+              'Found active session for workout ${widget.workoutId}, restoring...');
+
+          // Restore elapsed time
+          _elapsedSeconds = activeSession['elapsedSeconds'] as int;
+
+          // Restore start time if available
+          final startTime = activeSession['startTime'] as DateTime?;
+          if (startTime != null) {
+            _workoutStartTime = startTime;
+          }
+
+          // Parse and restore workout data
+          final workoutDataString = activeSession['workoutData'] as String;
+          final workoutData =
+              jsonDecode(workoutDataString) as Map<String, dynamic>;
+
+          // Set up restoration
+          _isRestoringFromMinimized = true;
+          _savedWorkoutData = workoutData;
+
+          // Start timer with restored state
+          _startTimer();
+
+          print('Active session restored successfully');
+        } else {
+          // Different workout, clear the session and start fresh
+          await _workoutService.clearActiveWorkoutSessions();
+          _startTimer();
+        }
+      } else {
+        // No active session, start fresh
+        _startTimer();
+      }
+    } catch (e) {
+      print('Error checking for active session: $e');
+      // Fall back to starting fresh
+      _startTimer();
+    }
+  }
 
   void _startTimer() {
     if (_isTimerRunning) return;
@@ -440,6 +648,21 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       _isTimerRunning = true;
     });
 
+    // Save initial workout state to database when timer starts
+    _updateActiveNotifier();
+
+    // Start the foreground service to keep workout running in background
+    if (_workout != null) {
+      final workoutData = _serializeWorkoutData();
+      WorkoutForegroundService.startWorkoutService(
+        _workout!.name,
+        startTime: _workoutStartTime,
+        workoutData: workoutData,
+        workoutId: widget.workoutId,
+        isTemporary: widget.isTemporary,
+      );
+    }
+
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       // Calculate elapsed time based on real-world time difference
       // This allows the timer to accurately track time even when the app is in background
@@ -451,10 +674,15 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         // Update the elapsed seconds based on the actual time difference
         _elapsedSeconds = newElapsedSeconds;
 
-        // Only update UI if the widget is still mounted
-        if (mounted) {
+        // Only update UI if the widget is still mounted and not disposing
+        if (mounted && !_isDisposing) {
           // Update timer display without rebuilding the entire widget
           setState(() {});
+          
+          // ✅ UPDATE: Send fresh workout data to foreground service every 10 seconds
+          if (_elapsedSeconds % 10 == 0) {
+            _updateActiveNotifier();
+          }
           
           // Update workout duration in database less frequently
           if (_elapsedSeconds % 15 == 0) {
@@ -470,19 +698,23 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       _timer = null;
     }
 
+    // Stop the foreground service
+    WorkoutForegroundService.stopWorkoutService();
+
     // Before stopping timer, ensure we have the most accurate elapsed time
     if (_workoutStartTime != null) {
       _elapsedSeconds = DateTime.now().difference(_workoutStartTime!).inSeconds;
     }
 
-    if (mounted) {
+    // Only update UI state if widget is still mounted and not being disposed
+    if (mounted && !_isDisposing) {
       setState(() {
         _isTimerRunning = false;
       });
+      
+      // Final update to the workout duration only if still mounted
+      _updateWorkoutDuration();
     }
-
-    // Final update to the workout duration
-    _updateWorkoutDuration();
   }
   void _updateWorkoutDuration() {
     // Update workout duration 
@@ -509,6 +741,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
     }
   }
+
   String _formatTime(int seconds) {
     final duration = Duration(seconds: seconds);
     final minutes = duration.inMinutes;
@@ -590,7 +823,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     
     _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       // Skip if not mounted or paused
-      if (!mounted || _restPausedNotifier.value) return;
+      if (!mounted || _isDisposing || _restPausedNotifier.value) return;
       
       // Calculate remaining time based on real-world time difference (like workout timer)
       if (_restStartTime != null) {
@@ -599,12 +832,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             (_originalRestTime - elapsed).clamp(0, _originalRestTime);
 
         if (newTimeRemaining != _restRemainingNotifier.value) {
-          setState(() {
-            _restTimeRemaining = newTimeRemaining;
-            _restRemainingNotifier.value = newTimeRemaining;
-          });
-          // Update shared notifier so minimized bar reflects new time
-          _updateActiveNotifier();
+          if (mounted && !_isDisposing) {
+            setState(() {
+              _restTimeRemaining = newTimeRemaining;
+              _restRemainingNotifier.value = newTimeRemaining;
+            });
+            // Update shared notifier so minimized bar reflects new time
+            _updateActiveNotifier();
+          }
         }
         
         // Check if timer finished
@@ -613,7 +848,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           _restTimer = null;
           // Play the boxing bell sound when timer finishes - this will work even in background
           _playBoxingBellSound();
-          if (mounted) {
+          if (mounted && !_isDisposing) {
             setState(() {
               _currentRestSetId = null;
               _restStartTime = null;
@@ -641,7 +876,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
     }
     
-    if (mounted) {
+    // Only update UI state if widget is still mounted
+    if (mounted && !_isDisposing) {
       setState(() {
         _restTimeRemaining = 0;
         _currentRestSetId = null;
@@ -649,10 +885,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         _restPausedNotifier.value = false;
         _restRemainingNotifier.value = 0;
       });
+      
+      // Update the active workout notifier to reflect the rest timer state change
+      _updateActiveNotifier();
     }
-    
-    // Update the active workout notifier to reflect the rest timer state change
-    _updateActiveNotifier();
   }
   void _togglePauseRest() {
     if (_restPausedNotifier.value) {
@@ -787,6 +1023,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         );
 
         _loadWorkout();
+        
+        // Auto-save the workout state after adding an exercise
+        _updateActiveNotifier();
       } catch (e) {
         if (mounted) {
           _showSnackBar('Error adding exercise: $e', isError: true);
@@ -876,6 +1115,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         setState(() {
           _workout!.exercises[exerciseIndex].sets.add(newSet);
         });
+        
+        // Auto-save the workout state after adding a set
+        _updateActiveNotifier();
       } else {
         // If we couldn't get the new set ID, fall back to full reload
         _loadWorkout();
@@ -938,6 +1180,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
           WorkoutService.workoutsUpdatedNotifier.value =
               !WorkoutService.workoutsUpdatedNotifier.value;
+          // Auto-save the workout state after updating set completion
+          _updateActiveNotifier();
         }
       }
     } else {
@@ -951,6 +1195,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       );
       WorkoutService.workoutsUpdatedNotifier.value =
           !WorkoutService.workoutsUpdatedNotifier.value;
+      // Auto-save the workout state after updating set completion
+      _updateActiveNotifier();
     }
   }
 
@@ -1043,6 +1289,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // Notify listeners in either case
     WorkoutService.workoutsUpdatedNotifier.value =
         !WorkoutService.workoutsUpdatedNotifier.value;
+    
+    // Auto-save the workout state after updating set data
+    _updateActiveNotifier();
   }
 
 
@@ -1397,22 +1646,76 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   void _updateExerciseDataFromControllers() {
     if (_workout == null) return;
     
+    // Track if any changes were made
+    bool hasChanges = false;
+    
     // Update all sets with current values from controllers
     for (final exercise in _workout!.exercises) {
       for (final set in exercise.sets) {
+        double originalWeight = set.weight;
+        int originalReps = set.reps;
+        
         // Get data from controllers if they exist
         if (_weightControllers.containsKey(set.id)) {
           final weightText = _weightControllers[set.id]!.text.trim();
           if (weightText.isNotEmpty) {
-            set.weight = double.tryParse(weightText) ?? 0;
+            final newWeight = double.tryParse(weightText) ?? 0;
+            if (newWeight != originalWeight) {
+              set.weight = newWeight;
+              hasChanges = true;
+            }
           }
         }
         
         if (_repsControllers.containsKey(set.id)) {
           final repsText = _repsControllers[set.id]!.text.trim();
           if (repsText.isNotEmpty) {
-            set.reps = int.tryParse(repsText) ?? 0;
+            final newReps = int.tryParse(repsText) ?? 0;
+            if (newReps != originalReps) {
+              set.reps = newReps;
+              hasChanges = true;
+            }
           }
+        }
+
+        // If changes were made, persist them to database/temp storage immediately
+        // Use direct database update to avoid recursive calls to _updateActiveNotifier
+        if (hasChanges &&
+            (set.weight != originalWeight || set.reps != originalReps)) {
+          // Direct database update without calling _updateSetData to avoid recursion
+          if (widget.isTemporary || set.id < 0) {
+            // Update temporary workout in memory
+            final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+            if (tempWorkouts.containsKey(widget.workoutId)) {
+              final exercises = tempWorkouts[widget.workoutId]['exercises'];
+              for (var i = 0; i < exercises.length; i++) {
+                final sets = exercises[i]['sets'];
+                for (var j = 0; j < sets.length; j++) {
+                  if (sets[j]['id'] == set.id) {
+                    sets[j]['weight'] = set.weight;
+                    sets[j]['reps'] = set.reps;
+                    break;
+                  }
+                }
+              }
+              WorkoutService.tempWorkoutsNotifier.value =
+                  Map.from(tempWorkouts);
+            }
+          } else {
+            // Update regular workout in database asynchronously
+            DatabaseService.instance.database.then((db) {
+              db.update(
+                'exercise_sets',
+                {
+                  'weight': set.weight,
+                  'reps': set.reps,
+                },
+                where: 'id = ?',
+                whereArgs: [set.id],
+              );
+            });
+          }
+          hasChanges = false; // Reset flag for next set
         }
       }
     }
@@ -1421,6 +1724,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     if (widget.isTemporary) {
       _updateTemporaryWorkoutData();
     }
+    
+    // Auto-save the complete workout state
+    _updateActiveNotifier();
   }
   
   // Helper method to update temporary workout data to ensure consistency
@@ -1484,11 +1790,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       },
     };
     
-    // Debug: Log what we're serializing
-    print(
-        "SERIALIZE DEBUG: Rest timer state - isActive: ${_currentRestSetId != null}, SetId: $_currentRestSetId, TimeRemaining: $_restTimeRemaining");
+
     
-    if (_workout == null) return workoutData;
+    if (_workout == null) {
+      return workoutData;
+    }
     
     // Serialize all exercises and their sets
     for (final exercise in _workout!.exercises) {
@@ -1523,6 +1829,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   void _updateActiveNotifier() {
     if (_workout == null) return;
     final workoutData = _serializeWorkoutData();
+
+    
     WorkoutService.activeWorkoutNotifier.value = {
       'id': widget.workoutId,
       'name': _workout!.name,
@@ -1530,10 +1838,53 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       'isTemporary': widget.isTemporary,
       'workoutData': workoutData,
       'minimizedAt': DateTime.now().millisecondsSinceEpoch,
+      'isRunning': _isTimerRunning,
+      'currentRestSetId': _currentRestSetId,
+      'restTimeRemaining': _restTimeRemaining,
+      'restPaused': _restPausedNotifier.value,
     };
+    
+    // Update the foreground service with current workout data
+    // Always store to SharedPreferences for foreground service access
+    WorkoutForegroundService.updateWorkoutData(workoutData);
+    
+    // Save to persistent storage for app restart recovery
+    _saveCompleteWorkoutState();
+  }
+
+  // Save complete workout state to persistent storage for hot restart recovery
+  Future<void> _saveCompleteWorkoutState() async {
+    if (_workout == null) return;
+
+    try {
+      final workoutData = _serializeWorkoutData();
+
+      // Save to database for persistent storage across app restarts
+      await _workoutService.updateActiveWorkoutSession(
+        workoutId: widget.workoutId,
+        workoutData: jsonEncode(workoutData),
+        elapsedSeconds: _elapsedSeconds,
+      );
+
+      // Always save to foreground service to ensure workout state is preserved
+      await WorkoutForegroundService.startWorkoutService(
+        _workout!.name,
+        startTime: _workoutStartTime,
+        workoutData: workoutData,
+        workoutId: widget.workoutId,
+        isTemporary: widget.isTemporary,
+      );
+    } catch (e) {
+      print('Error saving complete workout state: $e');
+    }
   } // Helper method to restore workout data from serialized format
   void _restoreWorkoutData(Map<String, dynamic> workoutData) {
-
+    print('RESTORE DEBUG: Starting restoration process');
+    print('RESTORE DEBUG: Workout is null: ${_workout == null}');
+    print(
+        'RESTORE DEBUG: Workout exercises count: ${_workout?.exercises.length ?? 0}');
+    print(
+        'RESTORE DEBUG: Saved exercises count: ${(workoutData['exercises'] as List?)?.length ?? 0}');
 
     if (_workout == null || workoutData['exercises'] == null) {
       print("RESTORE DEBUG: Early return - workout or exercises is null");
@@ -1560,8 +1911,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             restState['originalTime'] as int? ?? timeRemaining;
         final int? startTimeMs = restState['startTime'] as int?;
 
-        print(
-            "RESTORE DEBUG: SetID: $setId, TimeRemaining: $timeRemaining, IsPaused: $isPaused, OriginalTime: $originalTime");
+
 
         // If timer was active (not paused) and we have a start time, adjust for time passed
         if (!isPaused && startTimeMs != null) {
@@ -1632,7 +1982,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             print("RESTORE DEBUG: Starting rest timer (not paused)");
             // Create a new timer that updates the UI like the workout timer
             _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-              if (!mounted || _restPausedNotifier.value) return;
+              if (!mounted || _isDisposing || _restPausedNotifier.value) return;
 
               if (_restStartTime != null) {
                 final elapsed =
@@ -1641,18 +1991,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     (_originalRestTime - elapsed).clamp(0, _originalRestTime);
 
                 if (newTimeRemaining != _restRemainingNotifier.value) {
-                  setState(() {
-                    _restRemainingNotifier.value = newTimeRemaining;
-                    _restTimeRemaining = newTimeRemaining;
-                  });
-                  _updateActiveNotifier();
+                  if (mounted && !_isDisposing) {
+                    setState(() {
+                      _restRemainingNotifier.value = newTimeRemaining;
+                      _restTimeRemaining = newTimeRemaining;
+                    });
+                    _updateActiveNotifier();
+                  }
                 }
 
                 if (newTimeRemaining <= 0) {
                   timer.cancel();
                   _restTimer = null;
                   _playBoxingBellSound();
-                  if (mounted) {
+                  if (mounted && !_isDisposing) {
                     setState(() {
                       _currentRestSetId = null;
                       _restStartTime = null;
@@ -1742,13 +2094,142 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     print("RESTORE DEBUG: Restoration completed and flag cleared");
   }
 
+  // Helper method to initialize controllers with values from saved workout data
+  void _initializeControllersFromSavedData(Map<String, dynamic> workoutData) {
+    final List<dynamic> exercisesData = workoutData['exercises'] ?? [];
+
+    for (final exerciseData in exercisesData) {
+      final List<dynamic> setsData = exerciseData['sets'] ?? [];
+
+      for (final setData in setsData) {
+        final int setId = setData['id'];
+        final double weight = (setData['weight'] ?? 0).toDouble();
+        final int reps = setData['reps'] ?? 0;
+
+        // Initialize weight controller if it doesn't exist
+        if (!_weightControllers.containsKey(setId)) {
+          _weightControllers[setId] = TextEditingController();
+        }
+
+        // Initialize reps controller if it doesn't exist
+        if (!_repsControllers.containsKey(setId)) {
+          _repsControllers[setId] = TextEditingController();
+        }
+
+        // Set controller values from saved data
+        final weightText =
+            (weight % 1 == 0) ? weight.toInt().toString() : weight.toString();
+        _weightControllers[setId]!.text = weight > 0 ? weightText : '';
+        _repsControllers[setId]!.text = reps > 0 ? reps.toString() : '';
+      }
+    }
+  }
+
+  // Helper method to restore only rest timer state (for temporary workouts with exercises already loaded)
+  void _restoreRestTimerOnly(Map<String, dynamic> workoutData) {
+    print('RESTORE DEBUG: Restoring rest timer only');
+
+    // Restore rest timer state if it was active
+    if (workoutData.containsKey('restTimerState')) {
+      final restState = workoutData['restTimerState'] as Map<String, dynamic>;
+      final bool isActive = restState['isActive'] as bool? ?? false;
+
+      if (isActive && restState['setId'] != null) {
+        final int setId = restState['setId'] as int;
+        int timeRemaining = restState['timeRemaining'] as int;
+        final bool isPaused = restState['isPaused'] as bool? ?? false;
+        final int originalTime =
+            restState['originalTime'] as int? ?? timeRemaining;
+        final int? startTimeMs = restState['startTime'] as int?;
+
+        // If timer was active (not paused) and we have a start time, adjust for time passed
+        if (!isPaused && startTimeMs != null) {
+          final restStartTime =
+              DateTime.fromMillisecondsSinceEpoch(startTimeMs);
+          final elapsed = DateTime.now().difference(restStartTime).inSeconds;
+          timeRemaining = (originalTime - elapsed).clamp(0, originalTime);
+        } else if (!isPaused && restState.containsKey('timestamp')) {
+          final int timestampMs = restState['timestamp'] as int;
+          final int elapsedSinceTimestamp =
+              (DateTime.now().millisecondsSinceEpoch - timestampMs) ~/ 1000;
+          timeRemaining =
+              (timeRemaining - elapsedSinceTimestamp).clamp(0, timeRemaining);
+        }
+
+        // If timer completed while minimized, play sound once
+        if (!isPaused && timeRemaining <= 0) {
+          _playBoxingBellSound();
+          setState(() {
+            _currentRestSetId = null;
+            _restTimeRemaining = 0;
+            _restRemainingNotifier.value = 0;
+            _restStartTime = null;
+          });
+        } else if (timeRemaining > 0) {
+          // Restore rest start time for continuous tracking
+          if (startTimeMs != null) {
+            _restStartTime = DateTime.fromMillisecondsSinceEpoch(startTimeMs);
+          } else {
+            _restStartTime = DateTime.now()
+                .subtract(Duration(seconds: originalTime - timeRemaining));
+          }
+
+          // Restore all rest timer state
+          setState(() {
+            _currentRestSetId = setId;
+            _restTimeRemaining = timeRemaining;
+            _originalRestTime = originalTime;
+            _restRemainingNotifier.value = timeRemaining;
+            _restPausedNotifier.value = isPaused;
+          });
+
+          // Only start the timer if it's not paused
+          if (!isPaused) {
+            _restTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+              if (!mounted || _isDisposing || _restPausedNotifier.value) return;
+
+              if (_restStartTime != null) {
+                final elapsed =
+                    DateTime.now().difference(_restStartTime!).inSeconds;
+                final newTimeRemaining =
+                    (_originalRestTime - elapsed).clamp(0, _originalRestTime);
+
+                if (newTimeRemaining != _restRemainingNotifier.value) {
+                  if (mounted && !_isDisposing) {
+                    setState(() {
+                      _restTimeRemaining = newTimeRemaining;
+                      _restRemainingNotifier.value = newTimeRemaining;
+                    });
+                    _updateActiveNotifier();
+                  }
+                }
+
+                if (newTimeRemaining <= 0) {
+                  timer.cancel();
+                  _restTimer = null;
+                  _playBoxingBellSound();
+                  if (mounted && !_isDisposing) {
+                    setState(() {
+                      _currentRestSetId = null;
+                      _restStartTime = null;
+                    });
+                  }
+                  _updateActiveNotifier();
+                }
+              }
+            });
+          }
+
+          _updateActiveNotifier();
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Debug: Check rest timer state during build
-    if (_currentRestSetId != null) {
-      print(
-          "BUILD DEBUG: Rest timer active - SetId: $_currentRestSetId, TimeRemaining: $_restTimeRemaining");
-    }
+
+
     
     return WillPopScope(
         onWillPop: () async {
@@ -1757,8 +2238,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             return true; // Allow pop to proceed normally
           }
 
-          // Only minimize active workouts if we have data to save
-          if (_workout != null && _workout!.exercises.isNotEmpty) {
+          // Minimize active workouts regardless of whether they have exercises
+          if (_workout != null) {
             // Set the minimizing flag to prevent timer cancellation in dispose()
             _isMinimizing = true;
 
@@ -1785,6 +2266,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               'minimizedAt': DateTime.now()
                   .millisecondsSinceEpoch, // Track when it was minimized
             };
+            
+            // Update the foreground service with the latest workout data
+            if (WorkoutForegroundService.isServiceRunning) {
+              WorkoutForegroundService.startWorkoutService(
+                _workout!.name,
+                startTime: _workoutStartTime,
+                workoutData: workoutData,
+                workoutId: widget.workoutId,
+                isTemporary: widget.isTemporary,
+              );
+            }
 
             print(
                 "Minimizing workout via system back - saving rest timer state");
@@ -1804,8 +2296,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   Navigator.of(context).pop();
                   return;
                 }
-                // Minimize and keep timers running
-                if (_workout != null && _workout!.exercises.isNotEmpty) {
+                // Minimize and keep timers running for any active workout
+                if (_workout != null) {
                   _isMinimizing = true;
                   _updateExerciseDataFromControllers();
                   final workoutData = _serializeWorkoutData();
@@ -1821,6 +2313,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     'workoutData': workoutData,
                     'minimizedAt': DateTime.now().millisecondsSinceEpoch,
                   };
+                  
+                  // Update the foreground service with the latest workout data
+                  if (WorkoutForegroundService.isServiceRunning) {
+                    WorkoutForegroundService.startWorkoutService(
+                      _workout!.name,
+                      startTime: _workoutStartTime,
+                      workoutData: workoutData,
+                      workoutId: widget.workoutId,
+                      isTemporary: widget.isTemporary,
+                    );
+                  }
                 }
                 Navigator.of(context).pop();
               },
@@ -1834,6 +2337,88 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         ),
         actions: [
           if (!widget.readOnly)
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert, color: _textPrimaryColor),
+                  color: _surfaceColor,
+                  onSelected: (value) async {
+                    if (value == 'discard') {
+                      // Show confirmation dialog for discarding workout
+                      bool confirmDiscard = await showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              backgroundColor: _surfaceColor,
+                              title: Text('Discard Workout',
+                                  style: TextStyle(color: _textPrimaryColor)),
+                              content: Text(
+                                'Are you sure you want to discard this workout? This action cannot be undone and your progress will be lost.',
+                                style: TextStyle(color: _textSecondaryColor),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context, false),
+                                  child: Text('Cancel',
+                                      style: TextStyle(
+                                          color: _textSecondaryColor)),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _dangerColor,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: Text('Discard'),
+                                ),
+                              ],
+                            ),
+                          ) ??
+                          false;
+
+                      if (confirmDiscard) {
+                        // Mark workout as discarded for foreground service to prevent restoration
+                        await WorkoutForegroundService.markWorkoutAsDiscarded();
+
+                        // Discard the workout using the same logic as existing discard methods
+                        if (widget.isTemporary) {
+                          _workoutService
+                              .discardTemporaryWorkout(widget.workoutId);
+                        } else {
+                          await _workoutService.deleteWorkout(widget.workoutId);
+                        }
+
+                        // Clear active workout from memory
+                        WorkoutService.activeWorkoutNotifier.value = null;
+
+                        // Stop the foreground service
+                        await WorkoutForegroundService.stopWorkoutService();
+
+                        _stopTimer();
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Workout discarded'),
+                            backgroundColor: _dangerColor,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem<String>(
+                      value: 'discard',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline, color: _dangerColor),
+                          SizedBox(width: 8),
+                          Text('Discard Workout',
+                              style: TextStyle(color: _dangerColor)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              if (!widget.readOnly)
             TextButton.icon(
               icon: Icon(Icons.check, color: _successColor),
               label: Text(
@@ -1878,8 +2463,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   if (confirmDiscard) {
                     // Delete/discard the workout based on whether it's temporary
                     if (widget.isTemporary) {
+                          print(
+                              '🗑️ WorkoutSessionPage: User confirmed discard of empty temporary workout ID: ${widget.workoutId}');
                       _workoutService.discardTemporaryWorkout(widget.workoutId);
                     } else {
+                          print(
+                              '🗑️ WorkoutSessionPage: User confirmed delete of empty regular workout ID: ${widget.workoutId}');
                       await _workoutService.deleteWorkout(widget.workoutId);
                     }
                     
@@ -2227,6 +2816,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     if (_workout?.exercises.isEmpty ?? true) {
                       // No exercises, discard the temporary workout
                       _workoutService.discardTemporaryWorkout(widget.workoutId);
+                          // Clear the active session from database
+                          await _clearActiveSessionFromDatabase();
                       _stopTimer();
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -2284,6 +2875,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     if (remainingExercises.isEmpty) {
                       // No exercises left, delete the workout
                       await _workoutService.deleteWorkout(widget.workoutId);
+                          // Clear the active session from database
+                          await _clearActiveSessionFromDatabase();
                       _stopTimer();
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -2297,6 +2890,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     }
                   }
                 } // We've already handled all the dialog cases above, no need for additional confirmation
+                
+                    // Clear the active session from database since workout is being completed
+                    await _clearActiveSessionFromDatabase();
                 
                 _stopTimer();
                     Navigator.pop(context);
