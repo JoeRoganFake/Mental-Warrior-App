@@ -286,7 +286,8 @@ class WorkoutForegroundService {
         playSound: false,
       ),
       foregroundTaskOptions: ForegroundTaskOptions(
-        eventAction: ForegroundTaskEventAction.repeat(5000), // Update every 5 seconds
+        eventAction:
+            ForegroundTaskEventAction.repeat(60000), // Update every 60 seconds
         autoRunOnBoot: false,
         allowWakeLock: true,
         allowWifiLock: true,

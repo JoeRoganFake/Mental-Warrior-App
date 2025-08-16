@@ -616,14 +616,14 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
       await player.setPlayerMode(PlayerMode.lowLatency);
       await player.setVolume(1.0);
 
-      // Set audio context for background playback
+      // Set audio context for background playback - use notification sounds that don't interrupt music
       await player.setAudioContext(AudioContext(
         android: AudioContextAndroid(
           isSpeakerphoneOn: false,
           stayAwake: true,
           contentType: AndroidContentType.sonification,
-          usageType: AndroidUsageType.alarm,
-          audioFocus: AndroidAudioFocus.gain,
+          usageType: AndroidUsageType.notification,
+          audioFocus: AndroidAudioFocus.gainTransientMayDuck,
         ),
       ));
 

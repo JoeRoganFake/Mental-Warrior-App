@@ -664,28 +664,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      // Calculate elapsed time based on real-world time difference
-      // This allows the timer to accurately track time even when the app is in background
       final now = DateTime.now();
       final newElapsedSeconds = now.difference(_workoutStartTime!).inSeconds;
 
-      // Only update if the value has changed
       if (newElapsedSeconds != _elapsedSeconds) {
-        // Update the elapsed seconds based on the actual time difference
         _elapsedSeconds = newElapsedSeconds;
 
-        // Only update UI if the widget is still mounted and not disposing
         if (mounted && !_isDisposing) {
-          // Update timer display without rebuilding the entire widget
           setState(() {});
           
-          // Update workout duration in database less frequently
-          if (_elapsedSeconds % 15 == 0) {
-            _updateWorkoutDuration();
-          }
-          
-          // ⏰ AUTO-SAVE: Save workout data to foreground service every minute as backup
+          // ✅ FIXED: Update workout duration every 60 seconds (not 15 seconds)
           if (_elapsedSeconds % 60 == 0) {
+            _updateWorkoutDuration();
             _updateActiveNotifier();
           }
         }
@@ -758,15 +748,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       await player.setPlayerMode(PlayerMode.lowLatency);
       await player.setVolume(1.0); // Ensure full volume
 
-      // Set audio context for better background support
+      // Set audio context for better background support - use notification sounds that don't interrupt music
       await player.setAudioContext(AudioContext(
         android: AudioContextAndroid(
           isSpeakerphoneOn: false,
           stayAwake: true,
           contentType: AndroidContentType.sonification,
-          usageType:
-              AndroidUsageType.alarm, // Use alarm usage for background playback
-          audioFocus: AndroidAudioFocus.gain,
+          usageType: AndroidUsageType.notification,
+          audioFocus: AndroidAudioFocus.gainTransientMayDuck,
         ),
       ));
       
@@ -791,6 +780,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       await player.setReleaseMode(ReleaseMode.release);
       await player.setPlayerMode(PlayerMode.lowLatency);
       await player.setVolume(0.8);
+
+      // Set audio context to avoid interrupting background music
+      await player.setAudioContext(AudioContext(
+        android: AudioContextAndroid(
+          isSpeakerphoneOn: false,
+          stayAwake: true,
+          contentType: AndroidContentType.sonification,
+          usageType: AndroidUsageType.notification,
+          audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+        ),
+      ));
+
       await player.resume();
       // Dispose player once playback completes
       player.onPlayerComplete.listen((_) => player.dispose());
@@ -854,7 +855,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               _restStartTime = null;
             });
           }
-          // Final update after timer ends
           _updateActiveNotifier();
         }
       }
@@ -1993,8 +1993,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 if (newTimeRemaining != _restRemainingNotifier.value) {
                   if (mounted && !_isDisposing) {
                     setState(() {
-                      _restRemainingNotifier.value = newTimeRemaining;
                       _restTimeRemaining = newTimeRemaining;
+                      _restRemainingNotifier.value = newTimeRemaining;
                     });
                     _updateActiveNotifier();
                   }
@@ -2571,7 +2571,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     );
                     return;
                   } else {
-                    return; // User chose to go back and fill in sets
+                        return; // User chose to go back
                   }
                 } else {
                   // Check for any issues: empty sets or uncompleted sets
@@ -2633,7 +2633,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     dialogContent.add(
                       Text(
                         'The following exercises have empty sets (missing weight or reps):',
-                        style: TextStyle(color: _textSecondaryColor),
+                          style: TextStyle(
+                              color: _textSecondaryColor, fontSize: 16),
                       )
                     );
                     dialogContent.add(SizedBox(height: 10));
