@@ -1,12 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
-import 'package:mental_warior/services/foreground_service.dart';
 import 'package:mental_warior/pages/workout/workout_session_page.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class ActiveWorkoutBar extends StatefulWidget {
-  const ActiveWorkoutBar({Key? key}) : super(key: key);
+  const ActiveWorkoutBar({super.key});
 
   @override
   State<ActiveWorkoutBar> createState() => _ActiveWorkoutBarState();
@@ -418,112 +417,6 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                       foregroundColor: _primaryColor,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                     ),
-                  ),
-                  
-                  // Close button
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    color: Colors.red,
-                    onPressed: () {
-                      // Show options dialog for ending or discarding workout
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          backgroundColor: const Color(0xFF26272B),
-                          title: Text('Workout Session Options', 
-                              style: TextStyle(color: _textColor)),
-                          content: Text(
-                            'Choose how you want to handle your current workout:',
-                            style: TextStyle(color: _textColor.withOpacity(0.8)),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: Text('Cancel', 
-                                  style: TextStyle(color: _textColor.withOpacity(0.8))),
-                            ),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange,
-                                foregroundColor: Colors.white,
-                              ),
-                              onPressed: () async {
-                                // End workout - save progress
-                                try {
-                                  final activeWorkout = WorkoutService
-                                      .activeWorkoutNotifier.value;
-                                  if (activeWorkout != null) {
-                                    final workoutId =
-                                        activeWorkout['id'] as int;
-                                    final isTemporary =
-                                        activeWorkout['isTemporary'] as bool? ??
-                                            false;
-
-                                    // If it's a temporary workout, save it to the database
-                                    if (isTemporary && workoutId > 0) {
-                                      final workoutService = WorkoutService();
-                                      await workoutService
-                                          .saveTemporaryWorkout(workoutId);
-                                      print(
-                                          '✅ Temporary workout saved permanently');
-                                    }
-                                  }
-
-                                  // Clear active workout from memory
-                                  WorkoutService.activeWorkoutNotifier.value =
-                                      null;
-
-                                  // Stop the foreground service and clear its data
-                                  await WorkoutForegroundService
-                                      .stopWorkoutService();
-                                  await WorkoutForegroundService
-                                      .clearSavedWorkoutData();
-
-                                  print(
-                                      '✅ Workout ended and saved successfully');
-                                } catch (e) {
-                                  print('❌ Error saving workout: $e');
-                                }
-                                Navigator.pop(context);
-                              },
-                              child: const Text('End & Save'),
-                            ),
-                            ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                              ),
-                              onPressed: () async {
-                                // Discard workout - mark for discard and clear active state
-                                try {
-                                  // First mark as discarded
-                                  await WorkoutForegroundService
-                                      .markWorkoutAsDiscarded();
-                                  print('✅ Workout marked as discarded');
-
-                                  // Clear active workout from memory
-                                  WorkoutService.activeWorkoutNotifier.value =
-                                      null;
-                                  
-                                  // Stop the foreground service
-                                  await WorkoutForegroundService
-                                      .stopWorkoutService();
-
-                                  // Do NOT call clearSavedWorkoutData() here - let the restoration process handle it
-                                  // This ensures the discard flag persists until the next app startup
-
-                                  print('✅ Workout discarded successfully');
-                                } catch (e) {
-                                  print('❌ Error discarding workout: $e');
-                                }
-                                Navigator.pop(context);
-                              },
-                              child: const Text('Discard'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
                   ),
                 ],
               ),

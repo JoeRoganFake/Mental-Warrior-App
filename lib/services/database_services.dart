@@ -31,7 +31,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 5, // Increment version for new active workout sessions table
+      version: 6, // Increment version for exercise finished flag
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -56,6 +56,11 @@ class DatabaseService {
         if (oldVersion < 5) {
           // Create active workout sessions table for persistent state storage
           await WorkoutService().createActiveWorkoutSessionsTable(db);
+        }
+        if (oldVersion < 6) {
+          // Add finished flag to exercises table
+          await db.execute(
+              'ALTER TABLE exercises ADD COLUMN finished INTEGER DEFAULT 0');
         }
       },
     );
@@ -842,6 +847,7 @@ class WorkoutService {
   final String _exerciseWorkoutIdColumnName = "workoutId";
   final String _exerciseNameColumnName = "name";
   final String _exerciseEquipmentColumnName = "equipment";
+  final String _exerciseFinishedColumnName = "finished";
 
   final String _setTableName = "exercise_sets";
   final String _setIdColumnName = "id";
@@ -882,6 +888,7 @@ class WorkoutService {
         $_exerciseWorkoutIdColumnName INTEGER NOT NULL,
         $_exerciseNameColumnName TEXT NOT NULL,
         $_exerciseEquipmentColumnName TEXT NOT NULL,
+        $_exerciseFinishedColumnName INTEGER DEFAULT 0,
         FOREIGN KEY ($_exerciseWorkoutIdColumnName) REFERENCES $_workoutTableName ($_workoutIdColumnName) ON DELETE CASCADE
       )
     ''');
@@ -1077,10 +1084,26 @@ class WorkoutService {
           await addExercise(workoutId, exercise['name'], exercise['equipment']);
 
       for (final set in exercise['sets']) {
-        await addSet(exerciseId, set['setNumber'], set['weight'], set['reps'],
-            set['restTime']);
+        // Only save sets that have valid data (weight > 0 OR reps > 0 OR set is completed)
+        // This prevents saving empty/invalid sets when workout is finished
+        final double weight = (set['weight'] ?? 0.0).toDouble();
+        final int reps = (set['reps'] ?? 0);
+        final bool completed = set['completed'] ?? false;
+
+        final bool hasValidWeight = weight > 0;
+        final bool hasValidReps = reps > 0;
+
+        // Only save the set if it has valid data or if it's marked as completed
+        if (hasValidWeight || hasValidReps || completed) {
+          await addSet(
+              exerciseId, set['setNumber'], weight, reps, set['restTime']);
+        }
       }
     }
+
+    // Mark all exercises in this workout as finished
+    await markWorkoutAsFinished(workoutId);
+    print('✅ Marked workout as finished with all exercises flagged');
 
     // Remove temporary workout from memory
     tempWorkouts.remove(tempId);
@@ -1219,6 +1242,7 @@ class WorkoutService {
         'id': tempExerciseId,
         'name': name,
         'equipment': equipment,
+        'finished': false,
         'sets': [],
       });
 
@@ -1237,6 +1261,7 @@ class WorkoutService {
         _exerciseWorkoutIdColumnName: workoutId,
         _exerciseNameColumnName: name,
         _exerciseEquipmentColumnName: equipment,
+        _exerciseFinishedColumnName: 0, // Not finished by default
       },
     );
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
@@ -1358,6 +1383,19 @@ class WorkoutService {
       whereArgs: [workoutId],
     );
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
+
+  // Mark all exercises in a workout as finished
+  Future<void> markWorkoutAsFinished(int workoutId) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _exerciseTableName,
+      {_exerciseFinishedColumnName: 1},
+      where: "$_exerciseWorkoutIdColumnName = ?",
+      whereArgs: [workoutId],
+    );
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+    print('✅ Marked all exercises in workout $workoutId as finished');
   }
 
   // Add updateExercise method to WorkoutService
@@ -1538,6 +1576,7 @@ class WorkoutService {
           workoutId: workoutId,
           name: exerciseData['name'],
           equipment: exerciseData['equipment'],
+          finished: exerciseData['finished'] ?? false,
           sets: sets,
         ));
       }
