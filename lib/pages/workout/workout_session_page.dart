@@ -7,6 +7,7 @@ import 'package:mental_warior/services/foreground_service.dart';
 import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/rest_timer_page.dart';
+import 'package:mental_warior/pages/workout/workout_completion_page.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class WorkoutSessionPage extends StatefulWidget {
@@ -70,12 +71,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   // Variables to track minimized workout restoration
   bool _isRestoringFromMinimized = false;
   Map<String, dynamic>? _savedWorkoutData;
-  
-  // Variable to track if we're in edit mode (for read-only workouts)
-  bool _isEditMode = false;
-
-  // Helper property to check if editing is allowed
-  bool get _isEditable => !widget.readOnly || _isEditMode;
   @override
   void initState() {
     super.initState();
@@ -157,9 +152,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     _loadWorkout();
     
     // If not minimized and not read-only, check for active session from database
-    if (!widget.minimized && (!widget.readOnly || _isEditMode)) {
+    if (!widget.minimized && !widget.readOnly) {
       _checkForActiveSessionFromDatabase();
-    } else if (!widget.minimized && (!widget.readOnly || _isEditMode)) {
+    } else if (!widget.minimized && !widget.readOnly) {
       _startTimer();
     }
   }
@@ -176,8 +171,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       
       // Save the current state to the notifier for all workouts (including minimized)
       // This ensures timers continue to work even when app is backgrounded
-      // But don't save as active when in edit mode
-      if (_workout != null && (!widget.readOnly || _isEditMode) && !_isEditMode) {
+      if (_workout != null && !widget.readOnly) {
         // Create a serialized version of the workout with all exercise data and timer state
         final workoutData = _serializeWorkoutData();
 
@@ -647,9 +641,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   void _startTimer() {
     if (_isTimerRunning) return;
     
-    // Don't start timer when in edit mode (editing completed workouts)
-    if (_isEditMode) return;
-    
     // Set the start time for accurate tracking even when app is in background
     _workoutStartTime ??=
         DateTime.now().subtract(Duration(seconds: _elapsedSeconds));
@@ -874,11 +865,38 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
   }
 
+  /// Play the fanfare sound effect for workout completion
+  Future<void> _playFanfareSound() async {
+    // Create a new player for fanfare
+    final player = AudioPlayer();
+    try {
+      await player.setSource(AssetSource('audio/fanfare chime.mp3'));
+      await player.setReleaseMode(ReleaseMode.release);
+      await player.setPlayerMode(PlayerMode.lowLatency);
+      await player.setVolume(1.0); // Full volume for celebration
+
+      // Set audio context
+      await player.setAudioContext(AudioContext(
+        android: AudioContextAndroid(
+          isSpeakerphoneOn: false,
+          stayAwake: true,
+          contentType: AndroidContentType.sonification,
+          usageType: AndroidUsageType.notification,
+          audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+        ),
+      ));
+
+      await player.resume();
+      // Dispose player once playback completes
+      player.onPlayerComplete.listen((_) => player.dispose());
+    } catch (e) {
+      print('Error playing fanfare: $e');
+      player.dispose();
+    }
+  }
+
   /// Starts a rest timer for a specific set and tracks its id
   void _startRestTimerForSet(int setId, int seconds) {
-    // Don't start rest timers in edit mode
-    if (_isEditMode) return;
-    
     // Cancel any ongoing rest timer without playing boxing bell
     _cancelRestTimer(playSound: false);
     
@@ -1053,7 +1071,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   }
 
   void _addExercise() async {
-    if (!_isEditable) return;
+    if (widget.readOnly) return;
 
     final result = await Navigator.push(
       context,
@@ -1113,7 +1131,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
   }
   void _updateWorkoutName() {
-    if (!_isEditable) return;
+    if (widget.readOnly) return;
 
     final newName = _nameController.text.trim();
     if (newName.isNotEmpty && _workout != null) {
@@ -1147,213 +1165,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         );
       }
     }
-  }
-
-  void _enableEditMode() {
-    setState(() {
-      _isEditMode = true;
-    });
-
-    // Initialize all controllers for existing sets if they haven't been initialized yet
-    _initializeAllControllers();
-
-    // Stop the timer when entering edit mode (for editing completed workouts)
-    _stopTimer();
-    
-    // Cancel any active rest timer when entering edit mode
-    _cancelRestTimer(playSound: false);
-    
-    // Clear active workout state - this is no longer an active workout when in edit mode
-    WorkoutService.activeWorkoutNotifier.value = null;
-    
-    // Stop foreground service since this is no longer an active workout
-    WorkoutForegroundService.stopWorkoutService();
-    
-    // Clear active session from database
-    _clearActiveSessionFromDatabase();
-
-    // Show a confirmation message
-    _showSnackBar(
-      'Edit mode enabled. Timer paused. You can now modify this workout.',
-      isError: false,
-      durationSeconds: 3,
-    );
-  }
-
-  void _showEditWorkoutNameDialog() {
-    final nameController = TextEditingController(text: _workout?.name ?? '');
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: _surfaceColor,
-        title: Text('Edit Workout Name',
-            style: TextStyle(color: _textPrimaryColor)),
-        content: TextField(
-          controller: nameController,
-          style: TextStyle(color: _textPrimaryColor),
-          decoration: InputDecoration(
-            labelText: 'Workout Name',
-            labelStyle: TextStyle(color: _textSecondaryColor),
-            enabledBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: _textSecondaryColor),
-            ),
-            focusedBorder: UnderlineInputBorder(
-              borderSide: BorderSide(color: _primaryColor),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              nameController.dispose();
-              Navigator.pop(context);
-            },
-            child: Text('Cancel', style: TextStyle(color: _textSecondaryColor)),
-          ),
-          TextButton(
-            onPressed: () {
-              final newName = nameController.text.trim();
-              if (newName.isNotEmpty && _workout != null) {
-                // Create a new workout with the updated name
-                setState(() {
-                  _workout = _workout!.copyWith(name: newName);
-                });
-
-                if (widget.isTemporary) {
-                  final tempWorkouts =
-                      WorkoutService.tempWorkoutsNotifier.value;
-                  if (tempWorkouts.containsKey(widget.workoutId)) {
-                    tempWorkouts[widget.workoutId]['name'] = newName;
-                    WorkoutService.tempWorkoutsNotifier.value =
-                        Map.from(tempWorkouts);
-                  }
-                } else {
-                  _workoutService.updateWorkout(
-                    widget.workoutId,
-                    newName,
-                    _workout!.date,
-                    _workout!.duration,
-                  );
-                }
-
-                _showSnackBar('Workout name updated');
-              }
-              nameController.dispose();
-              Navigator.pop(context);
-            },
-            child: Text('Save', style: TextStyle(color: _primaryColor)),
-          ),
-        ],
-      ),
-    ).then((_) => nameController.dispose());
-  }
-
-  void _showEditElapsedTimeDialog() {
-    final minutes = _elapsedSeconds ~/ 60;
-    final seconds = _elapsedSeconds % 60;
-
-    final minutesController = TextEditingController(text: minutes.toString());
-    final secondsController = TextEditingController(text: seconds.toString());
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: _surfaceColor,
-        title: Text('Edit Elapsed Time',
-            style: TextStyle(color: _textPrimaryColor)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: minutesController,
-                    style: TextStyle(color: _textPrimaryColor),
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Minutes',
-                      labelStyle: TextStyle(color: _textSecondaryColor),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: _textSecondaryColor),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: _primaryColor),
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(width: 16),
-                Expanded(
-                  child: TextField(
-                    controller: secondsController,
-                    style: TextStyle(color: _textPrimaryColor),
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(
-                      labelText: 'Seconds',
-                      labelStyle: TextStyle(color: _textSecondaryColor),
-                      enabledBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: _textSecondaryColor),
-                      ),
-                      focusedBorder: UnderlineInputBorder(
-                        borderSide: BorderSide(color: _primaryColor),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Current: ${_formatTime(_elapsedSeconds)}',
-              style: TextStyle(color: _textSecondaryColor, fontSize: 12),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              minutesController.dispose();
-              secondsController.dispose();
-              Navigator.pop(context);
-            },
-            child: Text('Cancel', style: TextStyle(color: _textSecondaryColor)),
-          ),
-          TextButton(
-            onPressed: () {
-              final newMinutes = int.tryParse(minutesController.text) ?? 0;
-              final newSeconds = int.tryParse(secondsController.text) ?? 0;
-              final newElapsedSeconds = (newMinutes * 60) + newSeconds;
-
-              if (newElapsedSeconds >= 0) {
-                setState(() {
-                  _elapsedSeconds = newElapsedSeconds;
-                });
-
-                // Update the workout start time to reflect the new elapsed time
-                _workoutStartTime =
-                    DateTime.now().subtract(Duration(seconds: _elapsedSeconds));
-
-                // Update workout duration
-                _updateWorkoutDuration();
-
-                _showSnackBar(
-                    'Elapsed time updated to ${_formatTime(_elapsedSeconds)}');
-              }
-
-              minutesController.dispose();
-              secondsController.dispose();
-              Navigator.pop(context);
-            },
-            child: Text('Save', style: TextStyle(color: _primaryColor)),
-          ),
-        ],
-      ),
-    ).then((_) {
-      minutesController.dispose();
-      secondsController.dispose();
-    });
   }
 
   void _addSetToExercise(int exerciseId) async {
@@ -2095,7 +1906,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         final bool hasValidWeight = set.weight > 0;
         final bool hasValidReps = set.reps > 0;
         final bool isCompleted = set.completed;
-
+        
         // Include the set if it has valid data or if it's marked as completed
         if (hasValidWeight || hasValidReps || isCompleted) {
           final Map<String, dynamic> setData = {
@@ -2107,7 +1918,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             'restTime': set.restTime,
             'completed': set.completed,
           };
-
+          
           exerciseData['sets'].add(setData);
         }
       }
@@ -2120,12 +1931,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   // Synchronize current workout and rest timer state to activeWorkoutNotifier
   void _updateActiveNotifier() {
     if (_workout == null) return;
-    
-    // Don't treat as active workout when in edit mode (read-only workout being edited)
-    if (_isEditMode) {
-      return;
-    }
-    
     final workoutData = _serializeWorkoutData();
 
     
@@ -2153,11 +1958,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   // Save complete workout state to persistent storage for hot restart recovery
   Future<void> _saveCompleteWorkoutState() async {
     if (_workout == null) return;
-    
-    // Don't save as active workout state when in edit mode
-    if (_isEditMode) {
-      return;
-    }
 
     try {
       final workoutData = _serializeWorkoutData();
@@ -2536,8 +2336,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     
     return WillPopScope(
         onWillPop: () async {
-          // Don't minimize if in read-only mode or edit mode, just pop
-          if (widget.readOnly || _isEditMode) {
+          // Don't minimize if in read-only mode, just pop
+          if (widget.readOnly) {
             return true; // Allow pop to proceed normally
           }
 
@@ -2593,9 +2393,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             backgroundColor: _backgroundColor,
             elevation: 0,
             leading: IconButton(
-              icon: Icon(Icons.arrow_back, color: _textPrimaryColor),
+              icon: Icon(Icons.keyboard_arrow_down,
+                  color: _textPrimaryColor, size: 28),
               onPressed: () {
-                if (widget.readOnly || _isEditMode) {
+                if (widget.readOnly) {
                   Navigator.of(context).pop();
                   return;
                 }
@@ -2631,108 +2432,27 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 Navigator.of(context).pop();
               },
             ),
-            title: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _workout?.name ?? 'Workout Session',
-                    style: TextStyle(
-                      color: _textPrimaryColor,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+            title: Container(
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: _surfaceColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _formatTime(_elapsedSeconds),
+                style: TextStyle(
+                  color: _textPrimaryColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
                 ),
-                if (_isEditMode)
-                  PopupMenuButton<String>(
-                    icon: Icon(Icons.more_horiz,
-                        color: _textPrimaryColor, size: 20),
-                    color: _surfaceColor,
-                    onSelected: (value) async {
-                      if (value == 'edit_name') {
-                        _showEditWorkoutNameDialog();
-                      } else if (value == 'edit_time') {
-                        _showEditElapsedTimeDialog();
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      PopupMenuItem<String>(
-                        value: 'edit_name',
-                        child: Row(
-                          children: [
-                            Icon(Icons.edit, color: _textPrimaryColor),
-                            SizedBox(width: 8),
-                            Text('Edit Name',
-                                style: TextStyle(color: _textPrimaryColor)),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem<String>(
-                        value: 'edit_time',
-                        child: Row(
-                          children: [
-                            Icon(Icons.timer, color: _textPrimaryColor),
-                            SizedBox(width: 8),
-                            Text('Edit Time',
-                                style: TextStyle(color: _textPrimaryColor)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-              ],
+              ),
             ),
             actions: [
-              if (!widget.readOnly || _isEditMode)
-                PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert, color: _textPrimaryColor),
-                  color: _surfaceColor,
-                  onSelected: (value) async {
-                    if (value == 'discard') {
-                      await _discardWorkout();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem<String>(
-                      value: 'discard',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline, color: _dangerColor),
-                          SizedBox(width: 8),
-                          Text('Discard Workout',
-                              style: TextStyle(color: _dangerColor)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              if (widget.readOnly && !_isEditMode)
-                PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert, color: _textPrimaryColor),
-                  color: _surfaceColor,
-                  onSelected: (value) async {
-                    if (value == 'edit') {
-                      _enableEditMode();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem<String>(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit, color: _primaryColor),
-                          SizedBox(width: 8),
-                          Text('Edit Workout',
-                              style: TextStyle(color: _textPrimaryColor)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              if ((!widget.readOnly || _isEditMode))
+              if (!widget.readOnly)
             TextButton.icon(
               icon: Icon(Icons.check, color: _successColor),
               label: Text(
-                'Finish',
+                    'Finished',
                 style: TextStyle(
                   color: _successColor,
                   fontWeight: FontWeight.bold,
@@ -3025,6 +2745,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       return; // User chose to cancel
                     }
 
+                    // Play fanfare sound for workout completion
+                    _playFanfareSound();
+
                     // Process the workout: remove invalid sets and mark valid ones as completed
                     // 1. Remove invalid sets
                     if (hasInvalidSets) {
@@ -3174,8 +2897,24 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     WorkoutService.activeWorkoutNotifier.value = null;
                   
                     _stopTimer();
-                    Navigator.pop(context);
-                    _showSnackBar('Workout saved');
+                    
+                    // Get workout count for completion screen
+                    final workoutCount = await _workoutService.getWorkoutCount();
+                    
+                    // Navigate to completion screen instead of just popping
+                    if (mounted && _workout != null) {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => WorkoutCompletionPage(
+                            workout: _workout!.copyWith(duration: _elapsedSeconds),
+                            workoutNumber: workoutCount,
+                          ),
+                        ),
+                      );
+                    } else {
+                      Navigator.pop(context);
+                    }
               },
             ),
         ],
@@ -3200,35 +2939,67 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Workout name
-                          if (_isEditable)
-                        TextField(
-                              controller: _nameController,
-                          style: TextStyle(
-                            color: _textPrimaryColor,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                          // Workout name and menu
+                          Row(
+                            children: [
+                              Expanded(
+                                child: !widget.readOnly
+                                    ? TextField(
+                                        controller: _nameController,
+                                        style: TextStyle(
+                                          color: _textPrimaryColor,
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        decoration: InputDecoration(
+                                          hintText: 'Enter workout name',
+                                          hintStyle: TextStyle(
+                                            color: _textSecondaryColor
+                                                .withOpacity(0.5),
+                                            fontSize: 24,
+                                          ),
+                                          border: InputBorder.none,
+                                          contentPadding: EdgeInsets.zero,
+                                        ),
+                                        onEditingComplete: _updateWorkoutName,
+                                      )
+                                    : Text(
+                                        _workout?.name ?? 'Workout',
+                                        style: TextStyle(
+                                          color: _textPrimaryColor,
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                              ),
+                              if (!widget.readOnly)
+                                PopupMenuButton<String>(
+                                  icon: Icon(Icons.more_vert,
+                                      color: _textPrimaryColor),
+                                  color: _surfaceColor,
+                                  onSelected: (value) async {
+                                    if (value == 'discard') {
+                                      await _discardWorkout();
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    PopupMenuItem<String>(
+                                      value: 'discard',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.delete_outline,
+                                              color: _dangerColor),
+                                          SizedBox(width: 8),
+                                          Text('Discard Workout',
+                                              style: TextStyle(
+                                                  color: _dangerColor)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                            ],
                           ),
-                          decoration: InputDecoration(
-                            hintText: 'Enter workout name',
-                            hintStyle: TextStyle(
-                              color: _textSecondaryColor.withOpacity(0.5),
-                              fontSize: 24,
-                            ),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
-                          ),
-                          onEditingComplete: _updateWorkoutName,
-                        )
-                      else
-                        Text(
-                          _workout?.name ?? 'Workout',
-                          style: TextStyle(
-                            color: _textPrimaryColor,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                            ),
 
                       SizedBox(height: 16),
 
@@ -3275,7 +3046,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                             if (index < _workout!.exercises.length) {
                               return _buildExerciseCard(
                                   _workout!.exercises[index]);
-                                } else if (_isEditable) {
+                                } else {
                               return Padding(
                                 padding: EdgeInsets.all(16),
 
@@ -3287,9 +3058,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                     onPressed: _addExercise,
                                   ),
                                 ),
-                              );
-                                } else {
-                                  return SizedBox.shrink();
+                                  );
                             }
                           },
                         ),
@@ -3319,7 +3088,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             ),
           ),
           SizedBox(height: 24),
-          if (_isEditable)
+          if (!widget.readOnly)
             TextButton.icon(
               icon: Icon(Icons.add, color: _primaryColor),
               label: Text('Add Your First Exercise',
@@ -3439,8 +3208,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     ),
 
                     // Status indicator
-                    // Show status indicator only if there are sets and in editable mode
-                    if (exercise.sets.isNotEmpty && _isEditable)
+                    // Show status indicator only if there are sets
+                    if (exercise.sets.isNotEmpty)
                       Container(
                         padding:
                             EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -3464,7 +3233,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
                     // Options menu
                     // Show options menu only for non-default exercises
-                    if (_isEditable)
+                    if (!widget.readOnly)
                       PopupMenuButton<String>(
                         icon: Icon(Icons.more_vert, color: _textSecondaryColor),
                         enabled: true,
@@ -3560,7 +3329,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold),
                             textAlign: TextAlign.center)),
-                    if (_isEditable) SizedBox(width: 44),
+                    SizedBox(width: 44),
                   ],
                 ),
               ),
@@ -3575,7 +3344,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               ),
 
             // Add set button (only for non-default exercises)
-            if (_isEditable)
+            if (!widget.readOnly)
               Padding(
                 padding: EdgeInsets.all(16),
                 child: Center(
@@ -3637,7 +3406,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       child: Dismissible(
         key: Key('set_${set.id}'),
       direction:
-          _isEditable ? DismissDirection.endToStart : DismissDirection.none,
+          widget.readOnly ? DismissDirection.none : DismissDirection.endToStart,
         background: Container(
           alignment: Alignment.centerRight,
           padding: EdgeInsets.only(right: 20.0),
@@ -3649,7 +3418,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         ),
         confirmDismiss: (direction) async {
           // Return true to confirm the dismiss, false to cancel
-        return _isEditable;
+        return !widget.readOnly;
         },
         onDismissed: (direction) {
           // Delete the set when dismissed
@@ -3693,7 +3462,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   padding: EdgeInsets.symmetric(horizontal: 8.0),
                   child: TextField(
                     controller: _weightControllers[set.id],
-                    readOnly: !_isEditable,
                     keyboardType:
                         TextInputType.numberWithOptions(decimal: true),
                     style: TextStyle(
@@ -3745,7 +3513,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   padding: EdgeInsets.symmetric(horizontal: 8.0),
                   child: TextField(
                     controller: _repsControllers[set.id],
-                    readOnly: !_isEditable,
                     keyboardType: TextInputType.number,
                     style: TextStyle(
                           color: _textPrimaryColor,
@@ -3781,43 +3548,47 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 ),
               ),
               // Complete button
-              if (_isEditable)
-                Container(
-                  width: 44,
-                  height: 40,
-                  child: IconButton(
-                    icon: set.completed
+              Container(
+                width: 44,
+                height: 40,
+                child: widget.readOnly
+                    ? set.completed
                         ? Icon(Icons.check_circle, color: _successColor)
                         : Icon(Icons.circle_outlined,
-                            color: canCompleteButton
-                                ? _textSecondaryColor
-                                : _textSecondaryColor.withOpacity(0.3)),
-                    tooltip: canCompleteButton
-                        ? (set.completed
-                            ? 'Mark as incomplete'
-                            : 'Mark as completed')
-                        : 'Enter weight and reps to complete',
-                    onPressed: canCompleteButton
-                        ? () {
-                            final willComplete = !set.completed;
-                            _toggleSetCompletion(
-                                exercise.id, set.id, willComplete);
-                            if (willComplete && !_isEditMode) {
-                              // Start rest when completing (but not in edit mode)
-                              _startRestTimerForSet(set.id, set.restTime);
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => RestTimerPage(
-                                    originalDuration: _originalRestTime,
-                                    remaining: _restRemainingNotifier,
-                                    isPaused: _restPausedNotifier,
-                                    onPause: _togglePauseRest,
-                                    onIncrement: _incrementRest,
-                                    onDecrement: _decrementRest,
-                                    onSkip: _cancelRestTimer,
-                                  ),
-                                ),
-                              );
+                            color: _textSecondaryColor)
+                    : IconButton(
+                        icon: set.completed
+                            ? Icon(Icons.check_circle, color: _successColor)
+                            : Icon(Icons.circle_outlined,
+                                color: canCompleteButton
+                                    ? _textSecondaryColor
+                                    : _textSecondaryColor.withOpacity(0.3)),
+                        tooltip: canCompleteButton
+                            ? (set.completed
+                                ? 'Mark as incomplete'
+                                : 'Mark as completed')
+                            : 'Enter weight and reps to complete',
+                        onPressed: canCompleteButton
+                            ? () {
+                                final willComplete = !set.completed;
+                                _toggleSetCompletion(
+                                    exercise.id, set.id, willComplete);
+                                if (willComplete) {
+                                  // Start rest when completing
+                                  _startRestTimerForSet(set.id, set.restTime);
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => RestTimerPage(
+                                        originalDuration: _originalRestTime,
+                                        remaining: _restRemainingNotifier,
+                                        isPaused: _restPausedNotifier,
+                                        onPause: _togglePauseRest,
+                                        onIncrement: _incrementRest,
+                                        onDecrement: _decrementRest,
+                                        onSkip: _cancelRestTimer,
+                                      ),
+                                    ),
+                                  );
                                 } else {
                                   // Cancel rest when undoing, but don't play sound
                                   _cancelRestTimer(playSound: false);
@@ -3825,13 +3596,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                               }
                             : null,
                       ), // close IconButton
-                ),
+              ),
             ]),
-            // Show countdown under set when active (but not in edit mode)
-            if (_currentRestSetId == set.id && _restTimeRemaining > 0 && !_isEditMode)
+            // Show countdown under set when active
+            if (_currentRestSetId == set.id && _restTimeRemaining > 0)
               GestureDetector(
-                onTap: _isEditable
-                    ? () {
+                onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => RestTimerPage(
@@ -3845,8 +3615,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       ),
                     ),
                   );
-                      }
-                    : null,
+                },
                 child: Padding(
                   padding: EdgeInsets.only(top: 4),
                   child: Text(

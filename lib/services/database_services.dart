@@ -1503,6 +1503,14 @@ class WorkoutService {
     return Workout.fromMap(
         workoutMaps.first as Map<String, dynamic>, exercises);
   }
+
+  // Get the total count of completed workouts
+  Future<int> getWorkoutCount() async {
+    final db = await DatabaseService.instance.database;
+    final result = await db.rawQuery('SELECT COUNT(*) as count FROM $_workoutTableName');
+    return (result.first['count'] as int?) ?? 0;
+  }
+
   // Delete a workout and all related exercises and sets
   Future<void> deleteWorkout(int workoutId) async {
     final db = await DatabaseService.instance.database;

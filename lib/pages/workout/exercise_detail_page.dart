@@ -137,56 +137,49 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
       // Use both sources of information
       final bool isTemporary = isTemporaryFromArgs || isNegativeId;
       
-      // Special handling for temporary exercises
-      if (isTemporary) {
-            
-        if (args != null) {
-          // First try to use the exerciseName if available
-          if (args.containsKey('exerciseName')) {
-            final String exerciseName = args['exerciseName'] as String;
-            
-            // Try to find by name
-            _tryFindExerciseByName(list, exerciseName);
-            
-            // If found by name, return early
-            if (_exercise != null && !_exercise!.isEmpty) {
-              return;
-            }
-          }
-          
-          // If name didn't work, try equipment as a fallback filter
-          if (args.containsKey('exerciseEquipment') && 
-              args['exerciseEquipment'] != null && 
-              args['exerciseEquipment'].toString().isNotEmpty) {
-            
-            final String equipment = args['exerciseEquipment'] as String;
-            
-            // Find first exercise with matching equipment
-            for (var e in list.cast<Map<String, dynamic>>()) {
-              if (e['equipment'] != null && 
-                  (e['equipment'] as String).toLowerCase() == equipment.toLowerCase()) {
-                _exercise = e;
-                return;
-              }
-            }
-          }
+      print('🎯 Loading exercise: ID="$currentExerciseId", Temp=$isTemporary');
+      
+      // Strategy 1: If we have route arguments with exercise name, try that first
+      if (args != null && args.containsKey('exerciseName')) {
+        final String exerciseName = args['exerciseName'] as String;
+        print('  Strategy 1: Searching by name "$exerciseName"');
+        _tryFindExerciseByName(list, exerciseName);
+        
+        if (_exercise != null && _exercise!.isNotEmpty) {
+          print('  ✅ Found by name: ${_exercise!['name']}');
+          return; // Success, exit early
         }
-        
-        // Use a default exercise as fallback
+      }
+      
+      // Strategy 2: Try to find by API ID if the exercise ID looks like an API ID
+      if (!isTemporary &&
+          currentExerciseId.isNotEmpty &&
+          !currentExerciseId.contains('##API_ID:')) {
+        print('  Strategy 2: Searching by API ID "$currentExerciseId"');
         _exercise = list.cast<Map<String, dynamic>>().firstWhere(
-          (e) => e['name'] != null && (e['name'] as String).contains('Push-up'), 
-          orElse: () => list.cast<Map<String, dynamic>>().first
+          (e) {
+            final String? idFromData = e['id'] as String?;
+            return idFromData != null && idFromData.trim() == currentExerciseId;
+          },
+          orElse: () => <String, dynamic>{},
         );
-        
-        return;
-      } 
-      // Check if the passed ID is an API ID with markers
-      else if (currentExerciseId.contains('##API_ID:')) {
-        // Extract the actual API ID from the marker
+
+        if (_exercise != null && _exercise!.isNotEmpty) {
+          print('  ✅ Found by API ID: ${_exercise!['name']}');
+          return; // Success, exit early
+        }
+      }
+
+      // Strategy 3: Handle exercises with API ID markers in the exercise ID
+      if (currentExerciseId.contains('##API_ID:')) {
+        print('  Strategy 3: Extracting API ID from markers');
         final RegExp apiIdRegex = RegExp(r'##API_ID:([^#]+)##');
         final Match? match = apiIdRegex.firstMatch(currentExerciseId);
-        final String extractedApiId = match?.group(1)?.trim() ?? currentExerciseId;
-        
+        final String extractedApiId =
+            match?.group(1)?.trim() ?? currentExerciseId;
+
+        print('  Extracted API ID: "$extractedApiId"');
+
         // Try to find exercise with the extracted API ID
         _exercise = list.cast<Map<String, dynamic>>().firstWhere(
           (e) {
@@ -195,31 +188,79 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
           },
           orElse: () => <String, dynamic>{},
         );
-      } else {
-        // Normal ID lookup
-        _exercise = list.cast<Map<String, dynamic>>().firstWhere(
-          (e) {
-            final String? idFromData = e['id'] as String?;
-            // Try both direct comparison and string conversion for flexibility
-            return idFromData != null && 
-                (idFromData.trim() == currentExerciseId || 
-                 idFromData.trim() == currentExerciseId.replaceAll('"', ''));
-          },
-          orElse: () => <String, dynamic>{},
-        );
+
+        if (_exercise != null && _exercise!.isNotEmpty) {
+          print('  ✅ Found by extracted API ID: ${_exercise!['name']}');
+          return; // Success, exit early
+        }
       }
+
+      // Strategy 4: Special handling for temporary exercises
+      if (isTemporary) {
+        print('  Strategy 4: Handling temporary exercise');
+
+        if (args != null &&
+            args.containsKey('exerciseEquipment') &&
+            args['exerciseEquipment'] != null &&
+            args['exerciseEquipment'].toString().isNotEmpty) {
+          final String equipment = args['exerciseEquipment'] as String;
+          print('  Searching by equipment: "$equipment"');
+          
+          // Find first exercise with matching equipment
+          for (var e in list.cast<Map<String, dynamic>>()) {
+            if (e['equipment'] != null &&
+                (e['equipment'] as String).toLowerCase() ==
+                    equipment.toLowerCase()) {
+              _exercise = e;
+              print('  ✅ Found by equipment: ${_exercise!['name']}');
+              return;
+            }
+          }
+        }
+        
+        // Use a default exercise as fallback for temporary exercises
+        print('  Using default fallback for temporary exercise');
+        _exercise = list.cast<Map<String, dynamic>>().firstWhere(
+            (e) =>
+                e['name'] != null &&
+                (e['name'] as String).toLowerCase().contains('push-up'), 
+          orElse: () => list.cast<Map<String, dynamic>>().first
+        );
+        
+        if (_exercise != null && _exercise!.isNotEmpty) {
+          print('  ✅ Using fallback: ${_exercise!['name']}');
+          return;
+        }
+      }
+
+      // Strategy 5: Final fallback - try name-based lookup with the current exercise ID
+      print('  Strategy 5: Final name-based lookup');
+      _tryFindExerciseByName(list, currentExerciseId);
       
-      // If exercise not found, try again looking for name matches
-      if (_exercise == null || _exercise!.isEmpty) {
-        _tryFindExerciseByName(list, currentExerciseId);
+      if (_exercise != null && _exercise!.isNotEmpty) {
+        print('  ✅ Found by final lookup: ${_exercise!['name']}');
+      } else {
+        print('  ❌ All strategies failed');
+
+        // Absolute final fallback - use the first available exercise to prevent crashes
+        if (list.isNotEmpty) {
+          _exercise = list.cast<Map<String, dynamic>>().first;
+          print('  🆘 Using first available exercise: ${_exercise!['name']}');
+        }
       }
       
       if (_exercise != null && _exercise!.isEmpty) {
         _exercise = null; // if the map is empty (exercise not found), set to null
       }
     } catch (e) {
-      print('❌ Error finding exercise ${widget.exerciseId}: $e');
-      _exercise = null; // Catch any error during parsing or lookup
+      print('❌ Error loading exercise "${widget.exerciseId}": $e');
+      // Emergency fallback - use the first exercise to prevent crashes
+      if (_exercisesList != null && _exercisesList!.isNotEmpty) {
+        _exercise = _exercisesList!.cast<Map<String, dynamic>>().first;
+        print('🆘 Using first exercise due to error: ${_exercise!['name']}');
+      } else {
+        _exercise = null;
+      }
     }
   }
 
@@ -670,7 +711,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
         final historyEntry = _exerciseHistory[index];
         final DateTime date = DateTime.parse(historyEntry.date);
         final String formattedDate =
-            '${_getWeekday(date.weekday)}, ${_getMonth(date.month)} ${date.day}, ${date.year} at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')} ${date.hour >= 12 ? 'PM' : 'AM'}';
+            '${_getWeekday(date.weekday)}, ${_getMonth(date.month)} ${date.day}, ${date.year}';
 
         return Card(
           margin: const EdgeInsets.only(bottom: 16),
