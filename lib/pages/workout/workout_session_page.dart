@@ -44,7 +44,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   Timer? _restTimer;
   int _restTimeRemaining = 0;
   int? _currentRestSetId;
-  final TextEditingController _nameController = TextEditingController();
   final Map<int, TextEditingController> _weightControllers = {};
   final Map<int, TextEditingController> _repsControllers = {};
   
@@ -331,15 +330,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
     }
     
-    _nameController.dispose();
     for (var c in _weightControllers.values) {
       c.dispose();
     }
     for (var c in _repsControllers.values) {
       c.dispose();
-    }
-    
-    // If this was a temporary workout and we're navigating away without saving,
+    } // If this was a temporary workout and we're navigating away without saving,
     // discard the temporary workout (but not if we're minimizing)
     if (widget.isTemporary && mounted && !_isMinimizing) {
       // Check if any exercises were added
@@ -462,6 +458,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       reps: setData['reps'] ?? 0,
                       restTime: setData['restTime'] ?? _defaultRestTime,
                       completed: setData['completed'] ?? false,
+                      isPR: setData['isPR'] ?? false,
                     ));
                   }
                 }
@@ -499,11 +496,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           // Check if widget is still mounted before updating state
           setState(() {
             _workout = workout;
-            _nameController.text = workout!.name;
             // Only set the elapsed seconds during the initial load, not on refreshes
             // This prevents timer resetting when adding exercises
             if (_elapsedSeconds == 0) {
-              _elapsedSeconds = workout.duration;
+              _elapsedSeconds = workout!.duration;
             }
             _isLoading = false;
             
@@ -1130,40 +1126,90 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
     }
   }
-  void _updateWorkoutName() {
+  Future<void> _showEditNameDialog() async {
     if (widget.readOnly) return;
 
-    final newName = _nameController.text.trim();
-    if (newName.isNotEmpty && _workout != null) {
-      // Update local state immediately
-      if (mounted) {
-        setState(() {
-          _workout = Workout(
-            id: _workout!.id,
-            name: newName,
-            date: _workout!.date,
-            duration: _workout!.duration,
-            exercises: _workout!.exercises,
-          );
-        });
-      }
+    // Create a temporary controller for the dialog
+    final dialogController = TextEditingController(text: _workout?.name ?? '');
 
-      if (widget.isTemporary) {
-        // Update the temporary workout in memory
-        final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
-        if (tempWorkouts.containsKey(widget.workoutId)) {
-          tempWorkouts[widget.workoutId]['name'] = newName;
-          WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
-        }
-      } else {
-        // Then update database in background
-        _workoutService.updateWorkout(
-          widget.workoutId,
-          newName,
-          _workout!.date,
-          _workout!.duration,
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _surfaceColor,
+        title: Text('Edit Workout Name',
+            style: TextStyle(color: _textPrimaryColor)),
+        content: TextField(
+          controller: dialogController,
+          autofocus: true,
+          style: TextStyle(color: _textPrimaryColor),
+          decoration: InputDecoration(
+            hintText: 'Enter workout name',
+            hintStyle: TextStyle(color: _textSecondaryColor.withOpacity(0.7)),
+            enabledBorder: UnderlineInputBorder(
+              borderSide:
+                  BorderSide(color: _textSecondaryColor.withOpacity(0.5)),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: _primaryColor),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: Text('Cancel', style: TextStyle(color: _textSecondaryColor)),
+          ),
+          TextButton(
+            onPressed: () {
+              final newName = dialogController.text.trim();
+              Navigator.pop(context, newName.isNotEmpty ? newName : null);
+            },
+            child: Text('Save', style: TextStyle(color: _primaryColor)),
+          ),
+        ],
+      ),
+    );
+
+    // Dispose the dialog controller
+    dialogController.dispose();
+
+    // Update the workout name if a valid name was provided
+    if (result != null && result.isNotEmpty) {
+      _updateWorkoutName(result);
+    }
+  }
+
+  void _updateWorkoutName(String newName) {
+    if (widget.readOnly || _workout == null) return;
+
+    // Update local state immediately
+    if (mounted) {
+      setState(() {
+        _workout = Workout(
+          id: _workout!.id,
+          name: newName,
+          date: _workout!.date,
+          duration: _workout!.duration,
+          exercises: _workout!.exercises,
         );
+      });
+    }
+
+    if (widget.isTemporary) {
+      // Update the temporary workout in memory
+      final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+      if (tempWorkouts.containsKey(widget.workoutId)) {
+        tempWorkouts[widget.workoutId]['name'] = newName;
+        WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
       }
+    } else {
+      // Then update database in background
+      _workoutService.updateWorkout(
+        widget.workoutId,
+        newName,
+        _workout!.date,
+        _workout!.duration,
+      );
     }
   }
 
@@ -1266,6 +1312,39 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           for (var j = 0; j < sets.length && !found; j++) {
             if (sets[j]['id'] == setId) {
               sets[j]['completed'] = completed;
+              
+              // If completing the set, check if it's a PR based on volume
+              if (completed) {
+                final double weight = sets[j]['weight'] ?? 0.0;
+                final int reps = sets[j]['reps'] ?? 0;
+                final double volume = weight * reps;
+                final String currentExerciseName = exercises[i]['name'] ?? '';
+                
+                // For temporary workouts, we'll do a simple check by comparing
+                // with the maximum volume for this exercise across the workout
+                double maxVolume = 0.0;
+                for (var ex in exercises) {
+                  if (ex['name'] == currentExerciseName) {
+                    final List<dynamic> exSets = ex['sets'] ?? [];
+                    for (var exSet in exSets) {
+                      if (exSet['completed'] == true && exSet['id'] != setId) {
+                        final double exWeight = exSet['weight'] ?? 0.0;
+                        final int exReps = exSet['reps'] ?? 0;
+                        final double exVolume = exWeight * exReps;
+                        if (exVolume > maxVolume) {
+                          maxVolume = exVolume;
+                        }
+                      }
+                    }
+                  }
+                }
+                
+                // This is a temporary PR if volume is greater than any other completed set
+                sets[j]['isPR'] = volume > maxVolume && volume > 0;
+              } else {
+                sets[j]['isPR'] = false;
+              }
+              
               found = true;
             }
           }
@@ -1357,6 +1436,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               sets[j]['weight'] = weight;
               sets[j]['reps'] = reps;
               sets[j]['restTime'] = restTime;
+              sets[j]['volume'] = weight * reps;
               found = true;
             }
           }
@@ -1374,6 +1454,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           'weight': weight,
           'reps': reps,
           'restTime': restTime,
+          'volume': weight * reps,
         },
         where: 'id = ?',
         whereArgs: [setId],
@@ -1788,6 +1869,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   if (sets[j]['id'] == set.id) {
                     sets[j]['weight'] = set.weight;
                     sets[j]['reps'] = set.reps;
+                    sets[j]['volume'] = set.weight * set.reps;
                     break;
                   }
                 }
@@ -1803,6 +1885,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 {
                   'weight': set.weight,
                   'reps': set.reps,
+                  'volume': set.weight * set.reps,
                 },
                 where: 'id = ?',
                 whereArgs: [set.id],
@@ -2805,6 +2888,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                             .discardTemporaryWorkout(widget.workoutId);
                         // Clear the active session from database
                         await _clearActiveSessionFromDatabase();
+                        
+                        // Mark workout as discarded for foreground service to prevent restoration
+                        await WorkoutForegroundService.markWorkoutAsDiscarded();
+
+                        // Clear active workout from memory to remove the active workout bar
+                        WorkoutService.activeWorkoutNotifier.value = null;
+
+                        // Stop the foreground service and clear saved data
+                        await WorkoutForegroundService.stopWorkoutService();
+                        await WorkoutForegroundService.clearSavedWorkoutData();
+                        
                         _stopTimer();
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -2820,7 +2914,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         try {
                         // Create data structure for the temporary workout with all its exercises and sets
                         final tempData = {
-                          'name': _nameController.text,
+                            'name': _workout!.name,
                           'date': _workout!.date,
                           'duration': _elapsedSeconds,
                           'exercises': _workout!.exercises.map((exercise) {
@@ -2873,9 +2967,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       await _workoutService.deleteWorkout(widget.workoutId);
                         // Clear the active session from database
                         await _clearActiveSessionFromDatabase();
+                        
+                        // Mark workout as discarded for foreground service to prevent restoration
+                        await WorkoutForegroundService.markWorkoutAsDiscarded();
                       
                         // Clear active workout from memory to remove the active workout bar
                         WorkoutService.activeWorkoutNotifier.value = null;
+                        
+                        // Stop the foreground service and clear saved data
+                        await WorkoutForegroundService.stopWorkoutService();
+                        await WorkoutForegroundService.clearSavedWorkoutData();
                       
                       _stopTimer();
                       Navigator.pop(context);
@@ -2892,11 +2993,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
                     // Clear the active session from database since workout is being completed
                     await _clearActiveSessionFromDatabase();
+                    
+                    // Mark workout as discarded for foreground service to prevent restoration
+                    await WorkoutForegroundService.markWorkoutAsDiscarded();
                   
                     // Clear active workout from memory to remove the active workout bar
                     WorkoutService.activeWorkoutNotifier.value = null;
                   
+                    // Stop the timer and foreground service
                     _stopTimer();
+                    
+                    // Clear saved foreground service data to prevent restoration
+                    await WorkoutForegroundService.clearSavedWorkoutData();
                     
                     // Get workout count for completion screen
                     final workoutCount = await _workoutService.getWorkoutCount();
@@ -2943,34 +3051,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                           Row(
                             children: [
                               Expanded(
-                                child: !widget.readOnly
-                                    ? TextField(
-                                        controller: _nameController,
-                                        style: TextStyle(
-                                          color: _textPrimaryColor,
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        decoration: InputDecoration(
-                                          hintText: 'Enter workout name',
-                                          hintStyle: TextStyle(
-                                            color: _textSecondaryColor
-                                                .withOpacity(0.5),
-                                            fontSize: 24,
-                                          ),
-                                          border: InputBorder.none,
-                                          contentPadding: EdgeInsets.zero,
-                                        ),
-                                        onEditingComplete: _updateWorkoutName,
-                                      )
-                                    : Text(
-                                        _workout?.name ?? 'Workout',
-                                        style: TextStyle(
-                                          color: _textPrimaryColor,
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
+                                child: Text(
+                                  _workout?.name ?? 'Workout',
+                                  style: TextStyle(
+                                    color: _textPrimaryColor,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                               if (!widget.readOnly)
                                 PopupMenuButton<String>(
@@ -2978,11 +3066,26 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                       color: _textPrimaryColor),
                                   color: _surfaceColor,
                                   onSelected: (value) async {
-                                    if (value == 'discard') {
+                                    if (value == 'edit_name') {
+                                      await _showEditNameDialog();
+                                    } else if (value == 'discard') {
                                       await _discardWorkout();
                                     }
                                   },
                                   itemBuilder: (context) => [
+                                    PopupMenuItem<String>(
+                                      value: 'edit_name',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.edit_outlined,
+                                              color: _textPrimaryColor),
+                                          SizedBox(width: 8),
+                                          Text('Edit Name',
+                                              style: TextStyle(
+                                                  color: _textPrimaryColor)),
+                                        ],
+                                      ),
+                                    ),
                                     PopupMenuItem<String>(
                                       value: 'discard',
                                       child: Row(
@@ -3402,6 +3505,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         repsValue != null &&
         repsValue >= 0;
 
+    // Removed PR checking for workout session UI
+
     return RepaintBoundary(
       child: Dismissible(
         key: Key('set_${set.id}'),
@@ -3441,15 +3546,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 height: 40,
                 decoration: BoxDecoration(
                   color: set.completed
-                      ? _successColor.withOpacity(0.15)
-                      : _primaryColor.withOpacity(0.15),
+                          ? _successColor.withOpacity(0.15)
+                          : _primaryColor.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   '${set.setNumber}',
                   style: TextStyle(
-                    color: set.completed ? _successColor : _primaryColor,
+                    color: set.completed 
+                        ? _successColor 
+                        : _primaryColor,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

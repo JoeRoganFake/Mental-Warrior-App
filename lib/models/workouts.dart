@@ -97,6 +97,7 @@ class ExerciseSet {
   int reps;
   int restTime; // Rest time in seconds
   bool completed;
+  bool isPR; // Whether this set is a Personal Record
 
   ExerciseSet({
     required this.id,
@@ -106,7 +107,11 @@ class ExerciseSet {
     required this.reps,
     required this.restTime,
     required this.completed,
+    this.isPR = false,
   });
+
+  // Calculate volume (weight × reps)
+  double get volume => weight * reps;
 
   factory ExerciseSet.fromMap(Map<String, dynamic> map) {
     return ExerciseSet(
@@ -117,6 +122,7 @@ class ExerciseSet {
       reps: map['reps'] as int,
       restTime: map['restTime'] as int,
       completed: map['completed'] == 1,
+      isPR: map['isPR'] == 1 || false, // Default to false if not present
     );
   }
 
@@ -129,6 +135,8 @@ class ExerciseSet {
       'reps': reps,
       'restTime': restTime,
       'completed': completed ? 1 : 0,
+      'volume': volume,
+      'isPR': isPR ? 1 : 0,
     };
   }
 
@@ -140,6 +148,7 @@ class ExerciseSet {
     int? reps,
     int? restTime,
     bool? completed,
+    bool? isPR,
   }) {
     return ExerciseSet(
       id: id ?? this.id,
@@ -149,6 +158,7 @@ class ExerciseSet {
       reps: reps ?? this.reps,
       restTime: restTime ?? this.restTime,
       completed: completed ?? this.completed,
+      isPR: isPR ?? this.isPR,
     );
   }
 }

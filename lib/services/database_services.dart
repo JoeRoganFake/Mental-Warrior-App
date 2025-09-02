@@ -857,6 +857,8 @@ class WorkoutService {
   final String _setRepsColumnName = "reps";
   final String _setRestTimeColumnName = "restTime";
   final String _setCompletedColumnName = "completed";
+  final String _setVolumeColumnName = "volume";
+  final String _setIsPRColumnName = "isPR";
 
   // Active workout sessions table (for persistent state storage across app restarts)
   final String _activeWorkoutSessionsTableName = "active_workout_sessions";
@@ -903,6 +905,8 @@ class WorkoutService {
         $_setRepsColumnName INTEGER NOT NULL,
         $_setRestTimeColumnName INTEGER NOT NULL,
         $_setCompletedColumnName INTEGER NOT NULL,
+        $_setVolumeColumnName REAL NOT NULL,
+        $_setIsPRColumnName INTEGER DEFAULT 0,
         FOREIGN KEY ($_setExerciseIdColumnName) REFERENCES $_exerciseTableName ($_exerciseIdColumnName) ON DELETE CASCADE
       )
     ''');
@@ -1294,6 +1298,8 @@ class WorkoutService {
               'reps': reps,
               'restTime': restTime,
               'completed': false,
+              'volume': weight * reps,
+              'isPR': false, // Will be calculated when completed
             });
 
             // Update the notifier to trigger UI refresh
@@ -1320,11 +1326,36 @@ class WorkoutService {
         _setRepsColumnName: reps,
         _setRestTimeColumnName: restTime,
         _setCompletedColumnName: 0, // Not completed by default
+        _setVolumeColumnName: weight * reps,
+        _setIsPRColumnName: 0, // Will be calculated when completed
       },
     );
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
     return setId;
   }
+
+  // Check if a set is a Personal Record (PR) based on volume
+  Future<bool> isPersonalRecord(String exerciseName, double volume) async {
+    final db = await DatabaseService.instance.database;
+
+    // Query to find the maximum volume for this exercise across all workouts
+    final result = await db.rawQuery('''
+      SELECT MAX(es.volume) as max_volume
+      FROM exercise_sets es
+      INNER JOIN exercises e ON es.exerciseId = e.id
+      WHERE e.name = ? AND es.completed = 1
+    ''', [exerciseName]);
+
+    if (result.isEmpty || result.first['max_volume'] == null) {
+      // First time doing this exercise, so it's a PR
+      return true;
+    }
+
+    final double maxVolume = result.first['max_volume'] as double;
+    // Current volume is a PR if it's greater than the previous max
+    return volume > maxVolume;
+  }
+
   // Delete a set
   Future<void> deleteSet(int setId) async {
     // Handle temporary sets (negative IDs)
@@ -1347,9 +1378,37 @@ class WorkoutService {
   // Update set completion status
   Future<void> updateSetStatus(int setId, bool completed) async {
     final db = await DatabaseService.instance.database;
+    
+    Map<String, dynamic> updateData = {
+      _setCompletedColumnName: completed ? 1 : 0
+    };
+
+    // If completing the set, check if it's a PR
+    if (completed) {
+      // First get the set data to check the exercise name and volume
+      final setResult = await db.rawQuery('''
+        SELECT es.volume, e.name 
+        FROM $_setTableName es
+        INNER JOIN $_exerciseTableName e ON es.$_setExerciseIdColumnName = e.$_exerciseIdColumnName
+        WHERE es.$_setIdColumnName = ?
+      ''', [setId]);
+
+      if (setResult.isNotEmpty) {
+        final double volume = setResult.first['volume'] as double;
+        final String exerciseName = setResult.first['name'] as String;
+
+        // Check if this is a PR
+        final bool isPR = await isPersonalRecord(exerciseName, volume);
+        updateData[_setIsPRColumnName] = isPR ? 1 : 0;
+      }
+    } else {
+      // If uncompleting the set, it's no longer a PR
+      updateData[_setIsPRColumnName] = 0;
+    }
+    
     await db.update(
       _setTableName,
-      {_setCompletedColumnName: completed ? 1 : 0},
+      updateData,
       where: "$_setIdColumnName = ?",
       whereArgs: [setId],
     );

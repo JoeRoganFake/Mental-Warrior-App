@@ -125,6 +125,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
   Map<String, dynamic> _calculateWorkoutStats() {
     int totalSets = 0;
     int completedSets = 0;
+    int totalPRs = 0;
     double totalWeight = 0;
     ExerciseSet? bestSet;
     double maxWeight = 0;
@@ -135,6 +136,11 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
         if (set.completed) {
           completedSets++;
           totalWeight += set.weight * set.reps;
+          
+          // Count PRs
+          if (set.isPR) {
+            totalPRs++;
+          }
           
           // Find best set (highest weight)
           if (set.weight > maxWeight) {
@@ -151,6 +157,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
       'totalWeight': totalWeight,
       'bestSet': bestSet,
       'maxWeight': maxWeight,
+      'totalPRs': totalPRs,
     };
   }
 
@@ -215,7 +222,6 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
   }
 
   Widget _buildWorkoutSummaryCard(Map<String, dynamic> stats) {
-    final bestSet = stats['bestSet'] as ExerciseSet?;
     final completedSets = stats['completedSets'] as int;
     
     return Container(
@@ -253,185 +259,246 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
           ),
           const SizedBox(height: 20),
           
-          // Sets and best set row
-          Row(
-            children: [
-              // Sets column
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Sets',
-                      style: TextStyle(
-                        color: _textSecondaryColor,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: '$completedSets',
-                            style: TextStyle(
-                              color: _textPrimaryColor,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
+          // Exercises and sets section
+          Text(
+            'Exercises',
+            style: TextStyle(
+              color: _textSecondaryColor,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          // List all exercises with their sets
+          ...widget.workout.exercises.map((exercise) {
+            final completedExerciseSets = exercise.sets.where((set) => set.completed).length;
+            final totalExerciseSets = exercise.sets.length;
+            final prSets = exercise.sets.where((set) => set.completed && set.isPR).toList();
+            
+            return Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.1),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Exercise name and set count
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          exercise.name,
+                          style: TextStyle(
+                            color: _textPrimaryColor,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                           ),
-                          TextSpan(
-                            text: ' × ',
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          Text(
+                            '$completedExerciseSets/$totalExerciseSets sets',
                             style: TextStyle(
                               color: _textSecondaryColor,
                               fontSize: 14,
                             ),
                           ),
-                          // Show first exercise name if available
-                          if (widget.workout.exercises.isNotEmpty)
-                            TextSpan(
-                              text: widget.workout.exercises.first.name,
-                              style: TextStyle(
-                                color: _textSecondaryColor,
-                                fontSize: 14,
+                          if (prSets.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '${prSets.length} PR${prSets.length == 1 ? '' : 's'}',
+                                style: TextStyle(
+                                  color: Colors.amber,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                          if (widget.workout.exercises.length > 1)
-                            TextSpan(
-                              text: ' + ${widget.workout.exercises.length - 1} more',
-                              style: TextStyle(
-                                color: _textSecondaryColor,
-                                fontSize: 14,
-                              ),
-                            ),
+                          ],
                         ],
                       ),
-                    ),
-                    if (widget.workout.exercises.length > 1)
-                      const SizedBox(height: 4),
-                    if (widget.workout.exercises.length > 1)
-                      Text(
-                        widget.workout.exercises.skip(1).map((e) => e.name).take(2).join(', '),
-                        style: TextStyle(
-                          color: _textSecondaryColor,
-                          fontSize: 12,
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Display completed sets
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: exercise.sets.where((set) => set.completed).map((set) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: set.isPR ? Colors.amber.withOpacity(0.3) : _primaryColor.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: set.isPR ? Border.all(color: Colors.amber, width: 1) : null,
                         ),
-                      ),
-                  ],
-                ),
-              ),
-              
-              // Best set column
-              if (bestSet != null)
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        'Best set',
-                        style: TextStyle(
-                          color: _textSecondaryColor,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      RichText(
-                        textAlign: TextAlign.right,
-                        text: TextSpan(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            TextSpan(
-                              text: '${bestSet.weight.toStringAsFixed(bestSet.weight % 1 == 0 ? 0 : 1)} kg',
-                              style: TextStyle(
-                                color: _textPrimaryColor,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                            if (set.isPR)
+                              Icon(
+                                Icons.star,
+                                size: 12,
+                                color: Colors.amber,
                               ),
-                            ),
-                            TextSpan(
-                              text: ' × ${bestSet.reps}',
+                            if (set.isPR)
+                              const SizedBox(width: 2),
+                            Text(
+                              '${set.weight.toStringAsFixed(set.weight % 1 == 0 ? 0 : 1)}kg × ${set.reps}',
                               style: TextStyle(
-                                color: _textSecondaryColor,
-                                fontSize: 14,
+                                color: set.isPR ? Colors.amber.shade800 : _primaryColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      Text(
-                        '[F]',
-                        style: TextStyle(
-                          color: _primaryColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        '${bestSet.reps} reps',
-                        style: TextStyle(
-                          color: _textSecondaryColor,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
+                      );
+                    }).toList(),
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
+                ],
+              ),
+            );
+          }).toList(),
           
-          // Bottom stats row
-          Row(
-            children: [
-              // Duration
-              Icon(
-                Icons.access_time,
-                size: 16,
-                color: _textSecondaryColor,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                _formatDuration(widget.workout.duration),
-                style: TextStyle(
-                  color: _textPrimaryColor,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+          const SizedBox(height: 16),
+          
+          // Summary stats row
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: _primaryColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                // Duration
+                Column(
+                  children: [
+                    Icon(
+                      Icons.access_time,
+                      size: 20,
+                      color: _primaryColor,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _formatDuration(widget.workout.duration),
+                      style: TextStyle(
+                        color: _textPrimaryColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Duration',
+                      style: TextStyle(
+                        color: _textSecondaryColor,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 20),
-              
-              // Total weight
-              Icon(
-                Icons.fitness_center,
-                size: 16,
-                color: _textSecondaryColor,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '${((stats['totalWeight'] as double) / 1000).toStringAsFixed(1)}k kg',
-                style: TextStyle(
-                  color: _textPrimaryColor,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                
+                // Total weight
+                Column(
+                  children: [
+                    Icon(
+                      Icons.fitness_center,
+                      size: 20,
+                      color: _primaryColor,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${((stats['totalWeight'] as double) / 1000).toStringAsFixed(1)}k kg',
+                      style: TextStyle(
+                        color: _textPrimaryColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Total Volume',
+                      style: TextStyle(
+                        color: _textSecondaryColor,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 20),
-              
-              // PRs (for now showing 0, can be enhanced later)
-              Icon(
-                Icons.emoji_events,
-                size: 16,
-                color: _textSecondaryColor,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                '0 PRs',
-                style: TextStyle(
-                  color: _textPrimaryColor,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+                
+                // Total sets
+                Column(
+                  children: [
+                    Icon(
+                      Icons.list_alt,
+                      size: 20,
+                      color: _primaryColor,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$completedSets',
+                      style: TextStyle(
+                        color: _textPrimaryColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Sets',
+                      style: TextStyle(
+                        color: _textSecondaryColor,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                
+                // PRs
+                Column(
+                  children: [
+                    Icon(
+                      Icons.emoji_events,
+                      size: 20,
+                      color: _primaryColor,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${stats['totalPRs']}',
+                      style: TextStyle(
+                        color: _textPrimaryColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'PRs',
+                      style: TextStyle(
+                        color: _textSecondaryColor,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -532,7 +599,11 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                         child: SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
-                            onPressed: () => Navigator.of(context).pop(),
+                            onPressed: () {
+                              // Navigate back to the main workouts page by popping until we reach the root
+                              Navigator.of(context)
+                                  .popUntil((route) => route.isFirst);
+                            },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _primaryColor,
                               foregroundColor: Colors.white,
