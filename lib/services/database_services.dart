@@ -1082,14 +1082,13 @@ class WorkoutService {
     final workoutId =
         await addWorkout(workout['name'], workout['date'], workout['duration']);
 
-    // Save exercises and sets
+    // Save exercises and sets - but only exercises that have valid sets
     for (final exercise in workout['exercises']) {
-      final exerciseId =
-          await addExercise(workoutId, exercise['name'], exercise['equipment']);
-
+      // First, check if this exercise has any valid sets
+      bool hasValidSets = false;
+      List<Map<String, dynamic>> validSets = [];
+      
       for (final set in exercise['sets']) {
-        // Only save sets that have valid data (weight > 0 OR reps > 0 OR set is completed)
-        // This prevents saving empty/invalid sets when workout is finished
         final double weight = (set['weight'] ?? 0.0).toDouble();
         final int reps = (set['reps'] ?? 0);
         final bool completed = set['completed'] ?? false;
@@ -1097,8 +1096,23 @@ class WorkoutService {
         final bool hasValidWeight = weight > 0;
         final bool hasValidReps = reps > 0;
 
-        // Only save the set if it has valid data or if it's marked as completed
+        // Only include sets that have valid data or are marked as completed
         if (hasValidWeight || hasValidReps || completed) {
+          hasValidSets = true;
+          validSets.add(set);
+        }
+      }
+
+      // Only save the exercise if it has at least one valid set
+      if (hasValidSets) {
+        final exerciseId = await addExercise(
+            workoutId, exercise['name'], exercise['equipment']);
+
+        // Save all valid sets for this exercise
+        for (final set in validSets) {
+          final double weight = (set['weight'] ?? 0.0).toDouble();
+          final int reps = (set['reps'] ?? 0);
+          
           await addSet(
               exerciseId, set['setNumber'], weight, reps, set['restTime']);
         }

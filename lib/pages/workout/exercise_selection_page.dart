@@ -24,6 +24,9 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   List<String> _equipmentTypes = [
     'All'
   ]; // Initialize with 'All' to avoid LateInitializationError
+  
+  // Track selected exercises for multiple selection
+  final Set<String> _selectedExercises = <String>{};
 
   // Equipment options for adding custom exercise
   final List<String> _equipmentOptions = [
@@ -100,6 +103,23 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   void _onSearchChanged() {
     setState(() {
       _searchQuery = _searchController.text.toLowerCase();
+    });
+  }
+
+  // Helper method to create a unique key for each exercise
+  String _getExerciseKey(Map<String, dynamic> exercise) {
+    return '${exercise['name']}_${exercise['equipment']}';
+  }
+
+  // Toggle exercise selection
+  void _toggleExerciseSelection(Map<String, dynamic> exercise) {
+    setState(() {
+      final key = _getExerciseKey(exercise);
+      if (_selectedExercises.contains(key)) {
+        _selectedExercises.remove(key);
+      } else {
+        _selectedExercises.add(key);
+      }
     });
   }
 
@@ -209,13 +229,17 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
               final exerciseName = _customExerciseController.text.trim();
               if (exerciseName.isNotEmpty) {
                 Navigator.pop(context);
-                Navigator.pop(context, {
+                // Return custom exercise in the same list format
+                Navigator.pop(context, [
+                  {
                   'name': exerciseName,
                   'equipment':
                       selectedEquipment == 'None' ? 'None' : selectedEquipment,
                   'type': selectedType,
-                  'description': 'Custom exercise'
-                });
+                    'description': 'Custom exercise',
+                    'apiId': '', // Custom exercises don't have API IDs
+                  }
+                ]);
               }
             },
             child: const Text('Add'),
@@ -229,7 +253,9 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Select Exercise'),
+        title: Text(_selectedExercises.isEmpty
+            ? 'Select Exercises'
+            : '${_selectedExercises.length} selected'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(110),
           child: Column(
@@ -338,12 +364,26 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
               itemCount: _filteredExercises.length,
               itemBuilder: (context, index) {
                 final exercise = _filteredExercises[index];
+                final isSelected =
+                    _selectedExercises.contains(_getExerciseKey(exercise));
+                
                 return Card(
                   margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  elevation: 1,
+                  elevation: isSelected ? 4 : 1,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
+                    side: isSelected
+                        ? BorderSide(
+                            color:
+                                _getColorForType(exercise['type'] ?? 'No Type'),
+                            width: 2,
+                          )
+                        : BorderSide.none,
                   ),
+                  color: isSelected
+                      ? _getColorForType(exercise['type'] ?? 'No Type')
+                          .withOpacity(0.1)
+                      : null,
                   child: ListTile(
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -387,31 +427,24 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                             fontSize: 20,
                           ),
                         ),
+                      ),
                     ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context, {
-                      'name': exercise['name'] ?? 'Unnamed Exercise',
-                      'equipment': exercise['equipment'] ?? 'No Equipment',
-                      'type': exercise['type'] ?? 'No Type',
-                      'description':
-                          exercise['description'] ?? 'No description available',
-                        'apiId': exercise['id'] ??
-                            '', // Add the API ID from exercises_data.dart
-                    });
-                    }, // Show description on long press or with an expansion panel
-                  onLongPress: () {
-                    if (exercise['description'] != null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(exercise['description']),
-                          duration: const Duration(seconds: 3),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Checkbox for multiple selection
+                        Checkbox(
+                          value: _selectedExercises
+                              .contains(_getExerciseKey(exercise)),
+                          onChanged: (bool? value) {
+                            _toggleExerciseSelection(exercise);
+                          },
+                          activeColor:
+                              _getColorForType(exercise['type'] ?? 'No Type'),
                         ),
-                      );
-                    }
-                    },
-                    trailing: exercise['id'] != null
-                        ? Container(
+                        // Info button for exercise details
+                        if (exercise['id'] != null)
+                          Container(
                             decoration: BoxDecoration(
                               color: Colors.grey.shade200,
                               borderRadius: BorderRadius.circular(8),
@@ -422,7 +455,8 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                                 color: Theme.of(context).primaryColor,
                               ),
                               tooltip: 'View exercise details',
-                              onPressed: () {                                Navigator.push(
+                              onPressed: () {
+                                Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (context) => ExerciseDetailPage(
@@ -441,15 +475,64 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                                 );
                               },
                             ),
-                          )
-                        : null,
+                          ),
+                      ],
+                    ),
+                    onTap: () {
+                      // Toggle selection on tap instead of immediately returning
+                      _toggleExerciseSelection(exercise);
+                    },
+                    // Show description on long press or with an expansion panel
+                    onLongPress: () {
+                      if (exercise['description'] != null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(exercise['description']),
+                            duration: const Duration(seconds: 3),
+                          ),
+                        );
+                      }
+                    },
                   ),
                 );
               },
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddCustomExerciseDialog,
-        child: const Icon(Icons.add),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          // Add selected exercises button
+          if (_selectedExercises.isNotEmpty)
+            Container(
+              margin: EdgeInsets.only(bottom: 16),
+              child: FloatingActionButton.extended(
+                onPressed: () {
+                  // Return selected exercises
+                  final selectedExercisesList = _exercises
+                      .where((exercise) => _selectedExercises
+                          .contains(_getExerciseKey(exercise)))
+                      .map((exercise) => {
+                            'name': exercise['name'],
+                            'equipment': exercise['equipment'],
+                            'type': exercise['type'],
+                            'description': exercise['description'],
+                            'apiId': exercise['id'] ?? '',
+                          })
+                      .toList();
+                  Navigator.pop(context, selectedExercisesList);
+                },
+                backgroundColor: Theme.of(context).primaryColor,
+                icon: Icon(Icons.add),
+                label: Text(
+                    'Add ${_selectedExercises.length} Exercise${_selectedExercises.length == 1 ? '' : 's'}'),
+              ),
+            ),
+          // Add custom exercise button
+          FloatingActionButton(
+            onPressed: _showAddCustomExerciseDialog,
+            child: const Icon(Icons.add),
+            tooltip: 'Add custom exercise',
+          ),
+        ],
       ),
     );
   }
