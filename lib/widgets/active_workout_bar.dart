@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/workout/workout_session_page.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ActiveWorkoutBar extends StatefulWidget {
   const ActiveWorkoutBar({super.key});
@@ -38,6 +39,41 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
     // Listen to changes in the active workout notifier
     WorkoutService.activeWorkoutNotifier.addListener(_handleActiveWorkoutChanged);
   }
+  
+  // Validate that the active workout is still valid and not marked for discard
+  Future<bool> _validateActiveWorkout() async {
+    try {
+      // First, check if we have an active workout in the notifier
+      final activeWorkout = WorkoutService.activeWorkoutNotifier.value;
+      if (activeWorkout == null) {
+        print("⚠️ Active workout validation: No active workout in notifier");
+        return false;
+      }
+
+      // For ongoing workouts (those that appear in the active workout bar),
+      // we should trust the notifier more than the saved data since the saved data
+      // might not be immediately updated after actions like skipping rest timers
+
+      // Only check for the discard flag to prevent opening truly completed workouts
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final forDiscard = prefs.getBool('workout_for_discard') ?? false;
+        if (forDiscard) {
+          print("⚠️ Active workout validation: Workout marked for discard");
+          return false;
+        }
+      } catch (e) {
+        print("Error checking discard flag: $e");
+        // If we can't check the discard flag, assume it's valid since we have an active workout
+      }
+
+      return true;
+    } catch (e) {
+      print("Error validating active workout: $e");
+      return true; // Default to valid if there's an error
+    }
+  }
+  
   @override
   void dispose() {
     _stopTimer();
@@ -65,7 +101,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
       _formattedTime = "00:00";
     }
   }
-  
+
   void _startTimer() {
     // Get the current elapsed seconds from the active workout
     final activeWorkout = WorkoutService.activeWorkoutNotifier.value;
@@ -137,7 +173,15 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
         final isTemporary = activeWorkout['isTemporary'] as bool? ?? false;
 
         return GestureDetector(
-          onTap: () {
+          onTap: () async {
+            // First validate that this workout is still active and not completed
+            final isValid = await _validateActiveWorkout();
+            if (!isValid) {
+              // Workout is no longer valid (completed/discarded), clear it
+              WorkoutService.activeWorkoutNotifier.value = null;
+              return;
+            }
+            
             // Restore the workout session with current workout data
             final currentWorkoutData =
                 activeWorkout['workoutData'] as Map<String, dynamic>?;

@@ -101,19 +101,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
       
 
-      // Only clear the notifier if we're truly maximizing a minimized workout,
-      // not during a hot restart restoration
-      if (widget.restoredWorkoutData != null) {
-        // We're maximizing a minimized workout, so clear the notifier
-        // Defer clearing the notifier until after first frame
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          print(
-              "Clearing activeWorkoutNotifier after maximizing minimized workout");
-          WorkoutService.activeWorkoutNotifier.value = null;
-        });
-      } else {
-        print("Hot restart restoration - keeping activeWorkoutNotifier intact");
-      }
+      // Don't clear the notifier when opening from active workout bar
+      // This allows the user to view the workout session while keeping the active workout bar
+      // The notifier should only be cleared when the workout is actually completed or discarded
+      print(
+          "Opened minimized workout from active workout bar - keeping notifier active");
       
       // Start the timer with the restored elapsed seconds
       _startTimer();
@@ -304,9 +296,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // Remove lifecycle observer
     WidgetsBinding.instance.removeObserver(this);
     
-    // Only stop timers if we're not minimizing
-    // Use our explicit flag rather than checking the notifier
-    if (!_isMinimizing) {
+    // If this was opened from the active workout bar (minimized = true), 
+    // treat navigation back as minimizing to preserve the workout state
+    final bool shouldPreserveWorkout = _isMinimizing || widget.minimized;
+
+    // Only stop timers if we're not minimizing/preserving the workout
+    if (!shouldPreserveWorkout) {
       print("Dispose: Stopping timers as we're closing the workout");
       // Note: timers already cancelled above, just clean up foreground service
       WorkoutForegroundService.stopWorkoutService();
@@ -314,19 +309,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       // Clear the active session from database if we're truly closing the workout
       _clearActiveSessionFromDatabase();
     } else {
-      // If we're minimizing, make sure we have the latest data for the workout timer
+      // If we're minimizing or preserving, make sure we have the latest data for the workout timer
       if (_workoutStartTime != null && _isTimerRunning) {
         _elapsedSeconds =
             DateTime.now().difference(_workoutStartTime!).inSeconds;
-        print("Dispose: Minimizing workout - keeping timers alive");
-        // No need to save since the workout_minimizer will handle this
+        print("Dispose: Preserving workout state - keeping timers alive");
+
+        // Update the active notifier with the latest state before closing
+        _updateActiveNotifier();
       }
       
       // Also ensure rest timer state is properly preserved
       if (_currentRestSetId != null && _restTimeRemaining > 0) {
         print(
             "Dispose: Preserving rest timer with $_restTimeRemaining seconds remaining for SetID: $_currentRestSetId");
-        // The timer state is saved through the _isMinimizing flag which prevents cancellation
       }
     }
     
@@ -1383,27 +1379,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 final double volume = weight * reps;
                 final String currentExerciseName = exercises[i]['name'] ?? '';
                 
-                // For temporary workouts, we'll do a simple check by comparing
-                // with the maximum volume for this exercise across the workout
-                double maxVolume = 0.0;
-                for (var ex in exercises) {
-                  if (ex['name'] == currentExerciseName) {
-                    final List<dynamic> exSets = ex['sets'] ?? [];
-                    for (var exSet in exSets) {
-                      if (exSet['completed'] == true && exSet['id'] != setId) {
-                        final double exWeight = exSet['weight'] ?? 0.0;
-                        final int exReps = exSet['reps'] ?? 0;
-                        final double exVolume = exWeight * exReps;
-                        if (exVolume > maxVolume) {
-                          maxVolume = exVolume;
-                        }
-                      }
-                    }
-                  }
+                // For temporary workouts, check against historical data from database
+                bool isPR = false;
+                if (volume > 0) {
+                  // Only check for PR if volume is greater than 0
+                  // Clean the exercise name (remove API ID markers)
+                  String cleanExerciseName = currentExerciseName.replaceAll(
+                      RegExp(r'##API_ID:[^#]+##'), '');
+                  isPR = await _workoutService.isPersonalRecord(
+                      cleanExerciseName, volume);
                 }
                 
-                // This is a temporary PR if volume is greater than any other completed set
-                sets[j]['isPR'] = volume > maxVolume && volume > 0;
+                sets[j]['isPR'] = isPR;
               } else {
                 sets[j]['isPR'] = false;
               }
@@ -1421,16 +1408,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         }
       }
     } else {
-      // Update in database for regular workouts
-      final db = await DatabaseService.instance.database;
-      await db.update(
-        'exercise_sets',
-        {'completed': completed ? 1 : 0},
-        where: 'id = ?',
-        whereArgs: [setId],
-      );
-      WorkoutService.workoutsUpdatedNotifier.value =
-          !WorkoutService.workoutsUpdatedNotifier.value;
+      // Update in database for regular workouts - use the proper service method that includes PR calculation
+      await _workoutService.updateSetStatus(setId, completed);
       // Auto-save the workout state after updating set completion
       _updateActiveNotifier();
     }
@@ -1534,8 +1513,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
   /// Comprehensive cleanup when finishing workout
   /// 1. Keep sets already marked as completed (they are safe)
-  /// 2. Auto-complete valid sets that have weight > 0 OR reps > 0 but aren't completed yet
-  /// 3. Hard delete invalid sets that have empty/invalid weight AND reps
+  /// 2. Auto-complete valid sets that have weight >= 0 AND reps >= 0 but aren't completed yet
+  /// 3. Hard delete invalid sets that have negative values or empty fields
   Future<void> _cleanupWorkoutOnFinish() async {
     if (_workout == null) return;
 
@@ -1563,15 +1542,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           continue;
         }
 
-        // Check if set has valid data
-        final bool hasValidWeight = weight > 0;
-        final bool hasValidReps = reps > 0;
+        // Check if set has valid data - 0 is a valid value for weight and reps
+        // Only consider a set invalid if both weight and reps are negative or null
+        final bool hasValidWeight = weight >= 0;
+        final bool hasValidReps = reps >= 0;
 
-        if (hasValidWeight || hasValidReps) {
+        if (hasValidWeight && hasValidReps) {
           // Valid set but not completed - mark as completed to make it safe
           await _updateSetComplete(set.id, true);
         } else {
-          // Invalid set (no valid weight AND no valid reps) - mark for deletion
+          // Invalid set (negative values) - mark for deletion
           setsToDelete.add(set.id);
         }
       }
@@ -2121,14 +2101,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       // Serialize all sets for this exercise, but only include valid sets
       bool hasValidSets = false;
       for (final set in exercise.sets) {
-        // Only serialize sets that have valid data (weight > 0 OR reps > 0 OR set is completed)
-        // This prevents saving empty/invalid sets when workout is finished
-        final bool hasValidWeight = set.weight > 0;
-        final bool hasValidReps = set.reps > 0;
+        // Include sets that have valid data (weight >= 0 AND reps >= 0) OR are completed
+        // 0 is a valid value for both weight and reps
+        final bool hasValidWeight = set.weight >= 0;
+        final bool hasValidReps = set.reps >= 0;
         final bool isCompleted = set.completed;
         
         // Include the set if it has valid data or if it's marked as completed
-        if (hasValidWeight || hasValidReps || isCompleted) {
+        if ((hasValidWeight && hasValidReps) || isCompleted) {
           hasValidSets = true;
           final Map<String, dynamic> setData = {
             'id': set.id,
@@ -2838,9 +2818,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     final double? repsDouble = double.tryParse(rText);
                     
                         // Check for invalid values using existing validation:
-                    // 1. Null values (empty fields)
+                    // 1. Null values (empty fields) 
                     // 2. Negative weights or reps
                     // 3. Non-integer reps (decimal reps)
+                        // Note: 0 is a valid value for both weight and reps
                         bool isInvalid = weight == null ||
                         repsInt == null || // Empty fields
                         (weight < 0) || // Negative weight
@@ -2853,7 +2834,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                           invalidSets++;
                           if (!invalidSetsByExercise.containsKey(exercise.id)) {
                             invalidSetsByExercise[exercise.id] = [];
-                      }
+                          }
                           invalidSetsByExercise[exercise.id]!.add(set.id);
                         } else if (!set.completed) {
                           // This set is valid but not completed - will be auto-completed
@@ -3091,13 +3072,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                               'name': exercise.name,
                               'equipment': exercise.equipment,
                                 'sets': exercise.sets.where((set) {
-                                  // Only include sets that have valid data (weight > 0 OR reps > 0 OR set is completed)
-                                  // This prevents saving empty/invalid sets when workout is finished
-                                  final bool hasValidWeight = set.weight > 0;
-                                  final bool hasValidReps = set.reps > 0;
+                                  // Include sets that have valid data (weight >= 0 AND reps >= 0) OR are completed
+                                  // 0 is a valid value for both weight and reps
+                                  final bool hasValidWeight = set.weight >= 0;
+                                  final bool hasValidReps = set.reps >= 0;
                                   final bool isCompleted = set.completed;
-                                  return hasValidWeight ||
-                                      hasValidReps ||
+                                  return (hasValidWeight && hasValidReps) ||
                                       isCompleted;
                                 }).map((set) {
                                 return {

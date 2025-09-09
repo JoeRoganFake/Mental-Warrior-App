@@ -132,8 +132,8 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
     
     for (var exercise in widget.workout.exercises) {
       for (var set in exercise.sets) {
-        // Only count sets that are completed AND have valid data (weight > 0 OR reps > 0)
-        if (set.completed && (set.weight > 0 || set.reps > 0)) {
+        // Count all completed sets regardless of weight/reps values
+        if (set.completed) {
           totalSets++;
           completedSets++;
           totalWeight += set.weight * set.reps;
@@ -283,26 +283,23 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
           ),
           const SizedBox(height: 12),
           
-          // List all exercises in compact format - only show exercises with valid completed sets
+          // List all exercises in compact format - show all exercises with completed sets
           ...widget.workout.exercises.where((exercise) {
-            // Only include exercises that have at least one valid completed set
-            return exercise.sets.any(
-                (set) => set.completed && (set.weight > 0 || set.reps > 0));
+            // Include exercises that have at least one completed set
+            return exercise.sets.any((set) => set.completed);
           }).map((exercise) {
-            // Count only valid completed sets
-            final validCompletedSets = exercise.sets
-                .where(
-                    (set) => set.completed && (set.weight > 0 || set.reps > 0))
+            // Count all completed sets
+            final completedSets =
+                exercise.sets.where((set) => set.completed)
                 .length;
             
-            // Find best set among valid completed sets
-            final validCompletedSetsList = exercise.sets
-                .where(
-                    (set) => set.completed && (set.weight > 0 || set.reps > 0))
+            // Find best set among completed sets (highest weight)
+            final completedSetsList =
+                exercise.sets.where((set) => set.completed)
                 .toList();
 
-            final bestSet = validCompletedSetsList.isNotEmpty
-                ? validCompletedSetsList
+            final bestSet = completedSetsList.isNotEmpty
+                ? completedSetsList
                     .reduce((a, b) => a.weight > b.weight ? a : b)
                 : null;
 
@@ -312,7 +309,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                 children: [
                   Expanded(
                     child: Text(
-                      '$validCompletedSets × ${exercise.name}',
+                      '$completedSets × ${exercise.name}',
                       style: TextStyle(
                         color: _textPrimaryColor,
                         fontSize: 16,

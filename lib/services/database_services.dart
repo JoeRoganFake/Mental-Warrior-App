@@ -1112,9 +1112,16 @@ class WorkoutService {
         for (final set in validSets) {
           final double weight = (set['weight'] ?? 0.0).toDouble();
           final int reps = (set['reps'] ?? 0);
+          final bool completed = set['completed'] ?? false;
           
-          await addSet(
+          final setId = await addSet(
               exerciseId, set['setNumber'], weight, reps, set['restTime']);
+          
+          // If the set was completed in the temporary workout, mark it as completed
+          // This will trigger the proper PR calculation
+          if (completed) {
+            await updateSetStatus(setId, true);
+          }
         }
       }
     }
@@ -1349,23 +1356,56 @@ class WorkoutService {
   }
 
   // Check if a set is a Personal Record (PR) based on volume
-  Future<bool> isPersonalRecord(String exerciseName, double volume) async {
+  Future<bool> isPersonalRecord(String exerciseName, double volume,
+      {int? excludeSetId}) async {
     final db = await DatabaseService.instance.database;
 
-    // Query to find the maximum volume for this exercise across all workouts
-    final result = await db.rawQuery('''
-      SELECT MAX(es.volume) as max_volume
+    // Clean the exercise name to ensure consistent comparison
+    final String cleanExerciseName =
+        exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+
+    // Query to find all completed sets for exercises that match the clean name
+    // We'll clean the names in Dart for more reliable comparison
+    String query = '''
+      SELECT es.volume, e.name, es.id
       FROM exercise_sets es
       INNER JOIN exercises e ON es.exerciseId = e.id
-      WHERE e.name = ? AND es.completed = 1
-    ''', [exerciseName]);
+      WHERE es.completed = 1
+    ''';
 
-    if (result.isEmpty || result.first['max_volume'] == null) {
+    List<dynamic> queryArgs = [];
+
+    // If excludeSetId is provided, exclude that set from the comparison
+    if (excludeSetId != null) {
+      query += ' AND es.id != ?';
+      queryArgs.add(excludeSetId);
+    }
+
+    final result = await db.rawQuery(query, queryArgs);
+
+    // Filter results by clean exercise name and find maximum volume
+    double maxVolume = 0.0;
+    bool hasAnyResults = false;
+
+    for (final row in result) {
+      final String dbExerciseName = row['name'] as String;
+      final String cleanDbExerciseName =
+          dbExerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+
+      if (cleanDbExerciseName == cleanExerciseName) {
+        hasAnyResults = true;
+        final double rowVolume = row['volume'] as double;
+        if (rowVolume > maxVolume) {
+          maxVolume = rowVolume;
+        }
+      }
+    }
+
+    if (!hasAnyResults) {
       // First time doing this exercise, so it's a PR
       return true;
     }
 
-    final double maxVolume = result.first['max_volume'] as double;
     // Current volume is a PR if it's greater than the previous max
     return volume > maxVolume;
   }
@@ -1410,9 +1450,14 @@ class WorkoutService {
       if (setResult.isNotEmpty) {
         final double volume = setResult.first['volume'] as double;
         final String exerciseName = setResult.first['name'] as String;
+        
+        // Clean the exercise name (remove API ID markers) for consistent PR comparison
+        final String cleanExerciseName =
+            exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
 
-        // Check if this is a PR
-        final bool isPR = await isPersonalRecord(exerciseName, volume);
+        // Check if this is a PR (excluding the current set from comparison)
+        final bool isPR = await isPersonalRecord(cleanExerciseName, volume,
+            excludeSetId: setId);
         updateData[_setIsPRColumnName] = isPR ? 1 : 0;
       }
     } else {

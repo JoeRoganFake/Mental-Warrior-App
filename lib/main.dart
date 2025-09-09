@@ -74,6 +74,8 @@ Future<void> _checkAndRestoreSavedWorkout() async {
       final workoutService = WorkoutService();
       await workoutService.restoreSavedWorkout(savedData);
       print("✅ Restored saved workout: ${savedData['workout_name']}");
+    } else {
+      print("ℹ️ No saved workout data found or workout was marked for discard");
     }
   } catch (e) {
     print("❌ Error restoring saved workout data: $e");
