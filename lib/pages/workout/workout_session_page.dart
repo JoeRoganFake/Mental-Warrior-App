@@ -70,6 +70,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   // Variables to track minimized workout restoration
   bool _isRestoringFromMinimized = false;
   Map<String, dynamic>? _savedWorkoutData;
+  
+  // Cache for previous exercise history to show as greyed out placeholders
+  final Map<String, List<ExerciseSet>> _exerciseHistoryCache = {};
   @override
   void initState() {
     super.initState();
@@ -1100,15 +1103,42 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 equipment);
           }
 
-          // Add a set with null/empty values that will be displayed as empty fields in UI
-          // The database needs some value, but we'll use the `_buildSetItem` logic to show empty fields
-          await _workoutService.addSet(
-            exerciseId,
-            1, // Set number
-            0, // Weight - will be displayed as empty
-            0, // Reps - will be displayed as empty
-            _defaultRestTime, // Default rest time
-          );
+          // Check for previous exercise history to create sets based on previous workout
+          final previousSets =
+              await _workoutService.getRecentExerciseHistory(exerciseName);
+
+          // Cache the previous exercise history for UI display
+          final String cleanExerciseName =
+              exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+          if (previousSets != null && previousSets.isNotEmpty) {
+            _exerciseHistoryCache[cleanExerciseName] = previousSets;
+          }
+
+          if (previousSets != null && previousSets.isNotEmpty) {
+            // Create sets based on previous exercise history
+            print(
+                '🏗️ Creating ${previousSets.length} sets based on previous history');
+
+            for (int i = 0; i < previousSets.length; i++) {
+              final previousSet = previousSets[i];
+              await _workoutService.addSet(
+                exerciseId,
+                i + 1, // Set number (1-indexed)
+                0, // Current weight starts as 0 (empty)
+                0, // Current reps starts as 0 (empty)
+                previousSet.restTime, // Use previous rest time
+              );
+            }
+          } else {
+            // No previous history, create a single empty set
+            await _workoutService.addSet(
+              exerciseId,
+              1, // Set number
+              0, // Weight - will be displayed as empty
+              0, // Reps - will be displayed as empty
+              _defaultRestTime, // Default rest time
+            );
+          }
         }
 
         _loadWorkout();
@@ -1155,15 +1185,42 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               equipment);
         }
 
-        // Add a set with null/empty values that will be displayed as empty fields in UI
-        // The database needs some value, but we'll use the `_buildSetItem` logic to show empty fields
-        await _workoutService.addSet(
-          exerciseId,
-          1, // Set number
-          0, // Weight - will be displayed as empty
-          0, // Reps - will be displayed as empty
-          _defaultRestTime, // Default rest time
-        );
+        // Check for previous exercise history to create sets based on previous workout
+        final previousSets =
+            await _workoutService.getRecentExerciseHistory(exerciseName);
+
+        // Cache the previous exercise history for UI display
+        final String cleanExerciseName =
+            exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+        if (previousSets != null && previousSets.isNotEmpty) {
+          _exerciseHistoryCache[cleanExerciseName] = previousSets;
+        }
+
+        if (previousSets != null && previousSets.isNotEmpty) {
+          // Create sets based on previous exercise history
+          print(
+              '🏗️ Creating ${previousSets.length} sets based on previous history');
+
+          for (int i = 0; i < previousSets.length; i++) {
+            final previousSet = previousSets[i];
+            await _workoutService.addSet(
+              exerciseId,
+              i + 1, // Set number (1-indexed)
+              0, // Current weight starts as 0 (empty)
+              0, // Current reps starts as 0 (empty)
+              previousSet.restTime, // Use previous rest time
+            );
+          }
+        } else {
+          // No previous history, create a single empty set
+          await _workoutService.addSet(
+            exerciseId,
+            1, // Set number
+            0, // Weight - will be displayed as empty
+            0, // Reps - will be displayed as empty
+            _defaultRestTime, // Default rest time
+          );
+        }
 
         _loadWorkout();
         
@@ -3625,7 +3682,28 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       ),
     );
   }
+  
+  // Helper method to get previous exercise values for display as greyed out placeholders
+  ExerciseSet? _getPreviousSetValues(String exerciseName, int setNumber) {
+    // Clean exercise name to remove API ID markers
+    final String cleanExerciseName =
+        exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+
+    // Check cache
+    if (_exerciseHistoryCache.containsKey(cleanExerciseName)) {
+      final previousSets = _exerciseHistoryCache[cleanExerciseName]!;
+      if (setNumber <= previousSets.length) {
+        return previousSets[setNumber - 1]; // Convert to 0-based index
+      }
+    }
+
+    return null;
+  }
+  
   Widget _buildSetItem(Exercise exercise, ExerciseSet set) {
+    // Get previous set values for display as greyed out placeholders
+    final previousSet = _getPreviousSetValues(exercise.name, set.setNumber);
+    
     // initialize controllers if absent
     _weightControllers.putIfAbsent(set.id, () {
       // Show initial weight only if greater than zero
@@ -3742,6 +3820,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                           borderSide: BorderSide.none),
+                      // Show previous weight as placeholder if available and current field is empty
+                      hintText: (previousSet != null &&
+                              (_weightControllers[set.id]?.text.isEmpty ??
+                                  true))
+                          ? (previousSet.weight > 0
+                              ? (previousSet.weight % 1 == 0
+                                  ? previousSet.weight.toInt().toString()
+                                  : previousSet.weight.toString())
+                              : null)
+                          : null,
+                      hintStyle: TextStyle(
+                        color: _textSecondaryColor.withOpacity(0.6),
+                        fontSize: 14,
+                      ),
                       // Use suffix widget with padding to avoid cramped edge
                       suffix: Padding(
                         padding: EdgeInsets.symmetric(horizontal: 8.0),
@@ -3793,6 +3885,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                           borderSide: BorderSide.none),
+                      // Show previous reps as placeholder if available and current field is empty
+                      hintText: (previousSet != null &&
+                              (_repsControllers[set.id]?.text.isEmpty ?? true))
+                          ? (previousSet.reps > 0
+                              ? previousSet.reps.toString()
+                              : null)
+                          : null,
+                      hintStyle: TextStyle(
+                        color: _textSecondaryColor.withOpacity(0.6),
+                        fontSize: 14,
+                      ),
                     ),
                     textAlign: TextAlign.center,
                     onChanged: (value) {

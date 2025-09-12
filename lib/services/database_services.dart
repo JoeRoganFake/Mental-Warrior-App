@@ -1858,6 +1858,44 @@ class WorkoutService {
       print('❌ Error restoring saved workout: $e');
     }
   }
+
+  // Get the most recent exercise history for a given exercise name
+  Future<List<ExerciseSet>?> getRecentExerciseHistory(
+      String exerciseName) async {
+    try {
+      final workouts = await getWorkouts();
+
+      // Clean the exercise name to remove API ID markers
+      final String cleanExerciseName =
+          exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+
+      // Find the most recent workout that contains this exercise
+      for (final workout in workouts) {
+        for (final exercise in workout.exercises) {
+          // Clean the database exercise name for comparison
+          final String cleanDbExerciseName =
+              exercise.name.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+
+          // Check for exact match (case insensitive)
+          if (cleanDbExerciseName.toLowerCase() ==
+              cleanExerciseName.toLowerCase()) {
+            // Only return sets from finished workouts
+            if (exercise.finished) {
+              print(
+                  '📋 Found previous exercise history: ${exercise.sets.length} sets');
+              return exercise.sets;
+            }
+          }
+        }
+      }
+
+      print('📋 No previous exercise history found for: $cleanExerciseName');
+      return null;
+    } catch (e) {
+      print('❌ Error loading exercise history: $e');
+      return null;
+    }
+  }
 }
 
 // Add a new SettingsService class at the end of the file

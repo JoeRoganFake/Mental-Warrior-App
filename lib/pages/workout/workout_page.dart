@@ -431,91 +431,134 @@ class WorkoutPageState extends State<WorkoutPage> {
                                   // Exercise sets and details - similar to the image
                                   if (workout.exercises.isNotEmpty)
                                     Column(
-                                      children:
-                                          workout.exercises.map((exercise) {
-                                        // Calculate total sets and best set
-                                        String bestSet = '';
-                                        double bestWeight = 0;
-                                        int bestReps = 0;
+                                          children: [
+                                            // Show only first 3 exercises
+                                            ...workout.exercises
+                                                .take(3)
+                                                .map((exercise) {
+                                              // Calculate total sets and best set
+                                              String bestSet = '';
+                                              double bestWeight = 0;
+                                              int bestReps = 0;
 
-                                        for (var set in exercise.sets) {
-                                          if (set.weight > bestWeight ||
-                                              (set.weight == bestWeight &&
-                                                  set.reps > bestReps)) {
-                                            bestWeight = set.weight;
-                                            bestReps = set.reps;
-                                            bestSet = bestWeight > 0
-                                                ? '${bestWeight.toStringAsFixed(bestWeight.truncateToDouble() == bestWeight ? 0 : 1)} kg × $bestReps'
-                                                : '$bestReps reps';
-                                          }
-                                        }
+                                              for (var set in exercise.sets) {
+                                                if (set.weight > bestWeight ||
+                                                    (set.weight == bestWeight &&
+                                                        set.reps > bestReps)) {
+                                                  bestWeight = set.weight;
+                                                  bestReps = set.reps;
+                                                  bestSet = bestWeight > 0
+                                                      ? '${bestWeight.toStringAsFixed(bestWeight.truncateToDouble() == bestWeight ? 0 : 1)} kg × $bestReps'
+                                                      : '$bestReps reps';
+                                                }
+                                              }
 
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                              bottom: 12.0),
-                                          child: Row(
-                                            children: [
-                                              Expanded(
-                                                flex: 3,
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 12.0),
+                                                child: Row(
                                                   children: [
-                                                    Text(
-                                                      exercise.name.replaceAll(
-                                                          RegExp(
-                                                              r'##API_ID:[^#]+##'),
-                                                          ''),
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.w500,
+                                                    Expanded(
+                                                      flex: 3,
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Text(
+                                                            exercise.name
+                                                                .replaceAll(
+                                                                    RegExp(
+                                                                        r'##API_ID:[^#]+##'),
+                                                                    ''),
+                                                            style:
+                                                                const TextStyle(
+                                                              color:
+                                                                  Colors.white,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w500,
+                                                            ),
+                                                          ),
+                                                          // Show set details
+                                                          ...exercise.sets
+                                                              .map((set) {
+                                                            return Text(
+                                                              set.weight > 0
+                                                                  ? "${set.weight.toStringAsFixed(set.weight.truncateToDouble() == set.weight ? 0 : 1)} kg × ${set.reps}"
+                                                                  : "${set.reps} reps",
+                                                              style:
+                                                                  const TextStyle(
+                                                                color: Colors
+                                                                    .white70,
+                                                                fontSize: 12,
+                                                              ),
+                                                            );
+                                                          }), // Limit to first 2 sets
+                                                        ],
                                                       ),
                                                     ),
-                                                    // Show set details
-                                                    ...exercise.sets.map((set) {
-                                                      return Text(
-                                                        set.weight > 0
-                                                            ? "${set.weight.toStringAsFixed(set.weight.truncateToDouble() == set.weight ? 0 : 1)} kg × ${set.reps}"
-                                                            : "${set.reps} reps",
-                                                        style: const TextStyle(
-                                                          color: Colors.white70,
-                                                          fontSize: 12,
-                                                        ),
-                                                      );
-                                                    }), // Limit to first 2 sets
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      flex: 2,
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .end,
+                                                        children: [
+                                                          const Text(
+                                                            "Best set",
+                                                            style: TextStyle(
+                                                              color: Colors
+                                                                  .white70,
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                          Text(
+                                                            bestSet,
+                                                            style:
+                                                                const TextStyle(
+                                                              color:
+                                                                  Colors.white,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w500,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
                                                   ],
                                                 ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                flex: 2,
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.end,
+                                              );
+                                            }).toList(),
+                                        
+                                            // Show indicator if there are more than 3 exercises
+                                            if (workout.exercises.length > 3)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 12.0),
+                                                child: Row(
                                                   children: [
-                                                    const Text(
-                                                      "Best set",
-                                                      style: TextStyle(
+                                                    const Icon(
+                                                      Icons.more_horiz,
+                                                      color: Colors.white70,
+                                                      size: 16,
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      '${workout.exercises.length - 3} more exercise${workout.exercises.length - 3 > 1 ? 's' : ''}',
+                                                      style: const TextStyle(
                                                         color: Colors.white70,
                                                         fontSize: 12,
-                                                      ),
-                                                    ),
-                                                    Text(
-                                                      bestSet,
-                                                      style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontWeight:
-                                                            FontWeight.w500,
+                                                        fontStyle:
+                                                            FontStyle.italic,
                                                       ),
                                                     ),
                                                   ],
                                                 ),
                                               ),
-                                            ],
-                                          ),
-                                        );
-                                      }).toList(),
+                                          ],
                                     ),
                                     
                                     const SizedBox(height: 8),
