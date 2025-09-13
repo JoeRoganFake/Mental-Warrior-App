@@ -505,6 +505,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             // Initialize all controllers for all sets after workout is loaded
             _initializeAllControllers();
             
+            // Populate exercise history cache for all exercises in this workout
+            _populateExerciseHistoryCache();
+            
             // If we're restoring from minimized state, apply the saved data
             if (_isRestoringFromMinimized && _savedWorkoutData != null) {
               print(
@@ -577,6 +580,32 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           }
           _repsControllers[set.id] =
               TextEditingController(text: initialRepsText);
+        }
+      }
+    }
+  }
+
+  // Helper method to populate exercise history cache for all exercises in the workout
+  Future<void> _populateExerciseHistoryCache() async {
+    if (_workout == null) return;
+
+    for (final exercise in _workout!.exercises) {
+      // Clean exercise name to remove API ID markers
+      final String cleanExerciseName =
+          exercise.name.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+
+      // Only populate cache if not already cached
+      if (!_exerciseHistoryCache.containsKey(cleanExerciseName)) {
+        try {
+          final previousSets =
+              await _workoutService.getRecentExerciseHistory(exercise.name);
+          if (previousSets != null && previousSets.isNotEmpty) {
+            _exerciseHistoryCache[cleanExerciseName] = previousSets;
+            print(
+                '📋 Cached exercise history for: $cleanExerciseName (${previousSets.length} sets)');
+          }
+        } catch (e) {
+          print('❌ Error caching exercise history for $cleanExerciseName: $e');
         }
       }
     }
@@ -1387,6 +1416,65 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   }
 
   void _toggleSetCompletion(int exerciseId, int setId, bool completed) async {
+    // If completing a set, check if we should auto-fill with previous values
+    if (completed) {
+      // Find the exercise and set
+      Exercise? targetExercise;
+      ExerciseSet? targetSet;
+
+      for (var exercise in _workout!.exercises) {
+        if (exercise.id == exerciseId) {
+          targetExercise = exercise;
+          for (var set in exercise.sets) {
+            if (set.id == setId) {
+              targetSet = set;
+              break;
+            }
+          }
+          break;
+        }
+      }
+
+      if (targetExercise != null && targetSet != null) {
+        // Check if current values are empty/zero and we have previous values available
+        final String currentWeightText = _weightControllers[setId]?.text ?? '';
+        final String currentRepsText = _repsControllers[setId]?.text ?? '';
+        final double currentWeight = double.tryParse(currentWeightText) ?? 0;
+        final int currentReps = int.tryParse(currentRepsText) ?? 0;
+
+        // Get previous values if current values are empty or zero
+        final bool shouldUsePreviousValues =
+            (currentWeightText.isEmpty || currentWeight == 0) &&
+                (currentRepsText.isEmpty || currentReps == 0);
+
+        if (shouldUsePreviousValues) {
+          final previousSet =
+              _getPreviousSetValues(targetExercise.name, targetSet.setNumber);
+
+          if (previousSet != null &&
+              previousSet.weight > 0 &&
+              previousSet.reps > 0) {
+            // Update the controllers with previous values
+            final weightText = (previousSet.weight % 1 == 0)
+                ? previousSet.weight.toInt().toString()
+                : previousSet.weight.toString();
+            final repsText = previousSet.reps.toString();
+
+            _weightControllers[setId]?.text = weightText;
+            _repsControllers[setId]?.text = repsText;
+
+            // Update the set data in the database with previous values
+            await _updateSetData(setId, previousSet.weight, previousSet.reps,
+                targetSet.restTime);
+          }
+        } else if (currentWeight > 0 && currentReps > 0) {
+          // If user has entered custom values, save those
+          await _updateSetData(
+              setId, currentWeight, currentReps, targetSet.restTime);
+        }
+      }
+    }
+    
     // First update UI immediately without waiting for database operation
     if (mounted) {
       setState(() {
@@ -3625,6 +3713,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     SizedBox(width: 40),
                     Expanded(
                         flex: 2,
+                        child: Text('PREVIOUS',
+                            style: TextStyle(
+                                color: _textSecondaryColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center)),
+                    Expanded(
+                        flex: 2,
                         child: Text('WEIGHT',
                             style: TextStyle(
                                 color: _textSecondaryColor,
@@ -3727,11 +3823,22 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     final String repsTextStr = _repsControllers[set.id]?.text ?? '';
     final double? weightValue = double.tryParse(weightTextStr);
     final int? repsValue = int.tryParse(repsTextStr);
-    final bool canCompleteButton =
-        weightValue != null &&
+    
+    // Check if current fields have valid values
+    final bool hasCurrentValues = weightValue != null &&
         weightValue >= 0 &&
         repsValue != null &&
         repsValue >= 0;
+    
+    // Check if previous values are available when current fields are empty
+    final bool hasPreviousValues =
+        (weightTextStr.isEmpty || (weightValue ?? 0) == 0) &&
+            (repsTextStr.isEmpty || (repsValue ?? 0) == 0) &&
+            previousSet != null &&
+            previousSet.weight > 0 &&
+            previousSet.reps > 0;
+
+    final bool canCompleteButton = hasCurrentValues || hasPreviousValues;
 
     // Removed PR checking for workout session UI
 
@@ -3797,6 +3904,32 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         ? _successColor 
                         : _primaryColor,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
+              // Previous values column
+              Expanded(
+                flex: 2,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Center(
+                    child: previousSet != null
+                        ? Text(
+                            '${previousSet.weight > 0 ? (previousSet.weight % 1 == 0 ? previousSet.weight.toInt().toString() : previousSet.weight.toString()) : '-'}kg x ${previousSet.reps > 0 ? previousSet.reps.toString() : '-'}',
+                            style: TextStyle(
+                              color: _textSecondaryColor.withOpacity(0.7),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          )
+                        : Text(
+                            '-',
+                            style: TextStyle(
+                              color: _textSecondaryColor.withOpacity(0.4),
+                              fontSize: 12,
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -3937,7 +4070,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         tooltip: canCompleteButton
                             ? (set.completed
                                 ? 'Mark as incomplete'
-                                : 'Mark as completed')
+                                : hasPreviousValues
+                                    ? 'Mark as completed (will use previous values)'
+                                    : 'Mark as completed')
                             : 'Enter weight and reps to complete',
                         onPressed: canCompleteButton
                             ? () {
@@ -3945,21 +4080,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                 _toggleSetCompletion(
                                     exercise.id, set.id, willComplete);
                                 if (willComplete) {
-                                  // Start rest when completing
+                                  // Start rest when completing (but don't open rest timer window)
                                   _startRestTimerForSet(set.id, set.restTime);
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => RestTimerPage(
-                                        originalDuration: _originalRestTime,
-                                        remaining: _restRemainingNotifier,
-                                        isPaused: _restPausedNotifier,
-                                        onPause: _togglePauseRest,
-                                        onIncrement: _incrementRest,
-                                        onDecrement: _decrementRest,
-                                        onSkip: _cancelRestTimer,
-                                      ),
-                                    ),
-                                  );
                                 } else {
                                   // Cancel rest when undoing, but don't play sound
                                   _cancelRestTimer(playSound: false);

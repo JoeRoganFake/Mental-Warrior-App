@@ -1870,6 +1870,7 @@ class WorkoutService {
           exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
 
       // Find the most recent workout that contains this exercise
+      // Workouts are already ordered by date DESC (most recent first)
       for (final workout in workouts) {
         for (final exercise in workout.exercises) {
           // Clean the database exercise name for comparison
@@ -1879,11 +1880,15 @@ class WorkoutService {
           // Check for exact match (case insensitive)
           if (cleanDbExerciseName.toLowerCase() ==
               cleanExerciseName.toLowerCase()) {
-            // Only return sets from finished workouts
-            if (exercise.finished) {
-              print(
-                  '📋 Found previous exercise history: ${exercise.sets.length} sets');
-              return exercise.sets;
+            // Only return sets from finished workouts and exercises with completed sets
+            if (exercise.finished && exercise.sets.isNotEmpty) {
+              // Filter to only return completed sets
+              final completedSets = exercise.sets.where((set) => set.completed).toList();
+              if (completedSets.isNotEmpty) {
+                print(
+                    '📋 Found most recent exercise history: ${completedSets.length} completed sets');
+                return completedSets;
+              }
             }
           }
         }
