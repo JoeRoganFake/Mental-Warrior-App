@@ -71,6 +71,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   bool _isRestoringFromMinimized = false;
   Map<String, dynamic>? _savedWorkoutData;
   
+  // Flag to track if workout is being completed/discarded
+  bool _isCompleting = false;
+  
   // Cache for previous exercise history to show as greyed out placeholders
   final Map<String, List<ExerciseSet>> _exerciseHistoryCache = {};
   @override
@@ -505,7 +508,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             // Initialize all controllers for all sets after workout is loaded
             _initializeAllControllers();
             
-            // Populate exercise history cache for all exercises in this workout
+            // Populate exercise history cache for all exercises in the workout
             _populateExerciseHistoryCache();
             
             // If we're restoring from minimized state, apply the saved data
@@ -558,6 +561,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   void _initializeAllControllers() {
     if (_workout == null) return;
 
+    // First, clean up any orphaned controllers that don't correspond to current sets
+    _cleanupOrphanedControllers();
+
     for (final exercise in _workout!.exercises) {
       for (final set in exercise.sets) {
         // Initialize weight controller if it doesn't exist
@@ -585,8 +591,48 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
   }
 
+  // Helper method to clean up orphaned controllers that don't correspond to current sets
+  void _cleanupOrphanedControllers() {
+    if (_workout == null) return;
+
+    // Get all valid set IDs from current workout
+    final Set<int> validSetIds = {};
+    for (final exercise in _workout!.exercises) {
+      for (final set in exercise.sets) {
+        validSetIds.add(set.id);
+      }
+    }
+
+    // Remove controllers for IDs that no longer exist in the workout
+    final List<int> orphanedWeightControllerIds = [];
+    final List<int> orphanedRepsControllerIds = [];
+
+    for (final setId in _weightControllers.keys) {
+      if (!validSetIds.contains(setId)) {
+        orphanedWeightControllerIds.add(setId);
+      }
+    }
+
+    for (final setId in _repsControllers.keys) {
+      if (!validSetIds.contains(setId)) {
+        orphanedRepsControllerIds.add(setId);
+      }
+    }
+
+    // Dispose and remove orphaned controllers
+    for (final setId in orphanedWeightControllerIds) {
+      _weightControllers[setId]?.dispose();
+      _weightControllers.remove(setId);
+    }
+
+    for (final setId in orphanedRepsControllerIds) {
+      _repsControllers[setId]?.dispose();
+      _repsControllers.remove(setId);
+    }
+  }
+
   // Helper method to populate exercise history cache for all exercises in the workout
-  Future<void> _populateExerciseHistoryCache() async {
+  void _populateExerciseHistoryCache() async {
     if (_workout == null) return;
 
     for (final exercise in _workout!.exercises) {
@@ -594,19 +640,23 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       final String cleanExerciseName =
           exercise.name.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
 
-      // Only populate cache if not already cached
-      if (!_exerciseHistoryCache.containsKey(cleanExerciseName)) {
-        try {
-          final previousSets =
-              await _workoutService.getRecentExerciseHistory(exercise.name);
-          if (previousSets != null && previousSets.isNotEmpty) {
-            _exerciseHistoryCache[cleanExerciseName] = previousSets;
-            print(
-                '📋 Cached exercise history for: $cleanExerciseName (${previousSets.length} sets)');
-          }
-        } catch (e) {
-          print('❌ Error caching exercise history for $cleanExerciseName: $e');
+      // Skip if already cached
+      if (_exerciseHistoryCache.containsKey(cleanExerciseName)) {
+        continue;
+      }
+
+      // Get recent exercise history from database
+      try {
+        final previousSets = await _workoutService.getRecentExerciseHistory(
+            exercise.name,
+            excludeWorkoutId: widget.workoutId);
+        if (previousSets != null && previousSets.isNotEmpty) {
+          _exerciseHistoryCache[cleanExerciseName] = previousSets;
+          print(
+              '📋 Cached previous history for ${cleanExerciseName}: ${previousSets.length} sets');
         }
+      } catch (e) {
+        print('❌ Error loading history for ${cleanExerciseName}: $e');
       }
     }
   }
@@ -764,12 +814,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         false;
 
     if (confirmDiscard) {
-      // Mark workout as discarded for foreground service to prevent restoration
-      await WorkoutForegroundService.markWorkoutAsDiscarded();
+      // Set completion flag to prevent any further state saves
+      _isCompleting = true;
+      
+      // FIRST: Clear active workout from memory to immediately hide the active workout bar
+      WorkoutService.activeWorkoutNotifier.value = null;
 
-      // Clear the active session from database
+      // THEN: Stop the timer to prevent any further updates
+      _stopTimer();
+
+      // THEN: Clear the active session from database and discard the workout
       await _clearActiveSessionFromDatabase();
-
+      
       // Discard the workout using the same logic as existing discard methods
       if (widget.isTemporary) {
         _workoutService.discardTemporaryWorkout(widget.workoutId);
@@ -777,13 +833,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         await _workoutService.deleteWorkout(widget.workoutId);
       }
 
-      // Clear active workout from memory
-      WorkoutService.activeWorkoutNotifier.value = null;
+      // THEN: Mark workout as discarded for foreground service to prevent restoration
+      await WorkoutForegroundService.markWorkoutAsDiscarded();
 
-      // Stop the foreground service
+      // FINALLY: Stop the foreground service
       await WorkoutForegroundService.stopWorkoutService();
-
-      _stopTimer();
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1215,8 +1269,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         }
 
         // Check for previous exercise history to create sets based on previous workout
-        final previousSets =
-            await _workoutService.getRecentExerciseHistory(exerciseName);
+        final previousSets = await _workoutService.getRecentExerciseHistory(
+            exerciseName,
+            excludeWorkoutId: widget.workoutId);
 
         // Cache the previous exercise history for UI display
         final String cleanExerciseName =
@@ -1509,34 +1564,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       // Update the set in memory
       final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
       if (tempWorkouts.containsKey(widget.workoutId)) {
+        String? exerciseName;
         bool found = false;
         final exercises = tempWorkouts[widget.workoutId]['exercises'];
+        
+        // Find the exercise that contains this set
         for (var i = 0; i < exercises.length && !found; i++) {
           final sets = exercises[i]['sets'];
           for (var j = 0; j < sets.length && !found; j++) {
             if (sets[j]['id'] == setId) {
               sets[j]['completed'] = completed;
+              exerciseName = exercises[i]['name'] ?? '';
               
-              // If completing the set, check if it's a PR based on volume
-              if (completed) {
-                final double weight = sets[j]['weight'] ?? 0.0;
-                final int reps = sets[j]['reps'] ?? 0;
-                final double volume = weight * reps;
-                final String currentExerciseName = exercises[i]['name'] ?? '';
-                
-                // For temporary workouts, check against historical data from database
-                bool isPR = false;
-                if (volume > 0) {
-                  // Only check for PR if volume is greater than 0
-                  // Clean the exercise name (remove API ID markers)
-                  String cleanExerciseName = currentExerciseName.replaceAll(
-                      RegExp(r'##API_ID:[^#]+##'), '');
-                  isPR = await _workoutService.isPersonalRecord(
-                      cleanExerciseName, volume);
-                }
-                
-                sets[j]['isPR'] = isPR;
-              } else {
+              // If uncompleting the set, it's no longer a PR
+              if (!completed) {
                 sets[j]['isPR'] = false;
               }
               
@@ -1544,6 +1585,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             }
           }
         }
+        
+        // If completing a set, recalculate PR status for all sets in this exercise
+        if (completed && found && exerciseName != null) {
+          await _recalculatePRStatusForTempExercise(exerciseName);
+        }
+        
         if (found) {
           WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
           WorkoutService.workoutsUpdatedNotifier.value =
@@ -1558,6 +1605,92 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       // Auto-save the workout state after updating set completion
       _updateActiveNotifier();
     }
+  }
+
+  /// Recalculate PR status for all completed sets in a temporary workout exercise
+  Future<void> _recalculatePRStatusForTempExercise(String exerciseName) async {
+    final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+    if (!tempWorkouts.containsKey(widget.workoutId)) return;
+
+    final exercises = tempWorkouts[widget.workoutId]['exercises'];
+    final String cleanExerciseName =
+        exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+
+    // Find the exercise and collect all its completed sets with volumes
+    List<Map<String, dynamic>> completedSets = [];
+    for (var exercise in exercises) {
+      if ((exercise['name'] ?? '')
+              .replaceAll(RegExp(r'##API_ID:[^#]+##'), '') ==
+          cleanExerciseName) {
+        final sets = exercise['sets'] as List;
+        for (var set in sets) {
+          if (set['completed'] == true) {
+            final double weight = set['weight'] ?? 0.0;
+            final int reps = set['reps'] ?? 0;
+            final double volume = weight * reps;
+            if (volume > 0) {
+              completedSets.add({
+                'set': set,
+                'volume': volume,
+              });
+            }
+          }
+        }
+        break;
+      }
+    }
+
+    if (completedSets.isEmpty) return;
+
+    // Get historical max volume from database (excluding current workout)
+    double historicalMaxVolume = 0.0;
+    try {
+      // Get all completed sets for this exercise from database
+      final db = await DatabaseService.instance.database;
+      final result = await db.rawQuery('''
+        SELECT es.volume, e.name
+        FROM exercise_sets es
+        INNER JOIN exercises e ON es.exerciseId = e.id
+        WHERE es.completed = 1
+      ''');
+
+      for (final row in result) {
+        final String dbExerciseName = row['name'] as String;
+        final String cleanDbExerciseName =
+            dbExerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+
+        if (cleanDbExerciseName == cleanExerciseName) {
+          final double rowVolume = row['volume'] as double;
+          if (rowVolume > historicalMaxVolume) {
+            historicalMaxVolume = rowVolume;
+          }
+        }
+      }
+    } catch (e) {
+      print('Error getting historical PR data: $e');
+    }
+
+    // Find max volume in current workout
+    double currentMaxVolume = 0.0;
+    for (final setData in completedSets) {
+      if (setData['volume'] > currentMaxVolume) {
+        currentMaxVolume = setData['volume'];
+      }
+    }
+
+    // Determine which sets should be PRs
+    double prVolume =
+        currentMaxVolume > historicalMaxVolume ? currentMaxVolume : 0.0;
+
+    // Update PR status for all sets
+    for (final setData in completedSets) {
+      final set = setData['set'];
+      final volume = setData['volume'];
+      set['isPR'] = (prVolume > 0 && volume == prVolume);
+    }
+
+    // Update the notifier
+    WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
   }
 
   Future<void> _updateSetData(
@@ -2280,6 +2413,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   // Synchronize current workout and rest timer state to activeWorkoutNotifier
   void _updateActiveNotifier() {
     if (_workout == null) return;
+    
+    // If the workout is being completed/discarded, don't save state to prevent recreation
+    if (_isCompleting) {
+      return;
+    }
+    
     final workoutData = _serializeWorkoutData();
 
     
@@ -3168,6 +3307,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       return; // User chose to cancel
                     }
 
+                    // Set completion flag to prevent any further state saves
+                    _isCompleting = true;
+
                     // Play fanfare sound for workout completion
                     _playFanfareSound();
 
@@ -3178,23 +3320,23 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     if (widget.isTemporary) {
                       // For temporary workouts, check if we have any valid exercises and sets
                       if (_workout?.exercises.isEmpty ?? true) {
-                        // No exercises, discard the temporary workout
-                        _workoutService
-                            .discardTemporaryWorkout(widget.workoutId);
-                        // Clear the active session from database
-                        await _clearActiveSessionFromDatabase();
-                        
-                        // Mark workout as discarded for foreground service to prevent restoration
-                        await WorkoutForegroundService.markWorkoutAsDiscarded();
-
-                        // Clear active workout from memory to remove the active workout bar
+                        // FIRST: Clear active workout from memory to immediately hide the active workout bar
                         WorkoutService.activeWorkoutNotifier.value = null;
 
-                        // Stop the foreground service and clear saved data
+                        // THEN: Stop the timer to prevent any further updates
+                        _stopTimer();
+
+                        // THEN: Discard the temporary workout and clear database session
+                        _workoutService
+                            .discardTemporaryWorkout(widget.workoutId);
+                        await _clearActiveSessionFromDatabase();
+                        
+                        // THEN: Mark workout as discarded for foreground service to prevent restoration
+                        await WorkoutForegroundService.markWorkoutAsDiscarded();
+
+                        // FINALLY: Stop the foreground service and clear saved data
                         await WorkoutForegroundService.stopWorkoutService();
                         await WorkoutForegroundService.clearSavedWorkoutData();
-                        
-                        _stopTimer();
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -3257,22 +3399,22 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     final remainingExercises = await _workoutService
                         .getExercisesForWorkout(widget.workoutId);
                     if (remainingExercises.isEmpty) {
-                      // No exercises left, delete the workout
-                      await _workoutService.deleteWorkout(widget.workoutId);
-                        // Clear the active session from database
-                        await _clearActiveSessionFromDatabase();
-                        
-                        // Mark workout as discarded for foreground service to prevent restoration
-                        await WorkoutForegroundService.markWorkoutAsDiscarded();
+                      // FIRST: Clear active workout from memory to immediately hide the active workout bar
+                      WorkoutService.activeWorkoutNotifier.value = null;
                       
-                        // Clear active workout from memory to remove the active workout bar
-                        WorkoutService.activeWorkoutNotifier.value = null;
-                        
-                        // Stop the foreground service and clear saved data
-                        await WorkoutForegroundService.stopWorkoutService();
-                        await WorkoutForegroundService.clearSavedWorkoutData();
-                      
+                      // THEN: Stop the timer to prevent any further updates
                       _stopTimer();
+                      
+                      // THEN: Delete the empty workout and clear database session
+                      await _workoutService.deleteWorkout(widget.workoutId);
+                      await _clearActiveSessionFromDatabase();
+                        
+                      // THEN: Mark workout as discarded for foreground service to prevent restoration
+                      await WorkoutForegroundService.markWorkoutAsDiscarded();
+                      
+                      // FINALLY: Stop the foreground service and clear saved data
+                      await WorkoutForegroundService.stopWorkoutService();
+                      await WorkoutForegroundService.clearSavedWorkoutData();
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -3285,19 +3427,19 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     }
                     }
 
-                    // Clear the active session from database since workout is being completed
-                    await _clearActiveSessionFromDatabase();
-                    
-                    // Mark workout as discarded for foreground service to prevent restoration
-                    await WorkoutForegroundService.markWorkoutAsDiscarded();
-                  
-                    // Clear active workout from memory to remove the active workout bar
+                    // FIRST: Clear active workout from memory to immediately hide the active workout bar
                     WorkoutService.activeWorkoutNotifier.value = null;
-                  
-                    // Stop the timer and foreground service
+                    
+                    // THEN: Stop the timer to prevent any further updates
                     _stopTimer();
                     
-                    // Clear saved foreground service data to prevent restoration
+                    // THEN: Clear the active session from database since workout is being completed
+                    await _clearActiveSessionFromDatabase();
+                    
+                    // THEN: Mark workout as discarded for foreground service to prevent restoration
+                    await WorkoutForegroundService.markWorkoutAsDiscarded();
+                    
+                    // FINALLY: Clear saved foreground service data to prevent restoration
                     await WorkoutForegroundService.clearSavedWorkoutData();
                     
                     // Get workout count for completion screen
@@ -3800,7 +3942,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // Get previous set values for display as greyed out placeholders
     final previousSet = _getPreviousSetValues(exercise.name, set.setNumber);
     
-    // initialize controllers if absent
+    // Initialize controllers if absent with validation to prevent conflicts
     _weightControllers.putIfAbsent(set.id, () {
       // Show initial weight only if greater than zero
       String initialWeightText = '';
@@ -3811,6 +3953,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
       return TextEditingController(text: initialWeightText);
     });
+    
     _repsControllers.putIfAbsent(set.id, () {
       // Show initial reps only if greater than zero
       String initialRepsText = '';
@@ -3818,7 +3961,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         initialRepsText = set.reps.toString();
       }
       return TextEditingController(text: initialRepsText);
-    }); // Determine if both fields have valid values (now allowing zero values) to enable the completion button
+    });
+
+    // Validate that controllers exist and are correctly mapped
+    if (!_weightControllers.containsKey(set.id) ||
+        !_repsControllers.containsKey(set.id)) {
+      // Emergency fallback: create controllers if they don't exist
+      _weightControllers[set.id] = TextEditingController();
+      _repsControllers[set.id] = TextEditingController();
+    }
+
+    // Determine if both fields have valid values (now allowing zero values) to enable the completion button
     final String weightTextStr = _weightControllers[set.id]?.text ?? '';
     final String repsTextStr = _repsControllers[set.id]?.text ?? '';
     final double? weightValue = double.tryParse(weightTextStr);

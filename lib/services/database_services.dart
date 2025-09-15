@@ -835,6 +835,9 @@ class WorkoutService {
   static final ValueNotifier<Map<String, dynamic>?> activeWorkoutNotifier =
       ValueNotifier(null);
 
+  // Counter to ensure unique temporary IDs
+  static int _tempIdCounter = 0;
+
   // Table & column names
   final String _workoutTableName = "workouts";
   final String _workoutIdColumnName = "id";
@@ -1051,8 +1054,9 @@ class WorkoutService {
   
   // Create a temporary workout that's not saved to database yet
   int createTemporaryWorkout(String name, String date, int duration) {
-    // Generate a negative ID to avoid conflicts with database IDs
-    final tempId = -(DateTime.now().millisecondsSinceEpoch);
+    // Generate a unique negative ID to avoid conflicts with database IDs
+    _tempIdCounter++;
+    final tempId = -(DateTime.now().microsecondsSinceEpoch + _tempIdCounter);
 
     // Store workout data in memory
     final tempWorkouts = tempWorkoutsNotifier.value;
@@ -1245,8 +1249,10 @@ class WorkoutService {
   Future<int> addExercise(int workoutId, String name, String equipment) async {
     // Handle temporary workouts
     if (isTemporaryWorkout(workoutId)) {
-      // Generate a negative ID for the temporary exercise
-      final tempExerciseId = -(DateTime.now().millisecondsSinceEpoch);
+      // Generate a unique negative ID for the temporary exercise using counter and microseconds
+      _tempIdCounter++;
+      final tempExerciseId =
+          -(DateTime.now().microsecondsSinceEpoch + _tempIdCounter);
 
       // Add exercise to temporary workout in memory
       final tempWorkouts = tempWorkoutsNotifier.value;
@@ -1298,8 +1304,10 @@ class WorkoutService {
     // Handle temporary workouts
     if (exerciseId < 0) {
       // Negative IDs are temporary
-      // Generate a negative ID for the temporary set
-      final tempSetId = -(DateTime.now().millisecondsSinceEpoch);
+      // Generate a unique negative ID for the temporary set using counter and microseconds
+      _tempIdCounter++;
+      final tempSetId =
+          -(DateTime.now().microsecondsSinceEpoch + _tempIdCounter);
 
       // Find the workout containing this exercise
       final tempWorkouts = tempWorkoutsNotifier.value;
@@ -1406,8 +1414,9 @@ class WorkoutService {
       return true;
     }
 
-    // Current volume is a PR if it's greater than the previous max
-    return volume > maxVolume;
+    // Current volume is a PR if it's greater than or equal to the previous max
+    // We use >= to allow ties, but we'll handle duplicates in the recalculation logic
+    return volume >= maxVolume;
   }
 
   // Delete a set
@@ -1429,39 +1438,99 @@ class WorkoutService {
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
   }
 
+  // Recalculate PR status for all completed sets of a specific exercise
+  // This ensures only the highest volume sets are marked as PRs
+  Future<void> recalculatePRStatusForExercise(String exerciseName) async {
+    final db = await DatabaseService.instance.database;
+
+    // Clean the exercise name to ensure consistent comparison
+    final String cleanExerciseName =
+        exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+
+    // Get all completed sets for this exercise, ordered by volume descending
+    final result = await db.rawQuery('''
+      SELECT es.id, es.volume, e.name
+      FROM exercise_sets es
+      INNER JOIN exercises e ON es.exerciseId = e.id
+      WHERE es.completed = 1
+      ORDER BY es.volume DESC, es.id ASC
+    ''');
+
+    // Filter by clean exercise name
+    List<Map<String, dynamic>> exerciseSets = [];
+    for (final row in result) {
+      final String dbExerciseName = row['name'] as String;
+      final String cleanDbExerciseName =
+          dbExerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+
+      if (cleanDbExerciseName == cleanExerciseName) {
+        exerciseSets.add(row);
+      }
+    }
+
+    if (exerciseSets.isEmpty) return;
+
+    // Find the maximum volume
+    double maxVolume = exerciseSets.first['volume'] as double;
+
+    // First, mark all sets as non-PR
+    List<int> allSetIds = exerciseSets.map((s) => s['id'] as int).toList();
+    if (allSetIds.isNotEmpty) {
+      String placeholders = List.filled(allSetIds.length, '?').join(',');
+      await db.rawUpdate('''
+        UPDATE $_setTableName 
+        SET $_setIsPRColumnName = 0 
+        WHERE $_setIdColumnName IN ($placeholders)
+      ''', allSetIds);
+    }
+
+    // Then mark only the sets with maximum volume as PRs
+    List<int> prSetIds = [];
+    for (final set in exerciseSets) {
+      if ((set['volume'] as double) == maxVolume) {
+        prSetIds.add(set['id'] as int);
+      }
+    }
+
+    if (prSetIds.isNotEmpty) {
+      String placeholders = List.filled(prSetIds.length, '?').join(',');
+      await db.rawUpdate('''
+        UPDATE $_setTableName 
+        SET $_setIsPRColumnName = 1 
+        WHERE $_setIdColumnName IN ($placeholders)
+      ''', prSetIds);
+    }
+
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
+
   // Update set completion status
   Future<void> updateSetStatus(int setId, bool completed) async {
     final db = await DatabaseService.instance.database;
     
-    Map<String, dynamic> updateData = {
-      _setCompletedColumnName: completed ? 1 : 0
-    };
-
-    // If completing the set, check if it's a PR
+    String? exerciseName;
+    
+    // If completing the set, get the exercise name for PR recalculation
     if (completed) {
-      // First get the set data to check the exercise name and volume
       final setResult = await db.rawQuery('''
-        SELECT es.volume, e.name 
+        SELECT e.name 
         FROM $_setTableName es
         INNER JOIN $_exerciseTableName e ON es.$_setExerciseIdColumnName = e.$_exerciseIdColumnName
         WHERE es.$_setIdColumnName = ?
       ''', [setId]);
 
       if (setResult.isNotEmpty) {
-        final double volume = setResult.first['volume'] as double;
-        final String exerciseName = setResult.first['name'] as String;
-        
-        // Clean the exercise name (remove API ID markers) for consistent PR comparison
-        final String cleanExerciseName =
-            exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
-
-        // Check if this is a PR (excluding the current set from comparison)
-        final bool isPR = await isPersonalRecord(cleanExerciseName, volume,
-            excludeSetId: setId);
-        updateData[_setIsPRColumnName] = isPR ? 1 : 0;
+        exerciseName = setResult.first['name'] as String;
       }
-    } else {
-      // If uncompleting the set, it's no longer a PR
+    }
+
+    // Update the set completion status
+    Map<String, dynamic> updateData = {
+      _setCompletedColumnName: completed ? 1 : 0
+    };
+
+    // If uncompleting the set, it's no longer a PR
+    if (!completed) {
       updateData[_setIsPRColumnName] = 0;
     }
     
@@ -1471,6 +1540,12 @@ class WorkoutService {
       where: "$_setIdColumnName = ?",
       whereArgs: [setId],
     );
+
+    // If completing a set, recalculate PR status for all sets of this exercise
+    if (completed && exerciseName != null) {
+      await recalculatePRStatusForExercise(exerciseName);
+    }
+
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
   }
 
@@ -1536,7 +1611,7 @@ class WorkoutService {
   Future<List<Workout>> getWorkouts() async {
     final db = await DatabaseService.instance.database;
     final workoutMaps = await db.query(_workoutTableName,
-        orderBy: "$_workoutDateColumnName DESC");
+        orderBy: "$_workoutDateColumnName DESC, $_workoutIdColumnName DESC");
 
     List<Workout> workouts = [];
 
@@ -1861,7 +1936,8 @@ class WorkoutService {
 
   // Get the most recent exercise history for a given exercise name
   Future<List<ExerciseSet>?> getRecentExerciseHistory(
-      String exerciseName) async {
+      String exerciseName,
+      {int? excludeWorkoutId}) async {
     try {
       final workouts = await getWorkouts();
 
@@ -1869,35 +1945,100 @@ class WorkoutService {
       final String cleanExerciseName =
           exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
 
-      // Find the most recent workout that contains this exercise
-      // Workouts are already ordered by date DESC (most recent first)
-      for (final workout in workouts) {
-        for (final exercise in workout.exercises) {
+      print('🔍 EXERCISE HISTORY SEARCH STARTING');
+      print('🔍 Looking for: "$cleanExerciseName"');
+      print('🔍 Excluding workout ID: $excludeWorkoutId');
+      print('🔍 Total workouts to check: ${workouts.length}');
+
+      // Additional explicit sorting by date and ID to ensure most recent first
+      workouts.sort((a, b) {
+        // First sort by date (most recent first)
+        final dateComparison = b.date.compareTo(a.date);
+        if (dateComparison != 0) return dateComparison;
+
+        // If dates are equal, sort by ID (higher ID = more recent)
+        return b.id.compareTo(a.id);
+      });
+      print('🔍 Workouts sorted by date+ID (most recent first)');
+
+      // Find the most recent workout that contains this exercise with completed sets
+      for (int i = 0; i < workouts.length; i++) {
+        final workout = workouts[i];
+
+        print('🔍 WORKOUT ${i + 1}/${workouts.length}:');
+        print('🔍   ID: ${workout.id}');
+        print('🔍   Name: "${workout.name}"');
+        print('🔍   Date: ${workout.date}');
+        print('🔍   Duration: ${workout.duration} seconds');
+        print('🔍   Exercises: ${workout.exercises.length}');
+
+        // Skip the current workout if excludeWorkoutId is provided
+        // Note: temporary workouts have negative IDs, so they won't match database workouts
+        if (excludeWorkoutId != null && workout.id == excludeWorkoutId) {
+          print('🔍   ⏭️  SKIPPING - matches excludeWorkoutId');
+          continue;
+        }
+
+        for (int j = 0; j < workout.exercises.length; j++) {
+          final exercise = workout.exercises[j];
           // Clean the database exercise name for comparison
           final String cleanDbExerciseName =
               exercise.name.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
 
+          print('🔍   Exercise ${j + 1}: "$cleanDbExerciseName"');
+          print('🔍     Finished: ${exercise.finished}');
+          print('🔍     Total Sets: ${exercise.sets.length}');
+          
           // Check for exact match (case insensitive)
           if (cleanDbExerciseName.toLowerCase() ==
               cleanExerciseName.toLowerCase()) {
-            // Only return sets from finished workouts and exercises with completed sets
-            if (exercise.finished && exercise.sets.isNotEmpty) {
-              // Filter to only return completed sets
-              final completedSets = exercise.sets.where((set) => set.completed).toList();
-              if (completedSets.isNotEmpty) {
+            
+            print('🔍     ✅ EXERCISE NAME MATCH!');
+
+            // Check if this exercise has any completed sets
+            final completedSets =
+                exercise.sets.where((set) => set.completed).toList();
+
+            print(
+                '🔍     Completed sets: ${completedSets.length}/${exercise.sets.length}');
+
+            // Also check if the exercise itself is marked as finished (additional validation)
+            final isExerciseFinished = exercise.finished;
+            print('🔍     Exercise finished flag: $isExerciseFinished');
+
+            // Only return sets if the exercise has completed sets OR is marked as finished
+            if (completedSets.isNotEmpty || isExerciseFinished) {
+              print('📋 ✅ FOUND VALID EXERCISE HISTORY!');
+              print('📋     Workout: ${workout.id} ("${workout.name}")');
+              print('📋     Date: ${workout.date}');
+              print('📋     Total Sets: ${exercise.sets.length}');
+              print('📋     Completed Sets: ${completedSets.length}');
+              print('📋     Exercise Finished: $isExerciseFinished');
+              print('📋     Set details:');
+              for (int k = 0; k < exercise.sets.length; k++) {
+                final set = exercise.sets[k];
                 print(
-                    '📋 Found most recent exercise history: ${completedSets.length} completed sets');
-                return completedSets;
+                    '📋       Set ${k + 1}: ${set.weight}kg x ${set.reps} (completed: ${set.completed})');
               }
+              return exercise
+                  .sets; // Return all sets (including completed and uncompleted for full history)
+            } else {
+              print(
+                  '🔍     ❌ No completed sets and exercise not finished, continuing search...');
             }
+          } else {
+            print(
+                '🔍     ❌ Name mismatch: "${cleanDbExerciseName}" != "${cleanExerciseName}"');
           }
         }
+        print('�   End of workout ${i + 1}');
+        print('🔍 ─────────────────────────────────');
       }
 
-      print('📋 No previous exercise history found for: $cleanExerciseName');
+      print('📋 ❌ NO EXERCISE HISTORY FOUND for: "$cleanExerciseName"');
       return null;
     } catch (e) {
-      print('❌ Error loading exercise history: $e');
+      print('❌ ERROR in getRecentExerciseHistory: $e');
       return null;
     }
   }

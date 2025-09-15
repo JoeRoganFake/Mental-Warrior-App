@@ -505,6 +505,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
             Container(
               margin: EdgeInsets.only(bottom: 16),
               child: FloatingActionButton.extended(
+                heroTag: "add_selected_exercises", // Unique hero tag
                 onPressed: () {
                   // Return selected exercises
                   final selectedExercisesList = _exercises
@@ -528,6 +529,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
             ),
           // Add custom exercise button
           FloatingActionButton(
+            heroTag: "add_custom_exercise", // Unique hero tag
             onPressed: _showAddCustomExerciseDialog,
             child: const Icon(Icons.add),
             tooltip: 'Add custom exercise',
