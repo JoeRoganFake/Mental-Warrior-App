@@ -816,7 +816,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     if (confirmDiscard) {
       // Set completion flag to prevent any further state saves
       _isCompleting = true;
-      
+
       // FIRST: Clear active workout from memory to immediately hide the active workout bar
       WorkoutService.activeWorkoutNotifier.value = null;
 
@@ -1616,7 +1616,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     final String cleanExerciseName =
         exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
 
-    // Find the exercise and collect all its completed sets with volumes
+    // Find ALL instances of the exercise and collect all their completed sets with volumes
     List<Map<String, dynamic>> completedSets = [];
     for (var exercise in exercises) {
       if ((exercise['name'] ?? '')
@@ -1636,7 +1636,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             }
           }
         }
-        break;
+        // Remove the break statement to process ALL instances of the exercise
       }
     }
 
@@ -3399,22 +3399,22 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     final remainingExercises = await _workoutService
                         .getExercisesForWorkout(widget.workoutId);
                     if (remainingExercises.isEmpty) {
-                      // FIRST: Clear active workout from memory to immediately hide the active workout bar
-                      WorkoutService.activeWorkoutNotifier.value = null;
-                      
-                      // THEN: Stop the timer to prevent any further updates
-                      _stopTimer();
-                      
-                      // THEN: Delete the empty workout and clear database session
-                      await _workoutService.deleteWorkout(widget.workoutId);
-                      await _clearActiveSessionFromDatabase();
+                        // FIRST: Clear active workout from memory to immediately hide the active workout bar
+                        WorkoutService.activeWorkoutNotifier.value = null;
+
+                        // THEN: Stop the timer to prevent any further updates
+                        _stopTimer();
+
+                        // THEN: Delete the empty workout and clear database session
+                        await _workoutService.deleteWorkout(widget.workoutId);
+                        await _clearActiveSessionFromDatabase();
                         
-                      // THEN: Mark workout as discarded for foreground service to prevent restoration
-                      await WorkoutForegroundService.markWorkoutAsDiscarded();
+                        // THEN: Mark workout as discarded for foreground service to prevent restoration
+                        await WorkoutForegroundService.markWorkoutAsDiscarded();
                       
-                      // FINALLY: Stop the foreground service and clear saved data
-                      await WorkoutForegroundService.stopWorkoutService();
-                      await WorkoutForegroundService.clearSavedWorkoutData();
+                        // FINALLY: Stop the foreground service and clear saved data
+                        await WorkoutForegroundService.stopWorkoutService();
+                        await WorkoutForegroundService.clearSavedWorkoutData();
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
@@ -3429,10 +3429,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
                     // FIRST: Clear active workout from memory to immediately hide the active workout bar
                     WorkoutService.activeWorkoutNotifier.value = null;
-                    
+
                     // THEN: Stop the timer to prevent any further updates
                     _stopTimer();
-                    
+
                     // THEN: Clear the active session from database since workout is being completed
                     await _clearActiveSessionFromDatabase();
                     
