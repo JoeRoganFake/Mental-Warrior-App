@@ -47,6 +47,13 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   final Map<int, TextEditingController> _weightControllers = {};
   final Map<int, TextEditingController> _repsControllers = {};
   
+  // Exercise notes tracking (exerciseId -> note text)
+  final Map<int, String> _exerciseNotes = {};
+
+  // Note editing state
+  final Map<int, bool> _noteEditingState = {};
+  final Map<int, TextEditingController> _noteControllers = {};
+  
   // Theme colors
   final Color _backgroundColor = Color(0xFF1A1B1E); // Dark background
   final Color _surfaceColor = Color(0xFF26272B); // Surface for cards
@@ -336,6 +343,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       c.dispose();
     }
     for (var c in _repsControllers.values) {
+      c.dispose();
+    }
+    for (var c in _noteControllers.values) {
       c.dispose();
     } // If this was a temporary workout and we're navigating away without saving,
     // discard the temporary workout (but not if we're minimizing)
@@ -3665,6 +3675,125 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Exercise note bar (if note exists)
+            if (_exerciseNotes.containsKey(exercise.id))
+              Container(
+                decoration: BoxDecoration(
+                  color: _primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(12),
+                    topRight: Radius.circular(12),
+                  ),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: _primaryColor.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // Dismissible note content
+                    Expanded(
+                      child: Dismissible(
+                        key: Key('note_${exercise.id}'),
+                        direction: DismissDirection.endToStart,
+                        onDismissed: (direction) {
+                          _removeExerciseNote(exercise.id);
+                        },
+                        background: Container(
+                          decoration: BoxDecoration(
+                            color: _dangerColor,
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(12),
+                            ),
+                          ),
+                          alignment: Alignment.centerRight,
+                          padding: EdgeInsets.only(right: 16),
+                          child: Icon(
+                            Icons.delete,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        child: Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.note_outlined,
+                                color: _primaryColor,
+                                size: 18,
+                              ),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: _noteEditingState[exercise.id] == true
+                                    ? TextField(
+                                        controller:
+                                            _noteControllers[exercise.id],
+                                        style: TextStyle(
+                                          color: _textPrimaryColor,
+                                          fontSize: 14,
+                                        ),
+                                        decoration: InputDecoration(
+                                          border: InputBorder.none,
+                                          contentPadding: EdgeInsets.zero,
+                                          hintText: 'Enter your note...',
+                                          hintStyle: TextStyle(
+                                            color: _textSecondaryColor,
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                        autofocus: true,
+                                        onSubmitted: (value) =>
+                                            _finishEditingNote(exercise.id),
+                                        onTapOutside: (event) =>
+                                            _finishEditingNote(exercise.id),
+                                      )
+                                    : GestureDetector(
+                                        onTap: () =>
+                                            _startEditingNote(exercise.id),
+                                        child: Container(
+                                          width: double.infinity,
+                                          child: Text(
+                                            _exerciseNotes[exercise.id] ?? '',
+                                            style: TextStyle(
+                                              color: _textPrimaryColor,
+                                              fontSize: 14,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Pin button (outside of Dismissible)
+                    GestureDetector(
+                      onTap: () {
+                        // TODO: Pin functionality to be implemented
+                        print('Pin clicked for exercise ${exercise.id}');
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        color: Colors.transparent, // Ensure hit testing works
+                        child: Icon(
+                          Icons.push_pin,
+                          color: _textSecondaryColor,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             // Exercise header
             Padding(
               padding: EdgeInsets.all(16),
@@ -3790,6 +3919,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                             _confirmDeleteExercise(exercise);
                           } else if (value == 'set_rest') {
                             _showSetRestDialog(exercise);
+                          } else if (value == 'add_note') {
+                            _toggleExerciseNote(exercise.id);
                           }
                         },
                         itemBuilder: (BuildContext context) {
@@ -3813,6 +3944,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                 leading:
                                     Icon(Icons.timer, color: _primaryColor),
                                 title: Text('Set Rest Time',
+                                    style: TextStyle(color: _textPrimaryColor)),
+                              ),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'add_note',
+                              child: ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading:
+                                    Icon(Icons.note_add, color: _primaryColor),
+                                title: Text('Add Note',
                                     style: TextStyle(color: _textPrimaryColor)),
                               ),
                             ),
@@ -4483,6 +4624,70 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       // Silently handle any SnackBar positioning errors
       print('SnackBar display error: $e');
     }
+  }
+
+  // Toggle exercise note visibility
+  void _toggleExerciseNote(int exerciseId) {
+    setState(() {
+      if (_exerciseNotes.containsKey(exerciseId)) {
+        // If note exists, remove it
+        _exerciseNotes.remove(exerciseId);
+        _noteEditingState.remove(exerciseId);
+        if (_noteControllers.containsKey(exerciseId)) {
+          _noteControllers[exerciseId]!.dispose();
+          _noteControllers.remove(exerciseId);
+        }
+      } else {
+        // If no note exists, add an empty note and start editing immediately
+        _exerciseNotes[exerciseId] = '';
+        // Initialize controller and start editing
+        if (!_noteControllers.containsKey(exerciseId)) {
+          _noteControllers[exerciseId] = TextEditingController();
+        }
+        _noteControllers[exerciseId]!.text = '';
+        _noteEditingState[exerciseId] = true;
+      }
+    });
+  }
+
+  // Start editing a note
+  void _startEditingNote(int exerciseId) {
+    // Initialize controller if not exists
+    if (!_noteControllers.containsKey(exerciseId)) {
+      _noteControllers[exerciseId] = TextEditingController();
+    }
+
+    // Set current text
+    _noteControllers[exerciseId]!.text = _exerciseNotes[exerciseId] ?? '';
+
+    setState(() {
+      _noteEditingState[exerciseId] = true;
+    });
+  }
+
+  // Finish editing a note
+  void _finishEditingNote(int exerciseId) {
+    if (_noteControllers.containsKey(exerciseId)) {
+      final newText = _noteControllers[exerciseId]!.text.trim();
+
+      setState(() {
+        // Always keep the note, even if empty - only remove via swipe or manual deletion
+        _exerciseNotes[exerciseId] = newText;
+        _noteEditingState[exerciseId] = false;
+      });
+    }
+  }
+
+  // Remove a note completely
+  void _removeExerciseNote(int exerciseId) {
+    setState(() {
+      _exerciseNotes.remove(exerciseId);
+      _noteEditingState.remove(exerciseId);
+      if (_noteControllers.containsKey(exerciseId)) {
+        _noteControllers[exerciseId]!.dispose();
+        _noteControllers.remove(exerciseId);
+      }
+    });
   }
 
   // Shows "Empty workout discarded" notification

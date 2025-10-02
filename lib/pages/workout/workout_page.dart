@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/pages/workout/workout_session_page.dart';
+import 'package:mental_warior/pages/workout/workout_details_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/widgets/workout_week_chart.dart';
 import 'package:mental_warior/utils/functions.dart';
@@ -233,9 +234,8 @@ class WorkoutPageState extends State<WorkoutPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => WorkoutSessionPage(
+        builder: (context) => WorkoutDetailsPage(
           workoutId: workoutId,
-          readOnly: true,
         ),
       ),
     );
