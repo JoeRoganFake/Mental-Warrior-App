@@ -1439,7 +1439,7 @@ class WorkoutService {
   }
 
   // Recalculate PR status for all completed sets of a specific exercise
-  // This ensures only the highest volume sets are marked as PRs
+  // This ensures only sets that exceed previous records are marked as PRs
   Future<void> recalculatePRStatusForExercise(String exerciseName) async {
     final db = await DatabaseService.instance.database;
 
@@ -1449,11 +1449,12 @@ class WorkoutService {
 
     // Get all completed sets for this exercise, ordered by volume descending
     final result = await db.rawQuery('''
-      SELECT es.id, es.volume, e.name
+      SELECT es.id, es.volume, e.name, w.date
       FROM exercise_sets es
       INNER JOIN exercises e ON es.exerciseId = e.id
+      INNER JOIN workouts w ON e.workoutId = w.id
       WHERE es.completed = 1
-      ORDER BY es.volume DESC, es.id ASC
+      ORDER BY w.date ASC, es.id ASC
     ''');
 
     // Filter by clean exercise name
@@ -1470,9 +1471,6 @@ class WorkoutService {
 
     if (exerciseSets.isEmpty) return;
 
-    // Find the maximum volume
-    double maxVolume = exerciseSets.first['volume'] as double;
-
     // First, mark all sets as non-PR
     List<int> allSetIds = exerciseSets.map((s) => s['id'] as int).toList();
     if (allSetIds.isNotEmpty) {
@@ -1484,14 +1482,21 @@ class WorkoutService {
       ''', allSetIds);
     }
 
-    // Then mark only the sets with maximum volume as PRs
+    // Track the maximum volume seen so far (chronologically)
+    double currentMaxVolume = 0.0;
     List<int> prSetIds = [];
+    
     for (final set in exerciseSets) {
-      if ((set['volume'] as double) == maxVolume) {
+      final double volume = set['volume'] as double;
+
+      // If this volume is greater than any previous volume, it's a PR
+      if (volume > currentMaxVolume) {
+        currentMaxVolume = volume;
         prSetIds.add(set['id'] as int);
       }
     }
 
+    // Mark only the true PRs (sets that exceeded previous records)
     if (prSetIds.isNotEmpty) {
       String placeholders = List.filled(prSetIds.length, '?').join(',');
       await db.rawUpdate('''

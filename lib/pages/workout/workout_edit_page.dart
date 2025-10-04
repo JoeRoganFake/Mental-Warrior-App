@@ -112,6 +112,43 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     }
   }
 
+  void _removePRFlagIfSet(ExerciseSet set) {
+    if (set.isPR) {
+      setState(() {
+        set.isPR = false;
+      });
+    }
+  }
+
+  Future<void> _refreshLocalPRStatus(String exerciseName) async {
+    if (_workout == null) return;
+    
+    final db = await DatabaseService.instance.database;
+    
+    // Get updated PR status for all sets in this exercise
+    final result = await db.rawQuery('''
+      SELECT es.id, es.isPR
+      FROM exercise_sets es
+      INNER JOIN exercises e ON es.exerciseId = e.id
+      WHERE e.name = ? AND e.workoutId = ?
+    ''', [exerciseName, widget.workoutId]);
+    
+    // Update local model
+    setState(() {
+      for (final exercise in _workout!.exercises) {
+        if (exercise.name == exerciseName) {
+          for (final set in exercise.sets) {
+            final setData = result.firstWhere(
+              (row) => row['id'] == set.id,
+              orElse: () => {'isPR': 0},
+            );
+            set.isPR = (setData['isPR'] as int) == 1;
+          }
+        }
+      }
+    });
+  }
+
   Future<void> _saveChanges() async {
     if (_workout == null) return;
 
@@ -216,6 +253,23 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
       where: 'id = ?',
       whereArgs: [setId],
     );
+
+    // Get the exercise name for PR recalculation
+    final exerciseResult = await db.rawQuery('''
+      SELECT e.name 
+      FROM exercise_sets es
+      INNER JOIN exercises e ON es.exerciseId = e.id
+      WHERE es.id = ?
+    ''', [setId]);
+
+    if (exerciseResult.isNotEmpty) {
+      final exerciseName = exerciseResult.first['name'] as String;
+      // Recalculate PR status for this exercise
+      await _workoutService.recalculatePRStatusForExercise(exerciseName);
+      
+      // Update local model with new PR status
+      await _refreshLocalPRStatus(exerciseName);
+    }
   }
 
   Future<void> _addExercise() async {
@@ -997,7 +1051,10 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                                 ),
                               ),
                               keyboardType: TextInputType.number,
-                              onChanged: (value) => _markAsChanged(),
+                              onChanged: (value) {
+                                _removePRFlagIfSet(set);
+                                _markAsChanged();
+                              },
                             ),
                           ),
                         ],
@@ -1046,6 +1103,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                               ),
                               keyboardType: TextInputType.number,
                               onChanged: (value) {
+                                _removePRFlagIfSet(set);
                                 _markAsChanged();
                                 // Update local model immediately for responsive UI
                                 final reps = int.tryParse(value) ?? 0;
