@@ -27,6 +27,13 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
   late TextEditingController _workoutNameController;
   late TextEditingController _workoutDateController;
 
+  // Draft system - track pending operations
+  final List<Exercise> _pendingExercisesToAdd = [];
+  final List<ExerciseSet> _pendingSetsToAdd = [];
+  final Set<int> _pendingExercisesToDelete = {};
+  final Set<int> _pendingSetsToDelete = {};
+  int _nextTempId = -1; // Negative IDs for temporary items
+
   // Theme colors (matching workout session page)
   final Color _backgroundColor = const Color(0xFF1A1B1E); // Dark background
   final Color _surfaceColor = const Color(0xFF26272B); // Surface for cards
@@ -43,28 +50,43 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     super.initState();
     _workoutNameController = TextEditingController();
     _workoutDateController = TextEditingController();
+    // Always reload the workout data to ensure fresh state
     _loadWorkout();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Note: didChangeDependencies is called multiple times,
+    // so we don't reload here to avoid performance issues
   }
 
   @override
   void dispose() {
     _workoutNameController.dispose();
     _workoutDateController.dispose();
-    for (var controller in _weightControllers.values) {
-      controller.dispose();
-    }
-    for (var controller in _repsControllers.values) {
-      controller.dispose();
-    }
+    _clearControllers();
     super.dispose();
   }
 
   Future<void> _loadWorkout() async {
+    // Clear any existing state first to ensure complete reset
+    _clearControllers();
+
+    // Clear pending operations
+    _pendingExercisesToAdd.clear();
+    _pendingSetsToAdd.clear();
+    _pendingExercisesToDelete.clear();
+    _pendingSetsToDelete.clear();
+    
     setState(() {
       _isLoading = true;
+      _workout = null; // Clear current workout to force complete refresh
+      _hasChanges = false; // Reset changes flag
     });
 
     try {
+      // Always reload fresh data from database to prevent stale state
       final workout = await _workoutService.getWorkout(widget.workoutId);
       setState(() {
         _workout = workout;
@@ -92,8 +114,14 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
   void _initializeControllers() {
     if (_workout == null) return;
 
+    // Clear existing controllers to prevent memory leaks and state persistence
+    _clearControllers();
+
     for (final exercise in _workout!.exercises) {
       for (final set in exercise.sets) {
+        // Clear PR flags during editing - they will be recalculated on save
+        set.isPR = false;
+        
         _weightControllers[set.id] = TextEditingController(
           text: set.weight.toString(),
         );
@@ -104,6 +132,20 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     }
   }
 
+  void _clearControllers() {
+    // Dispose existing controllers
+    for (var controller in _weightControllers.values) {
+      controller.dispose();
+    }
+    for (var controller in _repsControllers.values) {
+      controller.dispose();
+    }
+
+    // Clear the maps
+    _weightControllers.clear();
+    _repsControllers.clear();
+  }
+
   void _markAsChanged() {
     if (!_hasChanges) {
       setState(() {
@@ -112,13 +154,8 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     }
   }
 
-  void _removePRFlagIfSet(ExerciseSet set) {
-    if (set.isPR) {
-      setState(() {
-        set.isPR = false;
-      });
-    }
-  }
+  // PR flags are cleared when loading workout and recalculated on save
+  // No need for individual PR flag removal during editing
 
   Future<void> _refreshLocalPRStatus(String exerciseName) async {
     if (_workout == null) return;
@@ -149,6 +186,28 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     });
   }
 
+  Future<void> _recalculateAllPRsForWorkout() async {
+    if (_workout == null) return;
+
+    try {
+      // Get all unique exercise names in this workout
+      final exerciseNames = _workout!.exercises.map((e) => e.name).toSet();
+
+      // Recalculate PR status for each exercise
+      for (final exerciseName in exerciseNames) {
+        await _workoutService.recalculatePRStatusForExercise(exerciseName);
+      }
+
+      // Update local model with fresh PR status for all exercises
+      for (final exerciseName in exerciseNames) {
+        await _refreshLocalPRStatus(exerciseName);
+      }
+    } catch (e) {
+      print('Error recalculating PRs for workout: $e');
+      // Don't throw error - PR calculation failure shouldn't block save
+    }
+  }
+
   Future<void> _saveChanges() async {
     if (_workout == null) return;
 
@@ -172,9 +231,115 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
         _workout!.duration, // Keep existing duration
       );
 
-      // Update all sets
+      // 1. Delete pending exercises and their sets
+      for (final exerciseId in _pendingExercisesToDelete) {
+        await _workoutService.deleteExercise(exerciseId);
+      }
+
+      // 2. Delete pending sets
+      for (final setId in _pendingSetsToDelete) {
+        await _workoutService.deleteSet(setId);
+      }
+
+      // 3. Add pending exercises
+      final Map<int, int> tempIdToRealId = {};
+      for (final tempExercise in _pendingExercisesToAdd) {
+        final realExerciseId = await _workoutService.addExercise(
+          widget.workoutId,
+          tempExercise.name,
+          tempExercise.equipment,
+        );
+        tempIdToRealId[tempExercise.id] = realExerciseId;
+
+        // Update the exercise ID in the local model
+        final exerciseIndex =
+            _workout!.exercises.indexWhere((e) => e.id == tempExercise.id);
+        if (exerciseIndex != -1) {
+          _workout!.exercises[exerciseIndex] = Exercise(
+            id: realExerciseId,
+            workoutId: tempExercise.workoutId,
+            name: tempExercise.name,
+            equipment: tempExercise.equipment,
+            finished: tempExercise.finished,
+            sets: _workout!.exercises[exerciseIndex].sets,
+          );
+        }
+      }
+
+      // 4. Add pending sets (with updated exercise IDs)
+      final Map<int, int> tempSetIdToRealId = {};
+      for (final tempSet in _pendingSetsToAdd) {
+        // Get the real exercise ID (might be newly created)
+        int realExerciseId = tempSet.exerciseId;
+        if (tempIdToRealId.containsKey(tempSet.exerciseId)) {
+          realExerciseId = tempIdToRealId[tempSet.exerciseId]!;
+        }
+
+        final realSetId = await _workoutService.addSet(
+          realExerciseId,
+          tempSet.setNumber,
+          tempSet.weight,
+          tempSet.reps,
+          tempSet.restTime,
+        );
+        tempSetIdToRealId[tempSet.id] = realSetId;
+
+        // Mark set as completed if it has valid weight and reps data
+        if (tempSet.weight > 0 && tempSet.reps > 0) {
+          await _workoutService.updateSetStatus(realSetId, true);
+        }
+
+        // Update the set ID in the local model
+        for (final exercise in _workout!.exercises) {
+          final setIndex = exercise.sets.indexWhere((s) => s.id == tempSet.id);
+          if (setIndex != -1) {
+            exercise.sets[setIndex] = ExerciseSet(
+              id: realSetId,
+              exerciseId: realExerciseId,
+              setNumber: tempSet.setNumber,
+              weight: tempSet.weight,
+              reps: tempSet.reps,
+              restTime: tempSet.restTime,
+              completed: tempSet.completed,
+              isPR: tempSet.isPR,
+            );
+            break;
+          }
+        }
+      }
+
+      // 5. Update controllers with real IDs
+      final Map<int, TextEditingController> newWeightControllers = {};
+      final Map<int, TextEditingController> newRepsControllers = {};
+
+      for (final entry in _weightControllers.entries) {
+        final tempId = entry.key;
+        final controller = entry.value;
+        final realId = tempSetIdToRealId[tempId] ?? tempId;
+        newWeightControllers[realId] = controller;
+      }
+
+      for (final entry in _repsControllers.entries) {
+        final tempId = entry.key;
+        final controller = entry.value;
+        final realId = tempSetIdToRealId[tempId] ?? tempId;
+        newRepsControllers[realId] = controller;
+      }
+
+      _weightControllers.clear();
+      _repsControllers.clear();
+      _weightControllers.addAll(newWeightControllers);
+      _repsControllers.addAll(newRepsControllers);
+
+      // 6. Update all sets with current values (existing sets only)
       for (final exercise in _workout!.exercises) {
         for (final set in exercise.sets) {
+          // Skip sets that are pending deletion or newly added (already saved above)
+          if (_pendingSetsToDelete.contains(set.id) ||
+              tempSetIdToRealId.containsKey(set.id)) {
+            continue;
+          }
+
           final weightController = _weightControllers[set.id];
           final repsController = _repsControllers[set.id];
 
@@ -192,13 +357,25 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
           }
         }
 
-        // Update exercise name if needed
-        await _workoutService.updateExercise(
-          exercise.id,
-          exercise.name,
-          exercise.equipment,
-        );
+        // Update exercise name if needed (existing exercises only)
+        if (!tempIdToRealId.containsKey(exercise.id)) {
+          await _workoutService.updateExercise(
+            exercise.id,
+            exercise.name,
+            exercise.equipment,
+          );
+        }
       }
+
+      // 7. Clear all pending operations
+      _pendingExercisesToAdd.clear();
+      _pendingSetsToAdd.clear();
+      _pendingExercisesToDelete.clear();
+      _pendingSetsToDelete.clear();
+
+      // 8. Recalculate PR flags for the entire workout
+      // This ensures all PRs are accurate and no conflicts exist
+      await _recalculateAllPRsForWorkout();
 
       // Close loading dialog
       if (mounted) Navigator.pop(context);
@@ -217,9 +394,14 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
         _hasChanges = false;
       });
 
+      // Notify the workout list that data has changed
+      WorkoutService.workoutsUpdatedNotifier.value =
+          !WorkoutService.workoutsUpdatedNotifier.value;
+
       // Navigate back to details page
       if (mounted) {
-        Navigator.pop(context, true); // Return true to indicate changes were saved
+        Navigator.pop(
+            context); // Just pop back, details page will reload from database
       }
     } catch (e) {
       // Close loading dialog
@@ -254,22 +436,8 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
       whereArgs: [setId],
     );
 
-    // Get the exercise name for PR recalculation
-    final exerciseResult = await db.rawQuery('''
-      SELECT e.name 
-      FROM exercise_sets es
-      INNER JOIN exercises e ON es.exerciseId = e.id
-      WHERE es.id = ?
-    ''', [setId]);
-
-    if (exerciseResult.isNotEmpty) {
-      final exerciseName = exerciseResult.first['name'] as String;
-      // Recalculate PR status for this exercise
-      await _workoutService.recalculatePRStatusForExercise(exerciseName);
-      
-      // Update local model with new PR status
-      await _refreshLocalPRStatus(exerciseName);
-    }
+    // Note: PR flags will be recalculated for the entire workout when saving
+    // No individual PR recalculation here to avoid conflicts
   }
 
   Future<void> _addExercise() async {
@@ -281,17 +449,10 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     );
 
     if (result != null && result is List<Map<String, dynamic>>) {
-      // Add multiple exercises
+      // Add multiple exercises to pending list (not database)
       for (final exerciseData in result) {
-        final exerciseId = await _workoutService.addExercise(
-          widget.workoutId,
-          exerciseData['name'],
-          exerciseData['equipment'] ?? '',
-        );
-        
-        // Add to local model
-        final newExercise = Exercise(
-          id: exerciseId,
+        final tempExercise = Exercise(
+          id: _nextTempId--, // Use negative temp ID
           workoutId: widget.workoutId,
           name: exerciseData['name'],
           equipment: exerciseData['equipment'] ?? '',
@@ -299,22 +460,18 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
           sets: [],
         );
         
+        _pendingExercisesToAdd.add(tempExercise);
+
+        // Add to local model for UI
         setState(() {
-          _workout!.exercises.add(newExercise);
+          _workout!.exercises.add(tempExercise);
         });
       }
       _markAsChanged();
     } else if (result != null && result is Map<String, dynamic>) {
-      // Add single exercise
-      final exerciseId = await _workoutService.addExercise(
-        widget.workoutId,
-        result['name'],
-        result['equipment'] ?? '',
-      );
-      
-      // Add to local model
-      final newExercise = Exercise(
-        id: exerciseId,
+      // Add single exercise to pending list (not database)
+      final tempExercise = Exercise(
+        id: _nextTempId--, // Use negative temp ID
         workoutId: widget.workoutId,
         name: result['name'],
         equipment: result['equipment'] ?? '',
@@ -322,8 +479,10 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
         sets: [],
       );
       
+      _pendingExercisesToAdd.add(tempExercise);
+      
       setState(() {
-        _workout!.exercises.add(newExercise);
+        _workout!.exercises.add(tempExercise);
       });
       _markAsChanged();
     }
@@ -337,35 +496,30 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     final setNumber = exercise.sets.length + 1;
 
     try {
-      // Add set to database
-      final setId = await _workoutService.addSet(
-        exerciseId,
-        setNumber,
-        0.0, // Default weight
-        0, // Default reps
-        150, // Default rest time (2:30)
-      );
-
-      // Create new set locally
+      // Create new set with temporary ID (not saved to database yet)
+      final tempSetId = _nextTempId--;
       final newSet = ExerciseSet(
-        id: setId,
+        id: tempSetId,
         exerciseId: exerciseId,
         setNumber: setNumber,
         weight: 0.0,
         reps: 0,
         restTime: 150,
-        completed: false,
+        completed: true, // Mark as completed since this is an edit session
         isPR: false,
       );
 
-      // Add to local model
+      // Add to pending list
+      _pendingSetsToAdd.add(newSet);
+
+      // Add to local model for UI
       setState(() {
         exercise.sets.add(newSet);
       });
 
       // Initialize controllers for the new set
-      _weightControllers[setId] = TextEditingController(text: '0');
-      _repsControllers[setId] = TextEditingController(text: '0');
+      _weightControllers[tempSetId] = TextEditingController(text: '0');
+      _repsControllers[tempSetId] = TextEditingController(text: '0');
 
       _markAsChanged();
     } catch (e) {
@@ -379,8 +533,14 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
 
   Future<void> _deleteSet(int exerciseId, int setId) async {
     try {
-      // Delete from database
-      await _workoutService.deleteSet(setId);
+      // Check if this is a temporary set (negative ID) or existing set
+      if (setId < 0) {
+        // Remove from pending sets to add
+        _pendingSetsToAdd.removeWhere((set) => set.id == setId);
+      } else {
+        // Mark existing set for deletion
+        _pendingSetsToDelete.add(setId);
+      }
       
       // Remove from local model
       final exerciseIndex = _workout!.exercises.indexWhere((e) => e.id == exerciseId);
@@ -457,8 +617,15 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
 
   Future<void> _deleteExercise(int exerciseId) async {
     try {
-      // Delete from database
-      await _workoutService.deleteExercise(exerciseId);
+      // Check if this is a temporary exercise (negative ID) or existing exercise
+      if (exerciseId < 0) {
+        // Remove from pending exercises to add
+        _pendingExercisesToAdd
+            .removeWhere((exercise) => exercise.id == exerciseId);
+      } else {
+        // Mark existing exercise for deletion
+        _pendingExercisesToDelete.add(exerciseId);
+      }
       
       // Remove from local model
       final exerciseIndex = _workout!.exercises.indexWhere((e) => e.id == exerciseId);
@@ -1052,7 +1219,6 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                               ),
                               keyboardType: TextInputType.number,
                               onChanged: (value) {
-                                _removePRFlagIfSet(set);
                                 _markAsChanged();
                               },
                             ),
@@ -1103,7 +1269,6 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                               ),
                               keyboardType: TextInputType.number,
                               onChanged: (value) {
-                                _removePRFlagIfSet(set);
                                 _markAsChanged();
                                 // Update local model immediately for responsive UI
                                 final reps = int.tryParse(value) ?? 0;

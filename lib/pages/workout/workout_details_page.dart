@@ -88,7 +88,8 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
     double totalVolume = 0;
     for (var exercise in _workout!.exercises) {
       for (var set in exercise.sets) {
-        if (set.completed) {
+        // Include all sets that have actual weight/reps data
+        if (set.weight > 0 && set.reps > 0) {
           totalVolume += set.weight * set.reps;
         }
       }
@@ -101,7 +102,8 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
     
     int totalSets = 0;
     for (var exercise in _workout!.exercises) {
-      totalSets += exercise.sets.where((set) => set.completed).length;
+      totalSets +=
+          exercise.sets.where((set) => set.weight > 0 && set.reps > 0).length;
     }
     return totalSets;
   }
@@ -111,22 +113,35 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
     
     int totalPRs = 0;
     for (var exercise in _workout!.exercises) {
-      totalPRs += exercise.sets.where((set) => set.isPR && set.completed).length;
+      totalPRs += exercise.sets
+          .where((set) => set.isPR && set.weight > 0 && set.reps > 0)
+          .length;
     }
     return totalPRs;
   }
 
   void _editWorkout() async {
-    final result = await Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => WorkoutEditPage(workoutId: widget.workoutId),
+        builder: (context) => WorkoutEditPage(
+          key: ValueKey(
+              'edit_${widget.workoutId}_${DateTime.now().millisecondsSinceEpoch}'),
+          workoutId: widget.workoutId,
+        ),
       ),
     );
 
-    // If changes were saved, reload the workout data
-    if (result == true) {
-      _loadWorkout();
+    // Add a small delay to ensure any database transactions are completed
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // Always reload fresh data from database when returning from edit
+    // This ensures we display the latest saved state
+    await _loadWorkout();
+
+    // Force a rebuild to ensure UI updates
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -174,15 +189,18 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
                   slivers: [
                     _buildSliverAppBar(),
                     SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildWorkoutStats(),
-                            const SizedBox(height: 24),
-                            _buildExercisesList(),
-                          ],
+                      child: RefreshIndicator(
+                        onRefresh: _loadWorkout,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildWorkoutStats(),
+                              const SizedBox(height: 24),
+                              _buildExercisesList(),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -212,6 +230,10 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
         onPressed: () => Navigator.pop(context),
       ),
       actions: [
+        IconButton(
+          icon: Icon(Icons.refresh, color: _textPrimaryColor),
+          onPressed: _loadWorkout,
+        ),
         IconButton(
           icon: Icon(Icons.edit, color: _textPrimaryColor),
           onPressed: _editWorkout,
@@ -433,9 +455,11 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
   }
 
   Widget _buildExerciseCard(Exercise exercise) {
-    final completedSets = exercise.sets.where((set) => set.completed).toList();
-    final bestSet = completedSets.isNotEmpty
-        ? completedSets.reduce((a, b) => 
+    final validSets =
+        exercise.sets.where((set) => set.weight > 0 && set.reps > 0).toList();
+    final bestSet = validSets.isNotEmpty
+        ? validSets
+            .reduce((a, b) => 
             (a.weight * a.reps) > (b.weight * b.reps) ? a : b)
         : null;
 
@@ -517,9 +541,9 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
             ],
           ),
           const SizedBox(height: 16),
-          if (completedSets.isNotEmpty) ...[
+          if (validSets.isNotEmpty) ...[
             Text(
-              'Sets (${completedSets.length})',
+              'Sets (${validSets.length})',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -530,10 +554,10 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: completedSets.length,
+              itemCount: validSets.length,
               separatorBuilder: (context, index) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
-                final set = completedSets[index];
+                final set = validSets[index];
                 return _buildSetRow(set, index + 1);
               },
             ),
@@ -553,7 +577,7 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'No completed sets for this exercise',
+                    'No sets with data for this exercise',
                     style: TextStyle(
                       color: _textSecondaryColor,
                       fontWeight: FontWeight.w500,
