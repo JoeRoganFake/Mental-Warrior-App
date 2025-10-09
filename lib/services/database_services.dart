@@ -31,7 +31,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 6, // Increment version for exercise finished flag
+      version: 7, // Increment version for custom exercises table
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -47,6 +47,8 @@ class DatabaseService {
         WorkoutService().createWorkoutTables(db); // Added workout tables
         WorkoutService().createActiveWorkoutSessionsTable(
             db); // Added active sessions table
+        CustomExerciseService()
+            .createCustomExerciseTable(db); // Added custom exercises table
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 4) {
@@ -61,6 +63,10 @@ class DatabaseService {
           // Add finished flag to exercises table
           await db.execute(
               'ALTER TABLE exercises ADD COLUMN finished INTEGER DEFAULT 0');
+        }
+        if (oldVersion < 7) {
+          // Create custom exercises table
+          await CustomExerciseService().createCustomExerciseTable(db);
         }
       },
     );
@@ -1447,17 +1453,30 @@ class WorkoutService {
     final String cleanExerciseName =
         exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
 
-    // Get all completed sets for this exercise, ordered by volume descending
+    // First, clear ALL PR flags for this exercise to start fresh
+    await db.rawUpdate('''
+      UPDATE $_setTableName 
+      SET $_setIsPRColumnName = 0 
+      WHERE id IN (
+        SELECT es.id 
+        FROM $_setTableName es
+        INNER JOIN exercises e ON es.exerciseId = e.id
+        WHERE e.name LIKE ? OR e.name LIKE ?
+      )
+    ''', ['%$cleanExerciseName%', cleanExerciseName]);
+
+    // Get all completed sets for this exercise, ordered chronologically
     final result = await db.rawQuery('''
-      SELECT es.id, es.volume, e.name, w.date
+      SELECT es.id, es.volume, es.weight, es.reps, e.name, w.date, w.id as workout_id
       FROM exercise_sets es
       INNER JOIN exercises e ON es.exerciseId = e.id
       INNER JOIN workouts w ON e.workoutId = w.id
-      WHERE es.completed = 1
-      ORDER BY w.date ASC, es.id ASC
-    ''');
+      WHERE es.completed = 1 
+      AND (e.name LIKE ? OR e.name LIKE ?)
+      ORDER BY w.date ASC, w.id ASC, es.id ASC
+    ''', ['%$cleanExerciseName%', cleanExerciseName]);
 
-    // Filter by clean exercise name
+    // Filter by exact clean exercise name match
     List<Map<String, dynamic>> exerciseSets = [];
     for (final row in result) {
       final String dbExerciseName = row['name'] as String;
@@ -1471,17 +1490,6 @@ class WorkoutService {
 
     if (exerciseSets.isEmpty) return;
 
-    // First, mark all sets as non-PR
-    List<int> allSetIds = exerciseSets.map((s) => s['id'] as int).toList();
-    if (allSetIds.isNotEmpty) {
-      String placeholders = List.filled(allSetIds.length, '?').join(',');
-      await db.rawUpdate('''
-        UPDATE $_setTableName 
-        SET $_setIsPRColumnName = 0 
-        WHERE $_setIdColumnName IN ($placeholders)
-      ''', allSetIds);
-    }
-
     // Track the maximum volume seen so far (chronologically)
     double currentMaxVolume = 0.0;
     List<int> prSetIds = [];
@@ -1489,8 +1497,8 @@ class WorkoutService {
     for (final set in exerciseSets) {
       final double volume = set['volume'] as double;
 
-      // If this volume is greater than any previous volume, it's a PR
-      if (volume > currentMaxVolume) {
+      // Only consider valid volumes (weight > 0 and reps > 0)
+      if (volume > 0 && volume > currentMaxVolume) {
         currentMaxVolume = volume;
         prSetIds.add(set['id'] as int);
       }
@@ -1551,6 +1559,33 @@ class WorkoutService {
       await recalculatePRStatusForExercise(exerciseName);
     }
 
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
+
+  // Update set completion status without triggering PR recalculation
+  // Use this during bulk operations where PR recalculation will be done separately
+  Future<void> updateSetStatusWithoutPRRecalculation(
+      int setId, bool completed) async {
+    final db = await DatabaseService.instance.database;
+
+    // Update the set completion status
+    Map<String, dynamic> updateData = {
+      _setCompletedColumnName: completed ? 1 : 0
+    };
+
+    // If uncompleting the set, it's no longer a PR
+    if (!completed) {
+      updateData[_setIsPRColumnName] = 0;
+    }
+
+    await db.update(
+      _setTableName,
+      updateData,
+      where: "$_setIdColumnName = ?",
+      whereArgs: [setId],
+    );
+
+    // Note: PR recalculation should be done separately after all updates
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
   }
 
@@ -2077,5 +2112,152 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_weeklyWorkoutGoalKey, goal);
     settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+}
+
+// Add a new CustomExerciseService class for managing user-created exercises
+class CustomExerciseService {
+  // Singleton instance
+  static final CustomExerciseService _instance =
+      CustomExerciseService._internal();
+  factory CustomExerciseService() => _instance;
+  CustomExerciseService._internal();
+
+  // Notifier to inform listeners when custom exercises change
+  static final ValueNotifier<bool> customExercisesUpdatedNotifier =
+      ValueNotifier(false);
+
+  // Table & column names
+  final String _customExerciseTableName = "custom_exercises";
+  final String _exerciseIdColumnName = "id";
+  final String _exerciseNameColumnName = "name";
+  final String _exerciseEquipmentColumnName = "equipment";
+  final String _exerciseTypeColumnName = "type";
+  final String _exerciseDescriptionColumnName = "description";
+  final String _exerciseSecondaryMusclesColumnName = "secondary_muscles";
+  final String _exerciseCreatedAtColumnName = "created_at";
+
+  // Create custom exercises table
+  Future<void> createCustomExerciseTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_customExerciseTableName (
+        $_exerciseIdColumnName INTEGER PRIMARY KEY AUTOINCREMENT,
+        $_exerciseNameColumnName TEXT NOT NULL,
+        $_exerciseEquipmentColumnName TEXT NOT NULL,
+        $_exerciseTypeColumnName TEXT NOT NULL,
+        $_exerciseDescriptionColumnName TEXT,
+        $_exerciseSecondaryMusclesColumnName TEXT,
+        $_exerciseCreatedAtColumnName TEXT NOT NULL
+      )
+    ''');
+  }
+
+  // Add a new custom exercise
+  Future<int> addCustomExercise({
+    required String name,
+    required String equipment,
+    required String type,
+    String? description,
+    List<String>? secondaryMuscles,
+  }) async {
+    final db = await DatabaseService.instance.database;
+
+    final exerciseData = {
+      _exerciseNameColumnName: name,
+      _exerciseEquipmentColumnName: equipment,
+      _exerciseTypeColumnName: type,
+      _exerciseDescriptionColumnName: description ?? '',
+      _exerciseSecondaryMusclesColumnName: secondaryMuscles?.join(',') ?? '',
+      _exerciseCreatedAtColumnName: DateTime.now().toIso8601String(),
+    };
+
+    final id = await db.insert(_customExerciseTableName, exerciseData);
+    customExercisesUpdatedNotifier.value =
+        !customExercisesUpdatedNotifier.value;
+    return id;
+  }
+
+  // Get all custom exercises
+  Future<List<Map<String, dynamic>>> getCustomExercises() async {
+    final db = await DatabaseService.instance.database;
+    final data = await db.query(
+      _customExerciseTableName,
+      orderBy: '$_exerciseNameColumnName ASC',
+    );
+
+    return data.map((exerciseMap) {
+      final secondaryMusclesString =
+          exerciseMap[_exerciseSecondaryMusclesColumnName] as String? ?? '';
+      final secondaryMuscles = secondaryMusclesString.isEmpty
+          ? <String>[]
+          : secondaryMusclesString.split(',');
+
+      return {
+        'id': exerciseMap[_exerciseIdColumnName],
+        'name': exerciseMap[_exerciseNameColumnName],
+        'equipment': exerciseMap[_exerciseEquipmentColumnName],
+        'type': exerciseMap[_exerciseTypeColumnName],
+        'description': exerciseMap[_exerciseDescriptionColumnName],
+        'secondaryMuscles': secondaryMuscles,
+        'apiId':
+            'custom_${exerciseMap[_exerciseIdColumnName]}', // Mark as custom with unique ID
+        'isCustom': true, // Flag to identify custom exercises
+        'createdAt': exerciseMap[_exerciseCreatedAtColumnName],
+      };
+    }).toList();
+  }
+
+  // Update a custom exercise
+  Future<void> updateCustomExercise({
+    required int id,
+    required String name,
+    required String equipment,
+    required String type,
+    String? description,
+    List<String>? secondaryMuscles,
+  }) async {
+    final db = await DatabaseService.instance.database;
+
+    final exerciseData = {
+      _exerciseNameColumnName: name,
+      _exerciseEquipmentColumnName: equipment,
+      _exerciseTypeColumnName: type,
+      _exerciseDescriptionColumnName: description ?? '',
+      _exerciseSecondaryMusclesColumnName: secondaryMuscles?.join(',') ?? '',
+    };
+
+    await db.update(
+      _customExerciseTableName,
+      exerciseData,
+      where: '$_exerciseIdColumnName = ?',
+      whereArgs: [id],
+    );
+    customExercisesUpdatedNotifier.value =
+        !customExercisesUpdatedNotifier.value;
+  }
+
+  // Delete a custom exercise
+  Future<void> deleteCustomExercise(int id) async {
+    final db = await DatabaseService.instance.database;
+    await db.delete(
+      _customExerciseTableName,
+      where: '$_exerciseIdColumnName = ?',
+      whereArgs: [id],
+    );
+    customExercisesUpdatedNotifier.value =
+        !customExercisesUpdatedNotifier.value;
+  }
+
+  // Check if a custom exercise with the same name and equipment already exists
+  Future<bool> exerciseExists(String name, String equipment) async {
+    final db = await DatabaseService.instance.database;
+    final result = await db.query(
+      _customExerciseTableName,
+      where:
+          '$_exerciseNameColumnName = ? AND $_exerciseEquipmentColumnName = ?',
+      whereArgs: [name, equipment],
+      limit: 1,
+    );
+    return result.isNotEmpty;
   }
 }

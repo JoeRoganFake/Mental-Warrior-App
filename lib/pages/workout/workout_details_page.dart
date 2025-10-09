@@ -113,9 +113,38 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
     
     int totalPRs = 0;
     for (var exercise in _workout!.exercises) {
-      totalPRs += exercise.sets
-          .where((set) => set.isPR && set.weight > 0 && set.reps > 0)
-          .length;
+      final validSets =
+          exercise.sets.where((set) => set.weight > 0 && set.reps > 0).toList();
+
+      if (validSets.isNotEmpty) {
+        // Find the maximum volume among all sets in this exercise
+        double maxVolume = validSets
+            .map((set) => set.weight * set.reps)
+            .reduce((a, b) => a > b ? a : b);
+
+        // Check if any set is marked as PR in database with max volume
+        bool hasDatabasePRWithMaxVolume = validSets
+            .any((set) => set.isPR && (set.weight * set.reps) == maxVolume);
+
+        if (hasDatabasePRWithMaxVolume) {
+          // If there's a database PR with max volume, only count those
+          for (final set in validSets) {
+            final volume = set.weight * set.reps;
+            if (set.isPR && volume == maxVolume) {
+              totalPRs++;
+            }
+          }
+        } else {
+          // If no database PR has max volume, count all sets with max volume as PRs
+          // This handles newly added sets that should be PRs but haven't been flagged yet
+          for (final set in validSets) {
+            final volume = set.weight * set.reps;
+            if (volume == maxVolume) {
+              totalPRs++;
+            }
+          }
+        }
+      }
     }
     return totalPRs;
   }
@@ -455,13 +484,47 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
   }
 
   Widget _buildExerciseCard(Exercise exercise) {
-    final validSets =
-        exercise.sets.where((set) => set.weight > 0 && set.reps > 0).toList();
+    final allSets = exercise.sets.toList(); // Show all sets
+    final validSets = exercise.sets
+        .where((set) => set.weight > 0 && set.reps > 0)
+        .toList(); // For calculations only
     final bestSet = validSets.isNotEmpty
         ? validSets
             .reduce((a, b) => 
             (a.weight * a.reps) > (b.weight * b.reps) ? a : b)
         : null;
+
+    // Calculate which sets are actually PRs based on volume and database flags
+    Set<int> actualPRSetIds = {};
+    if (validSets.isNotEmpty) {
+      // Find the maximum volume among all sets in this exercise
+      double maxVolume = validSets
+          .map((set) => set.weight * set.reps)
+          .reduce((a, b) => a > b ? a : b);
+
+      // Check if any set is marked as PR in database with max volume
+      bool hasDatabasePRWithMaxVolume = validSets
+          .any((set) => set.isPR && (set.weight * set.reps) == maxVolume);
+
+      if (hasDatabasePRWithMaxVolume) {
+        // If there's a database PR with max volume, only show those
+        for (final set in validSets) {
+          final volume = set.weight * set.reps;
+          if (set.isPR && volume == maxVolume) {
+            actualPRSetIds.add(set.id);
+          }
+        }
+      } else {
+        // If no database PR has max volume, show all sets with max volume as PRs
+        // This handles newly added sets that should be PRs but haven't been flagged yet
+        for (final set in validSets) {
+          final volume = set.weight * set.reps;
+          if (volume == maxVolume) {
+            actualPRSetIds.add(set.id);
+          }
+        }
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -541,9 +604,9 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
             ],
           ),
           const SizedBox(height: 16),
-          if (validSets.isNotEmpty) ...[
+          if (allSets.isNotEmpty) ...[
             Text(
-              'Sets (${validSets.length})',
+              'Sets (${allSets.length})',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -554,11 +617,12 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: validSets.length,
+              itemCount: allSets.length,
               separatorBuilder: (context, index) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
-                final set = validSets[index];
-                return _buildSetRow(set, index + 1);
+                final set = allSets[index];
+                final isActualPR = actualPRSetIds.contains(set.id);
+                return _buildSetRow(set, index + 1, isActualPR);
               },
             ),
           ] else
@@ -577,7 +641,7 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'No sets with data for this exercise',
+                    'No sets for this exercise',
                     style: TextStyle(
                       color: _textSecondaryColor,
                       fontWeight: FontWeight.w500,
@@ -591,7 +655,7 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
     );
   }
 
-  Widget _buildSetRow(ExerciseSet set, int setNumber) {
+  Widget _buildSetRow(ExerciseSet set, int setNumber, bool isActualPR) {
     final volume = set.weight * set.reps;
     
     return Container(
@@ -599,7 +663,7 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
       decoration: BoxDecoration(
         color: _surfaceColor,
         borderRadius: BorderRadius.circular(8),
-        border: set.isPR
+        border: isActualPR
             ? Border.all(color: Colors.amber.withOpacity(0.5), width: 1)
             : null,
       ),
@@ -664,7 +728,7 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              if (set.isPR)
+              if (isActualPR)
                 Container(
                   margin: const EdgeInsets.only(top: 2),
                   padding: const EdgeInsets.symmetric(

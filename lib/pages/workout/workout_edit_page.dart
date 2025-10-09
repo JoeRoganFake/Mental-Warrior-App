@@ -286,7 +286,8 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
 
         // Mark set as completed if it has valid weight and reps data
         if (tempSet.weight > 0 && tempSet.reps > 0) {
-          await _workoutService.updateSetStatus(realSetId, true);
+          await _workoutService.updateSetStatusWithoutPRRecalculation(
+              realSetId, true);
         }
 
         // Update the set ID in the local model
@@ -542,68 +543,25 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
         _pendingSetsToDelete.add(setId);
       }
       
+      // Remove controllers for the deleted set first
+      _weightControllers[setId]?.dispose();
+      _repsControllers[setId]?.dispose();
+      _weightControllers.remove(setId);
+      _repsControllers.remove(setId);
+      
       // Remove from local model
       final exerciseIndex = _workout!.exercises.indexWhere((e) => e.id == exerciseId);
       if (exerciseIndex != -1) {
         final exercise = _workout!.exercises[exerciseIndex];
         final setIndex = exercise.sets.indexWhere((s) => s.id == setId);
         
-        setState(() {
-          // Remove the set from our local state
-          _workout!.exercises[exerciseIndex].sets.removeAt(setIndex);
-          
-          // Since we can't directly modify the setNumber (it's final), we need to
-          // create new set objects with updated set numbers
-          if (exercise.sets.length > 0) {
-            final List<ExerciseSet> updatedSets = [];
-            
-            // Create new set objects with correct numbers
-            for (int i = 0; i < exercise.sets.length; i++) {
-              final oldSet = exercise.sets[i];
-              updatedSets.add(ExerciseSet(
-                id: oldSet.id,
-                exerciseId: oldSet.exerciseId,
-                setNumber: i + 1, // New sequential set number
-                weight: oldSet.weight,
-                reps: oldSet.reps,
-                restTime: oldSet.restTime,
-                completed: oldSet.completed,
-                isPR: oldSet.isPR,
-              ));
-            }
-            
-            // Replace the sets list with our updated one
-            _workout!.exercises[exerciseIndex].sets.clear();
-            _workout!.exercises[exerciseIndex].sets.addAll(updatedSets);
-            
-            // Update controllers for the renumbered sets
-            final Map<int, TextEditingController> newWeightControllers = {};
-            final Map<int, TextEditingController> newRepsControllers = {};
-            
-            for (final set in updatedSets) {
-              final oldWeightController = _weightControllers[set.id];
-              final oldRepsController = _repsControllers[set.id];
-              
-              if (oldWeightController != null && oldRepsController != null) {
-                newWeightControllers[set.id] = oldWeightController;
-                newRepsControllers[set.id] = oldRepsController;
-              }
-            }
-            
-            // Update the controller maps
-            _weightControllers.clear();
-            _repsControllers.clear();
-            _weightControllers.addAll(newWeightControllers);
-            _repsControllers.addAll(newRepsControllers);
-          }
-        });
+        if (setIndex != -1) {
+          setState(() {
+            // Simply remove the set - no need to renumber since setNumber is display-only
+            _workout!.exercises[exerciseIndex].sets.removeAt(setIndex);
+          });
+        }
       }
-      
-      // Remove controllers
-      _weightControllers[setId]?.dispose();
-      _repsControllers[setId]?.dispose();
-      _weightControllers.remove(setId);
-      _repsControllers.remove(setId);
 
       _markAsChanged();
     } catch (e) {

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/data/exercises_data.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
+import 'package:mental_warior/pages/workout/create_exercise_page.dart';
+import 'package:mental_warior/services/database_services.dart';
 
 class ExerciseSelectionPage extends StatefulWidget {
   const ExerciseSelectionPage({super.key});
@@ -12,12 +14,11 @@ class ExerciseSelectionPage extends StatefulWidget {
 
 class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _customExerciseController =
-      TextEditingController();
   String _searchQuery = '';
   String _selectedBodyPart = 'All';
   String _selectedEquipment = 'All';
   List<Map<String, dynamic>> _exercises = [];
+  List<Map<String, dynamic>> _customExercises = [];
   List<String> _bodyParts = [
     'All'
   ]; // Initialize with 'All' to avoid LateInitializationError
@@ -28,24 +29,16 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   // Track selected exercises for multiple selection
   final Set<String> _selectedExercises = <String>{};
 
-  // Equipment options for adding custom exercise
-  final List<String> _equipmentOptions = [
-    'Barbell',
-    'Dumbbell',
-    'Machine',
-    'Cable',
-    'Body Weight',
-    'Kettlebell',
-    'Resistance Band',
-    'Other',
-    'None'
-  ];
-
   @override
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
     _loadExercisesFromJson();
+    _loadCustomExercises();
+
+    // Listen for custom exercise updates
+    CustomExerciseService.customExercisesUpdatedNotifier
+        .addListener(_loadCustomExercises);
   }
 
   void _loadExercisesFromJson() {
@@ -74,6 +67,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
               ? 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/${(m['images'] as List).first}'
               : '',
           'secondaryMuscles': m['secondaryMuscles'] ?? [],
+          'isCustom': false, // Mark built-in exercises
         };
       }).toList();
       // Populate dynamic filter lists
@@ -92,11 +86,39 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
     }
   }
 
+  void _loadCustomExercises() async {
+    try {
+      final customExerciseService = CustomExerciseService();
+      final customExercises = await customExerciseService.getCustomExercises();
+
+      setState(() {
+        _customExercises = customExercises;
+        // Update filter lists to include custom exercise types and equipment
+        _updateFilterLists();
+      });
+    } catch (e) {
+      debugPrint('Error loading custom exercises: $e');
+      setState(() {
+        _customExercises = [];
+      });
+    }
+  }
+
+  void _updateFilterLists() {
+    // Combine built-in and custom exercises for filter lists
+    final allExercises = [..._exercises, ..._customExercises];
+    final bodySet = allExercises.map((e) => e['type'] as String).toSet();
+    final equipSet = allExercises.map((e) => e['equipment'] as String).toSet();
+    _bodyParts = ['All', ...bodySet.toList()..sort()];
+    _equipmentTypes = ['All', ...equipSet.toList()..sort()];
+  }
+
   @override
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
-    _customExerciseController.dispose();
+    CustomExerciseService.customExercisesUpdatedNotifier
+        .removeListener(_loadCustomExercises);
     super.dispose();
   }
 
@@ -124,8 +146,10 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   }
 
   List<Map<String, dynamic>> get _filteredExercises {
-    List<Map<String, dynamic>> result =
-        _exercises; // Filter by body part if not set to "All"
+    // Combine built-in and custom exercises
+    List<Map<String, dynamic>> result = [..._exercises, ..._customExercises];
+
+    // Filter by body part if not set to "All"
     if (_selectedBodyPart != 'All') {
       result = result.where((exercise) {
         return exercise['type'] != null &&
@@ -160,93 +184,141 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
     return result;
   }
 
-  void _showAddCustomExerciseDialog() {
-    _customExerciseController.clear();
-    String selectedEquipment = 'None';
-    String selectedType = 'Chest';
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Custom Exercise'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _customExerciseController,
-              decoration: const InputDecoration(
-                labelText: 'Exercise Name',
-                hintText: 'Enter exercise name',
-              ),
-              textCapitalization: TextCapitalization.words,
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: selectedType,
-              decoration: const InputDecoration(
-                labelText: 'Primary Muscle',
-              ),
-              items:
-                  _bodyParts.where((part) => part != 'All').map((String type) {
-                return DropdownMenuItem<String>(
-                  value: type,
-                  child: Text(type),
-                );
-              }).toList(),
-              onChanged: (String? value) {
-                if (value != null) {
-                  selectedType = value;
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: selectedEquipment,
-              decoration: const InputDecoration(
-                labelText: 'Equipment',
-              ),
-              items: _equipmentOptions.map((String equipment) {
-                return DropdownMenuItem<String>(
-                  value: equipment,
-                  child: Text(equipment),
-                );
-              }).toList(),
-              onChanged: (String? value) {
-                if (value != null) {
-                  selectedEquipment = value;
-                }
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final exerciseName = _customExerciseController.text.trim();
-              if (exerciseName.isNotEmpty) {
-                Navigator.pop(context);
-                // Return custom exercise in the same list format
-                Navigator.pop(context, [
-                  {
-                  'name': exerciseName,
-                  'equipment':
-                      selectedEquipment == 'None' ? 'None' : selectedEquipment,
-                  'type': selectedType,
-                    'description': 'Custom exercise',
-                    'apiId': '', // Custom exercises don't have API IDs
-                  }
-                ]);
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
+  void _navigateToCreateExercise() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CreateExercisePage(),
       ),
     );
+
+    // If an exercise was created, return it to the parent page
+    if (result != null) {
+      Navigator.pop(context, result);
+    }
+  }
+
+  void _showCustomExerciseOptions(Map<String, dynamic> exercise) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit),
+                title: const Text('Edit Exercise'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _editCustomExercise(exercise);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete Exercise',
+                    style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _confirmDeleteCustomExercise(exercise);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.info),
+                title: const Text('View Details'),
+                onTap: () {
+                  Navigator.pop(context);
+                  if (exercise['description'] != null &&
+                      exercise['description'].isNotEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(exercise['description']),
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _editCustomExercise(Map<String, dynamic> exercise) async {
+    // Navigate to create exercise page with existing data for editing
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CreateExercisePage(
+          editMode: true,
+          exerciseData: exercise,
+        ),
+      ),
+    );
+
+    // If exercise was updated, reload custom exercises
+    if (result != null) {
+      _loadCustomExercises();
+    }
+  }
+
+  void _confirmDeleteCustomExercise(Map<String, dynamic> exercise) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Delete Exercise'),
+          content: Text(
+              'Are you sure you want to delete "${exercise['name']}"? This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _deleteCustomExercise(exercise);
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _deleteCustomExercise(Map<String, dynamic> exercise) async {
+    try {
+      final customExerciseService = CustomExerciseService();
+      await customExerciseService.deleteCustomExercise(exercise['id']);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Exercise "${exercise['name']}" deleted successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // Remove from selected exercises if it was selected
+      final exerciseKey = _getExerciseKey(exercise);
+      if (_selectedExercises.contains(exerciseKey)) {
+        setState(() {
+          _selectedExercises.remove(exerciseKey);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete exercise: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -355,7 +427,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                   ElevatedButton.icon(
                     icon: const Icon(Icons.add),
                     label: const Text('Add Custom Exercise'),
-                    onPressed: _showAddCustomExerciseDialog,
+                    onPressed: _navigateToCreateExercise,
                   ),
                 ],
               ),
@@ -442,8 +514,10 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                           activeColor:
                               _getColorForType(exercise['type'] ?? 'No Type'),
                         ),
-                        // Info button for exercise details
-                        if (exercise['id'] != null)
+                        // Info button for built-in exercises with API details
+                        if (exercise['id'] != null &&
+                            exercise['id'].toString().isNotEmpty &&
+                            !(exercise['isCustom'] ?? false))
                           Container(
                             decoration: BoxDecoration(
                               color: Colors.grey.shade200,
@@ -476,15 +550,47 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                               },
                             ),
                           ),
+                        // Custom exercise indicator
+                        if (exercise['isCustom'] ?? false)
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade200,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.star,
+                                  color: Colors.orange.shade700,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Custom',
+                                  style: TextStyle(
+                                    color: Colors.orange.shade700,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                     onTap: () {
                       // Toggle selection on tap instead of immediately returning
                       _toggleExerciseSelection(exercise);
                     },
-                    // Show description on long press or with an expansion panel
+                    // Show description on long press for built-in exercises,
+                    // or show options menu for custom exercises
                     onLongPress: () {
-                      if (exercise['description'] != null) {
+                      if (exercise['isCustom'] ?? false) {
+                        _showCustomExerciseOptions(exercise);
+                      } else if (exercise['description'] != null) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(exercise['description']),
@@ -507,8 +613,9 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
               child: FloatingActionButton.extended(
                 heroTag: "add_selected_exercises", // Unique hero tag
                 onPressed: () {
-                  // Return selected exercises
-                  final selectedExercisesList = _exercises
+                  // Return selected exercises from both built-in and custom exercises
+                  final allExercises = [..._exercises, ..._customExercises];
+                  final selectedExercisesList = allExercises
                       .where((exercise) => _selectedExercises
                           .contains(_getExerciseKey(exercise)))
                       .map((exercise) => {
@@ -516,7 +623,8 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                             'equipment': exercise['equipment'],
                             'type': exercise['type'],
                             'description': exercise['description'],
-                            'apiId': exercise['id'] ?? '',
+                            'apiId': exercise['apiId'] ?? exercise['id'] ?? '',
+                            'isCustom': exercise['isCustom'] ?? false,
                           })
                       .toList();
                   Navigator.pop(context, selectedExercisesList);
@@ -530,7 +638,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
           // Add custom exercise button
           FloatingActionButton(
             heroTag: "add_custom_exercise", // Unique hero tag
-            onPressed: _showAddCustomExerciseDialog,
+            onPressed: _navigateToCreateExercise,
             child: const Icon(Icons.add),
             tooltip: 'Add custom exercise',
           ),
