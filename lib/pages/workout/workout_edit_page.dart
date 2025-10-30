@@ -1049,9 +1049,10 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                       children: [
                         Expanded(
                           child: Text(
-                            // Clean the exercise name by removing API ID markers
+                            // Clean the exercise name by removing API ID and CUSTOM markers
                             exercise.name
                                 .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+                                .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
                                 .trim(),
                             style: TextStyle(
                               fontSize: 18,

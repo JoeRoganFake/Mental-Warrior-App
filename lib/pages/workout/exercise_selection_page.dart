@@ -30,6 +30,14 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   // Track selected exercises for multiple selection
   final Set<String> _selectedExercises = <String>{};
 
+  // Helper function to clean exercise names from markers
+  String _cleanExerciseName(String name) {
+    return name
+        .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+        .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+        .trim();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -275,7 +283,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
         return AlertDialog(
           title: const Text('Delete Exercise'),
           content: Text(
-              'Are you sure you want to delete "${exercise['name']}"? This action cannot be undone.'),
+              'Are you sure you want to delete "${_cleanExerciseName(exercise['name'])}"? This action cannot be undone.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -302,7 +310,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Exercise "${exercise['name']}" deleted successfully'),
+          content: Text('Exercise "${_cleanExerciseName(exercise['name'])}" deleted successfully'),
           backgroundColor: Colors.green,
         ),
       );
@@ -463,7 +471,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     title: Text(
-                      exercise['name'] ?? 'Unnamed Exercise',
+                      _cleanExerciseName(exercise['name'] ?? 'Unnamed Exercise'),
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     subtitle: Text(
@@ -495,7 +503,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                       ),
                       child: Center(
                         child: Text(
-                          (exercise['name'] ?? 'X')[0],
+                          (_cleanExerciseName(exercise['name'] ?? 'X'))[0],
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,

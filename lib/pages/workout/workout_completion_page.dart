@@ -31,6 +31,14 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
   final Color _textPrimaryColor = Colors.white;
   final Color _textSecondaryColor = const Color(0xFFB3B3B3);
 
+  // Helper method to clean exercise names by removing markers
+  String _cleanExerciseName(String name) {
+    return name
+        .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+        .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+        .trim();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -309,7 +317,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                 children: [
                   Expanded(
                     child: Text(
-                      '$completedSets × ${exercise.name}',
+                      '$completedSets × ${_cleanExerciseName(exercise.name)}',
                       style: TextStyle(
                         color: _textPrimaryColor,
                         fontSize: 16,

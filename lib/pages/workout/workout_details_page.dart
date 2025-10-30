@@ -31,6 +31,14 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
   final Color _textSecondaryColor = const Color(0xFFBBBBBB);
   final Color _accentColor = const Color(0xFF7C4DFF);
 
+  // Helper method to clean exercise names by removing markers
+  String _cleanExerciseName(String name) {
+    return name
+        .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+        .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+        .trim();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -559,7 +567,7 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      exercise.name,
+                      _cleanExerciseName(exercise.name),
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
