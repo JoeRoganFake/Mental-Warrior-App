@@ -6,6 +6,7 @@ import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/foreground_service.dart';
 import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
+import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/rest_timer_page.dart';
 import 'package:mental_warior/pages/workout/workout_completion_page.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -369,6 +370,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     super.dispose();
   }
 
+  // Helper method to clean exercise names by removing markers
+  String _cleanExerciseName(String name) {
+    return name
+        .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+        .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+        .trim();
+  }
+
   // Clear active session from database (when workout is completed or discarded)
   Future<void> _clearActiveSessionFromDatabase() async {
     try {
@@ -505,6 +514,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
       if (workout != null) {
         if (mounted) {
+          // Debug: Print all exercise names as loaded from database
+          print('🔄 LOADED ${workout.exercises.length} exercises from database:');
+          for (var ex in workout.exercises) {
+            print('   Exercise ID: ${ex.id}, Name: "${ex.name}"');
+          }
+          
           // Check if widget is still mounted before updating state
           setState(() {
             _workout = workout;
@@ -646,9 +661,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     if (_workout == null) return;
 
     for (final exercise in _workout!.exercises) {
-      // Clean exercise name to remove API ID markers
-      final String cleanExerciseName =
-          exercise.name.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+      // Clean exercise name to remove API ID and CUSTOM markers
+      final String cleanExerciseName = _cleanExerciseName(exercise.name);
 
       // Skip if already cached
       if (_exerciseHistoryCache.containsKey(cleanExerciseName)) {
@@ -1180,6 +1194,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           final equipment = exerciseData['equipment'] as String? ?? '';
           final apiId = exerciseData['apiId'] as String? ??
               ''; // Get API ID from the selection result
+          final isCustom = exerciseData['isCustom'] as bool? ?? false; // Get custom flag
+
+          print('🔍 Adding exercise to workout:');
+          print('   Name: $exerciseName');
+          print('   API ID: $apiId');
+          print('   isCustom: $isCustom');
 
           // Add exercise to the database
           final exerciseId = await _workoutService.addExercise(
@@ -1188,12 +1208,59 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             equipment,
           );
 
-          // Store the API ID in the exercise name with a special marker
-          if (apiId.isNotEmpty) {
+          // Store the API ID and custom flag in the exercise name with special markers
+          if (apiId.isNotEmpty || isCustom) {
+            String updatedName = exerciseName;
+            if (apiId.isNotEmpty) {
+              updatedName += " ##API_ID:$apiId##";
+            }
+            if (isCustom) {
+              updatedName += " ##CUSTOM:true##";
+            }
+            print('   📌 STORING exercise with markers:');
+            print('      Original name: $exerciseName');
+            print('      Updated name: $updatedName');
+            print('      Exercise ID in DB: $exerciseId');
+            
+            // Update in database (for permanent workouts)
             await _workoutService.updateExercise(
                 exerciseId,
-                "$exerciseName ##API_ID:$apiId##", // Store API ID in the name with a special marker
+                updatedName,
                 equipment);
+            
+            // CRITICAL: For temporary workouts, also update tempWorkoutsNotifier
+            if (widget.isTemporary) {
+              final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+              if (tempWorkouts.containsKey(widget.workoutId)) {
+                final exercises = tempWorkouts[widget.workoutId]['exercises'] as List;
+                final exerciseIndex = exercises.indexWhere((e) => e['id'] == exerciseId);
+                if (exerciseIndex != -1) {
+                  exercises[exerciseIndex]['name'] = updatedName;
+                  // Trigger notifier update
+                  WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+                  print('   ✅ Updated tempWorkoutsNotifier with markers');
+                }
+              }
+            }
+            
+            // Also update the in-memory _workout object
+            // so that when the workout is serialized, it has the correct name with markers
+            if (_workout != null) {
+              final exerciseIndex = _workout!.exercises.indexWhere((e) => e.id == exerciseId);
+              if (exerciseIndex != -1) {
+                // Create a new Exercise object with the updated name
+                final oldExercise = _workout!.exercises[exerciseIndex];
+                _workout!.exercises[exerciseIndex] = Exercise(
+                  id: oldExercise.id,
+                  workoutId: oldExercise.workoutId,
+                  name: updatedName, // Use the updated name with markers
+                  equipment: oldExercise.equipment,
+                  sets: oldExercise.sets,
+                  finished: oldExercise.finished,
+                );
+                print('   ✅ Updated in-memory exercise name with markers');
+              }
+            }
           }
 
           // Check for previous exercise history to create sets based on previous workout
@@ -1201,8 +1268,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               await _workoutService.getRecentExerciseHistory(exerciseName);
 
           // Cache the previous exercise history for UI display
-          final String cleanExerciseName =
-              exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+          final String cleanExerciseName = _cleanExerciseName(exerciseName);
           if (previousSets != null && previousSets.isNotEmpty) {
             _exerciseHistoryCache[cleanExerciseName] = previousSets;
           }
@@ -1234,6 +1300,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           }
         }
 
+        // Reload the workout to show the new exercises
         _loadWorkout();
 
         // Auto-save the workout state after adding exercises
@@ -1257,6 +1324,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       final exerciseName = result['name'] as String;
       final equipment = result['equipment'] as String? ?? '';
       final apiId = result['apiId'] as String? ?? '';
+      final isCustom = result['isCustom'] as bool? ?? false;
 
       setState(() {
         _isLoading = true;
@@ -1270,11 +1338,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           equipment,
         );
 
-        // Store the API ID in the exercise name with a special marker
-        if (apiId.isNotEmpty) {
+        // Store the API ID and custom flag in the exercise name with special markers
+        if (apiId.isNotEmpty || isCustom) {
+          String updatedName = exerciseName;
+          if (apiId.isNotEmpty) {
+            updatedName += " ##API_ID:$apiId##";
+          }
+          if (isCustom) {
+            updatedName += " ##CUSTOM:true##";
+          }
           await _workoutService.updateExercise(
               exerciseId,
-              "$exerciseName ##API_ID:$apiId##", // Store API ID in the name with a special marker
+              updatedName, // Store API ID and custom flag in the name with special markers
               equipment);
         }
 
@@ -1284,8 +1359,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             excludeWorkoutId: widget.workoutId);
 
         // Cache the previous exercise history for UI display
-        final String cleanExerciseName =
-            exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+        final String cleanExerciseName = exerciseName
+            .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+            .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+            .trim();
         if (previousSets != null && previousSets.isNotEmpty) {
           _exerciseHistoryCache[cleanExerciseName] = previousSets;
         }
@@ -1623,15 +1700,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     if (!tempWorkouts.containsKey(widget.workoutId)) return;
 
     final exercises = tempWorkouts[widget.workoutId]['exercises'];
-    final String cleanExerciseName =
-        exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+    final String cleanExerciseName = _cleanExerciseName(exerciseName);
 
     // Find ALL instances of the exercise and collect all their completed sets with volumes
     List<Map<String, dynamic>> completedSets = [];
     for (var exercise in exercises) {
-      if ((exercise['name'] ?? '')
-              .replaceAll(RegExp(r'##API_ID:[^#]+##'), '') ==
-          cleanExerciseName) {
+      if (_cleanExerciseName(exercise['name'] ?? '') == cleanExerciseName) {
         final sets = exercise['sets'] as List;
         for (var set in sets) {
           if (set['completed'] == true) {
@@ -1666,8 +1740,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
       for (final row in result) {
         final String dbExerciseName = row['name'] as String;
-        final String cleanDbExerciseName =
-            dbExerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+        final String cleanDbExerciseName = _cleanExerciseName(dbExerciseName);
 
         if (cleanDbExerciseName == cleanExerciseName) {
           final double rowVolume = row['volume'] as double;
@@ -1997,7 +2070,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       // Extract the API ID
       apiId = match.group(1) ?? '';
       // Remove the API ID marker from display name
-      cleanName = exerciseName.replaceAll('##API_ID:$apiId##', '');
+      cleanName = exerciseName
+          .replaceAll('##API_ID:$apiId##', '')
+          .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '');
     }
 
     final nameController = TextEditingController(text: cleanName);
@@ -2060,9 +2135,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               final newName = nameController.text.trim();
               final newEquipment = equipmentController.text.trim();
 
-              // Add back the API ID marker if it was present
-              final String finalName =
-                  newName + (apiId.isNotEmpty ? "##API_ID:$apiId##" : "");
+              // Check if original exercise had custom marker
+              final RegExp customRegex = RegExp(r'##CUSTOM:([^#]+)##');
+              final bool hadCustomFlag = customRegex.hasMatch(exerciseName);
+
+              // Rebuild the name with any markers that were present
+              String finalName = newName;
+              if (apiId.isNotEmpty) {
+                finalName += "##API_ID:$apiId##";
+              }
+              if (hadCustomFlag) {
+                finalName += "##CUSTOM:true##";
+              }
 
               if (newName.isNotEmpty) {
                 Navigator.pop(context);
@@ -2132,7 +2216,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         title: Text('Delete Exercise?',
             style: TextStyle(color: _textPrimaryColor)),
         content: Text(
-          'Are you sure you want to delete "${exercise.name}" and all its sets? This cannot be undone.',
+          'Are you sure you want to delete "${_cleanExerciseName(exercise.name)}" and all its sets? This cannot be undone.',
           style: TextStyle(color: _textSecondaryColor),
         ),
         actions: [
@@ -3799,45 +3883,80 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               padding: EdgeInsets.all(16),
               child: InkWell(
                 onTap: () {
-                  // Check if the exercise name contains an API ID marker
+                  // Check if the exercise name contains API ID or custom markers
                   final String exerciseName = exercise.name;
+                  print('📖 TAPPED exercise - Raw name from DB: "$exerciseName"');
+                  
                   final RegExp apiIdRegex = RegExp(r'##API_ID:([^#]+)##');
-                  final Match? match = apiIdRegex.firstMatch(exerciseName);
+                  final RegExp customRegex = RegExp(r'##CUSTOM:([^#]+)##');
+                  final Match? apiMatch = apiIdRegex.firstMatch(exerciseName);
+                  final Match? customMatch = customRegex.firstMatch(exerciseName);
 
                   String apiId = '';
+                  bool isCustomExercise = false;
 
-                  if (match != null) {
+                  if (apiMatch != null) {
                     // Extract the API ID
-                    apiId = match.group(1) ?? '';
+                    apiId = apiMatch.group(1) ?? '';
+                    print('   Found API ID marker: $apiId');
+                    // Check if this is a custom exercise (API ID starts with 'custom_')
+                    isCustomExercise = apiId.startsWith('custom_');
                   }
                   
-                  // Get the clean exercise name without API ID markers
-                  final String cleanName =
-                      exerciseName.replaceAll(apiIdRegex, '').trim();
+                  // Also check for explicit custom marker
+                  if (customMatch != null) {
+                    final customFlag = customMatch.group(1) ?? 'false';
+                    print('   Found CUSTOM marker: $customFlag');
+                    isCustomExercise = isCustomExercise || customFlag.toLowerCase() == 'true';
+                  }
+                  
+                  // Get the clean exercise name without any markers
+                  final String cleanName = exerciseName
+                      .replaceAll(apiIdRegex, '')
+                      .replaceAll(customRegex, '')
+                      .trim();
 
+                  // Debug print
+                  print('Exercise ID: ${exercise.id}, Is Temporary: ${exercise.id < 0}, Is Custom: $isCustomExercise, API ID: $apiId');
+                  
                   // Check if this is a temporary exercise (negative ID)
                   final bool isTemporary = exercise.id < 0;
 
                   print(
-                      'Exercise ID: ${exercise.id}, Is Temporary: $isTemporary');
+                      'Exercise ID: ${exercise.id}, Is Temporary: $isTemporary, Is Custom: $isCustomExercise, API ID: $apiId');
 
-                  // Navigate to the detail page with the API ID if available, otherwise use the local ID
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ExerciseDetailPage(
-                        exerciseId:
-                            apiId.isNotEmpty ? apiId : exercise.id.toString(),
+                  // Navigate to different pages based on exercise type
+                  if (isCustomExercise) {
+                    // Navigate to custom exercise detail page
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CustomExerciseDetailPage(
+                          exerciseId: apiId.isNotEmpty ? apiId : exercise.id.toString(),
+                          exerciseName: cleanName,
+                          exerciseEquipment: exercise.equipment,
+                        ),
                       ),
-                      settings: RouteSettings(
-                        arguments: {
-                          'exerciseName': cleanName,
-                          'exerciseEquipment': exercise.equipment,
-                          'isTemporary': isTemporary,
-                        },
+                    );
+                  } else {
+                    // Navigate to the regular exercise detail page
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => ExerciseDetailPage(
+                          exerciseId:
+                              apiId.isNotEmpty ? apiId : exercise.id.toString(),
+                        ),
+                        settings: RouteSettings(
+                          arguments: {
+                            'exerciseName': cleanName,
+                            'exerciseEquipment': exercise.equipment,
+                            'isTemporary': isTemporary,
+                          },
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                  }
                 },
                 child: Row(
                   children: [
@@ -3860,9 +3979,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                           SizedBox(width: 12),
                           Expanded(
                             child: Text(
-                              // Clean the name to remove API ID marker if present
-                              exercise.name
-                                  .replaceAll(RegExp(r'##API_ID:[^#]+##'), ''),
+                              // Clean the name to remove API ID and CUSTOM markers if present
+                              _cleanExerciseName(exercise.name),
                               style: TextStyle(
                                 color: _textPrimaryColor,
                                 fontSize: 18,
@@ -4064,9 +4182,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   
   // Helper method to get previous exercise values for display as greyed out placeholders
   ExerciseSet? _getPreviousSetValues(String exerciseName, int setNumber) {
-    // Clean exercise name to remove API ID markers
-    final String cleanExerciseName =
-        exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+    // Clean exercise name to remove API ID and CUSTOM markers
+    final String cleanExerciseName = _cleanExerciseName(exerciseName);
 
     // Check cache
     if (_exerciseHistoryCache.containsKey(cleanExerciseName)) {

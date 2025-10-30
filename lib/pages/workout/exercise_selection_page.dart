@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/data/exercises_data.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
+import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/create_exercise_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 
@@ -192,9 +193,11 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
       ),
     );
 
-    // If an exercise was created, return it to the parent page
-    if (result != null) {
-      Navigator.pop(context, result);
+    // If an exercise was created, wrap it in a list and return it to the parent page
+    if (result != null && result is Map<String, dynamic>) {
+      print('✅ Exercise created, returning to workout session: ${result['name']}');
+      // Wrap the single exercise in a list so the workout session page can process it
+      Navigator.pop(context, [result]);
     }
   }
 
@@ -530,23 +533,43 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                               ),
                               tooltip: 'View exercise details',
                               onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => ExerciseDetailPage(
-                                      exerciseId:
-                                          exercise['id'].toString().trim(),
-                                    ),
-                                    settings: RouteSettings(
-                                      arguments: {
-                                        'exerciseName': exercise['name'],
-                                        'exerciseEquipment':
+                                // Check if it's a custom exercise
+                                final apiId =
+                                    exercise['apiId'] ?? exercise['id'];
+                                if (apiId.toString().startsWith('custom_')) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          CustomExerciseDetailPage(
+                                        exerciseId:
+                                            exercise['id'].toString().trim(),
+                                        exerciseName: exercise['name'],
+                                        exerciseEquipment:
                                             exercise['equipment'] ?? '',
-                                        'isTemporary': false, // These are API exercises, not temporary
-                                      },
+                                      ),
                                     ),
-                                  ),
-                                );
+                                  );
+                                } else {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ExerciseDetailPage(
+                                        exerciseId:
+                                            exercise['id'].toString().trim(),
+                                      ),
+                                      settings: RouteSettings(
+                                        arguments: {
+                                          'exerciseName': exercise['name'],
+                                          'exerciseEquipment':
+                                              exercise['equipment'] ?? '',
+                                          'isTemporary':
+                                              false, // These are API exercises, not temporary
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                }
                               },
                             ),
                           ),

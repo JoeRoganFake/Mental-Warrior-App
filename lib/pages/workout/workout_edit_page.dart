@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
+import 'package:mental_warior/pages/workout/create_exercise_page.dart';
+
 
 class WorkoutEditPage extends StatefulWidget {
   final int workoutId;
@@ -489,6 +491,74 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     }
   }
 
+  Future<void> _editCustomExercise(Exercise exercise) async {
+    // Extract custom exercise ID from the API ID marker
+    final RegExp apiIdRegex = RegExp(r'##API_ID:custom_(\d+)##');
+    final Match? match = apiIdRegex.firstMatch(exercise.name);
+
+    if (match == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to edit this exercise'),
+          backgroundColor: _dangerColor,
+        ),
+      );
+      return;
+    }
+
+    final customExerciseId = int.parse(match.group(1)!);
+
+    try {
+      // Get the custom exercise data from the database
+      final customExerciseService = CustomExerciseService();
+      final customExercises = await customExerciseService.getCustomExercises();
+      final customExerciseData = customExercises.firstWhere(
+        (ex) => ex['id'] == customExerciseId,
+        orElse: () => <String, dynamic>{},
+      );
+
+      if (customExerciseData.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Custom exercise not found'),
+            backgroundColor: _dangerColor,
+          ),
+        );
+        return;
+      }
+
+      // Navigate to the edit page
+      final result = await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CreateExercisePage(
+            editMode: true,
+            exerciseData: customExerciseData,
+          ),
+        ),
+      );
+
+      // If exercise was updated, reload the workout
+      if (result == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exercise updated successfully'),
+            backgroundColor: _successColor,
+          ),
+        );
+        // Reload the workout to get updated exercise data
+        _loadWorkout();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error editing exercise: $e'),
+          backgroundColor: _dangerColor,
+        ),
+      );
+    }
+  }
+
   Future<void> _addSetToExercise(int exerciseId) async {
     final exerciseIndex = _workout!.exercises.indexWhere((e) => e.id == exerciseId);
     if (exerciseIndex == -1) return;
@@ -908,7 +978,16 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                                 itemCount: _workout!.exercises.length,
                                 itemBuilder: (context, index) {
                                   final exercise = _workout!.exercises[index];
-                                  return _buildExerciseCard(exercise);
+                                  // Use custom exercise card for custom exercises, regular card for others
+                                  final isCustomExercise = exercise.name
+                                          .contains('##API_ID:custom_') ||
+                                      exercise.id < 0;
+
+                                  if (isCustomExercise) {
+
+                                    return _buildExerciseCard(exercise);
+                                  }
+                                  return null;
                                 },
                               ),
                       ),
@@ -926,13 +1005,18 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
   }
 
   Widget _buildExerciseCard(Exercise exercise) {
+    // Determine if this is a custom exercise
+    final bool isCustomExercise = exercise.name.contains('##API_ID:custom_');
+    
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: _textSecondaryColor.withOpacity(0.1),
+          color: isCustomExercise
+              ? Colors.orange.withOpacity(0.3)
+              : _textSecondaryColor.withOpacity(0.1),
           width: 1,
         ),
       ),
@@ -945,12 +1029,14 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: _primaryColor.withOpacity(0.2),
+                  color: isCustomExercise
+                      ? Colors.orange.withOpacity(0.2)
+                      : _primaryColor.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  Icons.fitness_center,
-                  color: _primaryColor,
+                  isCustomExercise ? Icons.star : Icons.fitness_center,
+                  color: isCustomExercise ? Colors.orange : _primaryColor,
                   size: 20,
                 ),
               ),
@@ -959,13 +1045,58 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      exercise.name,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: _textPrimaryColor,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            // Clean the exercise name by removing API ID markers
+                            exercise.name
+                                .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+                                .trim(),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: _textPrimaryColor,
+                            ),
+                          ),
+                        ),
+                        // Custom exercise badge
+                        if (isCustomExercise)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.orange.withOpacity(0.5),
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.star,
+                                  color: Colors.orange,
+                                  size: 12,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'CUSTOM',
+                                  style: TextStyle(
+                                    color: Colors.orange,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
                     if (exercise.equipment.isNotEmpty)
                       Text(
@@ -997,6 +1128,21 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                 color: _cardColor,
                 icon: Icon(Icons.more_vert, color: _textSecondaryColor),
                 itemBuilder: (context) => [
+                  // Edit option for custom exercises
+                  if (isCustomExercise)
+                    PopupMenuItem(
+                      value: 'edit_exercise',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, color: _primaryColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Edit Exercise',
+                            style: TextStyle(color: _primaryColor),
+                          ),
+                        ],
+                      ),
+                    ),
                   PopupMenuItem(
                     value: 'delete_exercise',
                     child: Row(
@@ -1014,6 +1160,8 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                 onSelected: (value) {
                   if (value == 'delete_exercise') {
                     _deleteExercise(exercise.id);
+                  } else if (value == 'edit_exercise' && isCustomExercise) {
+                    _editCustomExercise(exercise);
                   }
                 },
               ),

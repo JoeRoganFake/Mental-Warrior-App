@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:mental_warior/services/database_services.dart';
+import '../../services/database_services.dart';
 
 class CreateExercisePage extends StatefulWidget {
   final bool editMode;
   final Map<String, dynamic>? exerciseData;
+  final int? workoutId; // Optional workoutId to add exercise to
   
   const CreateExercisePage({
     super.key,
     this.editMode = false,
     this.exerciseData,
+    this.workoutId,
   });
 
   @override
@@ -18,7 +20,6 @@ class CreateExercisePage extends StatefulWidget {
 class CreateExercisePageState extends State<CreateExercisePage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
   
   String _selectedEquipment = 'None';
   String _selectedPrimaryMuscle = 'Chest';
@@ -76,7 +77,6 @@ class CreateExercisePageState extends State<CreateExercisePage> {
     // If in edit mode, populate form with existing data
     if (widget.editMode && widget.exerciseData != null) {
       _nameController.text = widget.exerciseData!['name'] ?? '';
-      _descriptionController.text = widget.exerciseData!['description'] ?? '';
       _selectedEquipment = widget.exerciseData!['equipment'] ?? 'None';
       _selectedPrimaryMuscle = widget.exerciseData!['type'] ?? 'Chest';
       
@@ -92,7 +92,6 @@ class CreateExercisePageState extends State<CreateExercisePage> {
   @override
   void dispose() {
     _nameController.dispose();
-    _descriptionController.dispose();
     super.dispose();
   }
 
@@ -107,87 +106,125 @@ class CreateExercisePageState extends State<CreateExercisePage> {
   }
 
   void _createExercise() async {
-    if (_formKey.currentState!.validate()) {
-      final exerciseName = _nameController.text.trim();
-      final description = _descriptionController.text.trim();
-      
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    try {
       final customExerciseService = CustomExerciseService();
       
-      // Check if exercise already exists (only for create mode or if name/equipment changed)
-      if (!widget.editMode || 
-          (widget.exerciseData!['name'] != exerciseName || widget.exerciseData!['equipment'] != _selectedEquipment)) {
-        final exists = await customExerciseService.exerciseExists(exerciseName, _selectedEquipment);
+      if (widget.editMode && widget.exerciseData != null) {
+        // Update existing custom exercise
+        await customExerciseService.updateCustomExercise(
+          id: widget.exerciseData!['id'],
+          name: _nameController.text.trim(),
+          equipment: _selectedEquipment,
+          type: _selectedPrimaryMuscle,
+          secondaryMuscles: _selectedSecondaryMuscles,
+        );
         
-        if (exists) {
-          // Show error dialog if exercise already exists
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Exercise Already Exists'),
-              content: Text('An exercise with the name "$exerciseName" and equipment "$_selectedEquipment" already exists.'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('OK'),
-                ),
-              ],
+        if (mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
+          Navigator.of(context).pop(true); // Return to previous screen with success
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Exercise updated successfully!'),
+              backgroundColor: _primaryColor,
+              behavior: SnackBarBehavior.floating,
             ),
           );
+        }
+      } else {
+        // Check if exercise already exists
+        final exerciseExists = await customExerciseService.exerciseExists(
+          _nameController.text.trim(),
+          _selectedEquipment,
+        );
+        
+        if (exerciseExists) {
+          if (mounted) {
+            Navigator.of(context).pop(); // Close loading dialog
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('An exercise with this name and equipment already exists'),
+                backgroundColor: _dangerColor,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
           return;
         }
-      }
-      
-      try {
-        if (widget.editMode) {
-          // Update existing exercise
-          await customExerciseService.updateCustomExercise(
-            id: widget.exerciseData!['id'],
-            name: exerciseName,
-            equipment: _selectedEquipment,
-            type: _selectedPrimaryMuscle,
-            description: description.isEmpty ? 'Custom exercise' : description,
-            secondaryMuscles: _selectedSecondaryMuscles,
-          );
+        
+        // Create new custom exercise
+        final exerciseId = await customExerciseService.addCustomExercise(
+          name: _nameController.text.trim(),
+          equipment: _selectedEquipment,
+          type: _selectedPrimaryMuscle,
+          secondaryMuscles: _selectedSecondaryMuscles,
+        );
+        
+        if (mounted) {
+          Navigator.of(context).pop(); // Close loading dialog
           
-          // Return success for edit mode
-          Navigator.pop(context, true);
-        } else {
-          // Create new exercise
-          final exerciseId = await customExerciseService.addCustomExercise(
-            name: exerciseName,
-            equipment: _selectedEquipment,
-            type: _selectedPrimaryMuscle,
-            description: description.isEmpty ? 'Custom exercise' : description,
-            secondaryMuscles: _selectedSecondaryMuscles,
-          );
-          
-          // Create the exercise data in the same format expected by the parent
+          // Return the created exercise data for the parent to handle
           final exerciseData = {
-            'name': exerciseName,
+            'id': exerciseId,
+            'name': _nameController.text.trim(),
             'equipment': _selectedEquipment,
             'type': _selectedPrimaryMuscle,
-            'description': description.isEmpty ? 'Custom exercise' : description,
-            'apiId': 'custom_$exerciseId', // Custom exercises have custom_ prefix
+            'description': '',
             'secondaryMuscles': _selectedSecondaryMuscles,
+            'apiId': 'custom_$exerciseId',
             'isCustom': true,
           };
           
-          // Return the exercise data as a list (to match the multi-select format)
-          Navigator.pop(context, [exerciseData]);
+          print('📝 CreateExercisePage returning custom exercise data:');
+          print('   ID: $exerciseId');
+          print('   Name: ${_nameController.text.trim()}');
+          print('   API ID: custom_$exerciseId');
+          print('   isCustom: true');
+          
+          // Show success message BEFORE popping to avoid "off screen" error
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Exercise created successfully!'),
+              backgroundColor: _primaryColor,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 1), // Short duration since we're navigating away
+            ),
+          );
+          
+          // Small delay to let snackbar show before popping
+          await Future.delayed(const Duration(milliseconds: 100));
+          
+          if (mounted) {
+            Navigator.of(context).pop(exerciseData); // Return exercise data
+          }
         }
-      } catch (e) {
-        // Show error dialog if saving fails
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Error'),
-            content: Text('Failed to ${widget.editMode ? 'update' : 'save'} exercise: $e'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop(); // Close loading dialog
+        
+        String errorMessage = 'An error occurred while saving the exercise';
+        if (e.toString().contains('UNIQUE constraint failed')) {
+          errorMessage = 'An exercise with this name already exists';
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: _dangerColor,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -281,17 +318,6 @@ class CreateExercisePageState extends State<CreateExercisePage> {
               _buildSectionTitle('Secondary Muscle Groups (Optional)'),
               const SizedBox(height: 8),
               _buildSecondaryMuscleSelector(),
-              const SizedBox(height: 24),
-
-              // Description
-              _buildSectionTitle('Description (Optional)'),
-              const SizedBox(height: 8),
-              _buildTextFormField(
-                controller: _descriptionController,
-                hintText: 'Enter exercise description or instructions',
-                maxLines: 4,
-                validator: null,
-              ),
               const SizedBox(height: 32),
 
               // Create Button
