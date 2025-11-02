@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/pages/workout/edit_exercise_page.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 // Helper class to represent exercise history entries
 class ExerciseHistoryEntry {
@@ -44,7 +45,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _loadExerciseData();
   }
 
@@ -334,6 +335,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                 tabs: const [
                   Tab(text: 'ABOUT'),
                   Tab(text: 'HISTORY'),
+                  Tab(text: 'CHARTS'),
                 ],
               )
             : null,
@@ -390,6 +392,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   children: [
                     _buildAboutTab(),
                     _buildHistoryTab(),
+                    _buildChartsTab(),
                   ],
                 ),
     );
@@ -1271,6 +1274,427 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildChartsTab() {
+    if (_isLoadingHistory) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              color: Color(0xFF3F8EFC),
+            ),
+            SizedBox(height: 20),
+            Text(
+              'Loading exercise data...',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFFBDBDBD),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_exerciseHistory.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF3F8EFC).withValues(alpha: 0.1),
+                      const Color(0xFF3F8EFC).withValues(alpha: 0.05),
+                    ],
+                  ),
+                ),
+                child: Icon(
+                  Icons.bar_chart,
+                  size: 64,
+                  color: Colors.grey[500],
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'No Data Available',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Complete and save workouts with this exercise to see your progress charts.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.grey[400],
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Prepare chart data
+    Map<String, List<FlSpot>> chartData = _prepareChartData();
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildChartCard(
+            title: 'Best Set (Est. 1RM)',
+            data: chartData['oneRM']!,
+            color: const Color(0xFF3F8EFC),
+            unit: 'kg',
+          ),
+          const SizedBox(height: 20),
+          _buildChartCard(
+            title: 'Best Set (Max Weight)',
+            data: chartData['maxWeight']!,
+            color: const Color(0xFFFF6B6B),
+            unit: 'kg',
+          ),
+          const SizedBox(height: 20),
+          _buildChartCard(
+            title: 'Total Volume',
+            data: chartData['totalVolume']!,
+            color: const Color(0xFF4ECDC4),
+            unit: 'kg',
+          ),
+          const SizedBox(height: 20),
+          _buildChartCard(
+            title: 'Best Set (Reps)',
+            data: chartData['maxReps']!,
+            color: const Color(0xFFFFE66D),
+            unit: 'reps',
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Map<String, List<FlSpot>> _prepareChartData() {
+    List<FlSpot> oneRMData = [];
+    List<FlSpot> maxWeightData = [];
+    List<FlSpot> totalVolumeData = [];
+    List<FlSpot> maxRepsData = [];
+
+    for (int i = 0; i < _exerciseHistory.length; i++) {
+      final historyEntry = _exerciseHistory[i];
+
+      // Calculate metrics for this workout
+      double bestOneRM = 0;
+      double bestWeight = 0;
+      int bestReps = 0;
+      double totalVolume = 0;
+
+      for (var set in historyEntry.sets) {
+        // Calculate 1RM
+        double oneRM = _calculateOneRM(set.weight, set.reps).toDouble();
+        if (oneRM > bestOneRM) bestOneRM = oneRM;
+
+        // Max weight
+        if (set.weight > bestWeight) bestWeight = set.weight;
+
+        // Max reps
+        if (set.reps > bestReps) bestReps = set.reps;
+
+        // Total volume
+        totalVolume += set.weight * set.reps;
+      }
+
+      // Add data points (x = index, y = value)
+      // We reverse the index so most recent is on the right
+      double x = (_exerciseHistory.length - 1 - i).toDouble();
+      oneRMData.add(FlSpot(x, bestOneRM));
+      maxWeightData.add(FlSpot(x, bestWeight));
+      totalVolumeData.add(FlSpot(x, totalVolume));
+      maxRepsData.add(FlSpot(x, bestReps.toDouble()));
+    }
+
+    return {
+      'oneRM': oneRMData,
+      'maxWeight': maxWeightData,
+      'totalVolume': totalVolumeData,
+      'maxReps': maxRepsData,
+    };
+  }
+
+  Widget _buildChartCard({
+    required String title,
+    required List<FlSpot> data,
+    required Color color,
+    required String unit,
+  }) {
+    // Find min and max values for better chart scaling
+    double minY = data.isEmpty
+        ? 0
+        : data.map((spot) => spot.y).reduce((a, b) => a < b ? a : b);
+    double maxY = data.isEmpty
+        ? 100
+        : data.map((spot) => spot.y).reduce((a, b) => a > b ? a : b);
+
+    // Add some padding to the y-axis
+    double yPadding = (maxY - minY) * 0.1;
+    if (yPadding == 0) yPadding = 10;
+    minY = (minY - yPadding).clamp(0, double.infinity);
+    maxY = maxY + yPadding;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF26272B),
+            Color(0xFF1E1F22),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.grey[800]!,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 4,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              if (data.isNotEmpty)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: color.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    '${data.last.y.toStringAsFixed(unit == 'reps' ? 0 : 1)} $unit',
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 200,
+            child: data.isEmpty
+                ? Center(
+                    child: Text(
+                      'No data available',
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                      ),
+                    ),
+                  )
+                : LineChart(
+                    LineChartData(
+                      minY: minY,
+                      maxY: maxY,
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: data,
+                          isCurved: true,
+                          color: color,
+                          barWidth: 3,
+                          isStrokeCapRound: true,
+                          dotData: FlDotData(
+                            show: true,
+                            getDotPainter: (spot, percent, barData, index) {
+                              return FlDotCirclePainter(
+                                radius: 4,
+                                color: color,
+                                strokeWidth: 2,
+                                strokeColor: const Color(0xFF26272B),
+                              );
+                            },
+                          ),
+                          belowBarData: BarAreaData(
+                            show: true,
+                            color: color.withValues(alpha: 0.1),
+                          ),
+                        ),
+                      ],
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 50,
+                            interval: (maxY - minY) / 4,
+                            getTitlesWidget: (value, meta) {
+                              // Format large numbers with K suffix
+                              String label;
+                              if (value >= 1000) {
+                                label = '${(value / 1000).toStringAsFixed(1)}K';
+                              } else {
+                                label = value.toStringAsFixed(0);
+                              }
+
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8.0),
+                                child: Text(
+                                  label,
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 30,
+                            interval: 1,
+                            getTitlesWidget: (value, meta) {
+                              int index =
+                                  (_exerciseHistory.length - 1 - value.toInt());
+                              if (index < 0 ||
+                                  index >= _exerciseHistory.length) {
+                                return const Text('');
+                              }
+
+                              // Show fewer labels if there are many data points
+                              if (_exerciseHistory.length > 10) {
+                                // Only show every nth label
+                                int step = (_exerciseHistory.length / 5).ceil();
+                                if (value.toInt() % step != 0 &&
+                                    value.toInt() != 0 &&
+                                    value.toInt() !=
+                                        _exerciseHistory.length - 1) {
+                                  return const Text('');
+                                }
+                              }
+
+                              final date =
+                                  DateTime.parse(_exerciseHistory[index].date);
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(
+                                  '${date.month}/${date.day}',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: (maxY - minY) / 5,
+                        getDrawingHorizontalLine: (value) {
+                          return FlLine(
+                            color: Colors.grey[800]!.withValues(alpha: 0.3),
+                            strokeWidth: 1,
+                          );
+                        },
+                      ),
+                      borderData: FlBorderData(
+                        show: true,
+                        border: Border(
+                          left: BorderSide(
+                            color: Colors.grey[800]!.withValues(alpha: 0.5),
+                            width: 1,
+                          ),
+                          bottom: BorderSide(
+                            color: Colors.grey[800]!.withValues(alpha: 0.5),
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      lineTouchData: LineTouchData(
+                        touchTooltipData: LineTouchTooltipData(
+                          getTooltipColor: (touchedSpot) =>
+                              color.withValues(alpha: 0.9),
+                          getTooltipItems: (touchedSpots) {
+                            return touchedSpots.map((spot) {
+                              return LineTooltipItem(
+                                '${spot.y.toStringAsFixed(unit == 'reps' ? 0 : 1)} $unit',
+                                const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              );
+                            }).toList();
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 

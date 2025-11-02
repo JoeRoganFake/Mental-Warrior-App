@@ -277,17 +277,30 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
           realExerciseId = tempIdToRealId[tempSet.exerciseId]!;
         }
 
+        // Get updated values from controllers before saving
+        final weightController = _weightControllers[tempSet.id];
+        final repsController = _repsControllers[tempSet.id];
+        
+        double weight = tempSet.weight;
+        int reps = tempSet.reps;
+        
+        if (weightController != null && repsController != null) {
+          weight = double.tryParse(weightController.text) ?? tempSet.weight;
+          reps = int.tryParse(repsController.text) ?? tempSet.reps;
+        }
+
         final realSetId = await _workoutService.addSet(
           realExerciseId,
           tempSet.setNumber,
-          tempSet.weight,
-          tempSet.reps,
+          weight,
+          reps,
           tempSet.restTime,
         );
         tempSetIdToRealId[tempSet.id] = realSetId;
 
         // Mark set as completed if it has valid weight and reps data
-        if (tempSet.weight > 0 && tempSet.reps > 0) {
+        // Use the updated weight and reps values from controllers
+        if (weight > 0 && reps > 0) {
           await _workoutService.updateSetStatusWithoutPRRecalculation(
               realSetId, true);
         }
@@ -300,8 +313,8 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
               id: realSetId,
               exerciseId: realExerciseId,
               setNumber: tempSet.setNumber,
-              weight: tempSet.weight,
-              reps: tempSet.reps,
+              weight: weight, // Use updated weight
+              reps: reps, // Use updated reps
               restTime: tempSet.restTime,
               completed: tempSet.completed,
               isPR: tempSet.isPR,
@@ -454,10 +467,23 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     if (result != null && result is List<Map<String, dynamic>>) {
       // Add multiple exercises to pending list (not database)
       for (final exerciseData in result) {
+        // Build exercise name with API ID marker (for custom exercises)
+        String exerciseName = exerciseData['name'];
+        final apiId = exerciseData['apiId'] ?? '';
+        final isCustom = exerciseData['isCustom'] ?? false;
+        
+        // Add API ID marker to exercise name if present
+        if (apiId.isNotEmpty) {
+          exerciseName += " ##API_ID:$apiId##";
+        }
+        if (isCustom) {
+          exerciseName += " ##CUSTOM:true##";
+        }
+        
         final tempExercise = Exercise(
           id: _nextTempId--, // Use negative temp ID
           workoutId: widget.workoutId,
-          name: exerciseData['name'],
+          name: exerciseName,
           equipment: exerciseData['equipment'] ?? '',
           finished: false,
           sets: [],
@@ -473,10 +499,23 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
       _markAsChanged();
     } else if (result != null && result is Map<String, dynamic>) {
       // Add single exercise to pending list (not database)
+      // Build exercise name with API ID marker (for custom exercises)
+      String exerciseName = result['name'];
+      final apiId = result['apiId'] ?? '';
+      final isCustom = result['isCustom'] ?? false;
+      
+      // Add API ID marker to exercise name if present
+      if (apiId.isNotEmpty) {
+        exerciseName += " ##API_ID:$apiId##";
+      }
+      if (isCustom) {
+        exerciseName += " ##CUSTOM:true##";
+      }
+      
       final tempExercise = Exercise(
         id: _nextTempId--, // Use negative temp ID
         workoutId: widget.workoutId,
-        name: result['name'],
+        name: exerciseName,
         equipment: result['equipment'] ?? '',
         finished: false,
         sets: [],
