@@ -98,7 +98,8 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   void _loadCustomExercises() async {
     try {
       final customExerciseService = CustomExerciseService();
-      final customExercises = await customExerciseService.getCustomExercises();
+      // Only load non-hidden exercises for selection
+      final customExercises = await customExerciseService.getCustomExercises(includeHidden: false);
 
       setState(() {
         _customExercises = customExercises;

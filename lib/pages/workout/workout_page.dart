@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/pages/workout/workout_session_page.dart';
 import 'package:mental_warior/pages/workout/workout_details_page.dart';
+import 'package:mental_warior/pages/workout/exercise_browse_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/widgets/workout_week_chart.dart';
 import 'package:mental_warior/utils/functions.dart';
@@ -268,6 +269,15 @@ class WorkoutPageState extends State<WorkoutPage> {
     }
   }
   
+  void _navigateToExerciseBrowse() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ExerciseBrowsePage(),
+      ),
+    );
+  }
+  
   String _calculateTotalVolume(Workout workout) {
     double totalVolume = 0;
     int totalPrs = 0;
@@ -286,18 +296,48 @@ class WorkoutPageState extends State<WorkoutPage> {
     return '${totalVolume.toStringAsFixed(0)} kg ${totalPrs > 0 ? '• $totalPrs PRs' : ''}';
   }
 
+  // Compact custom header to replace the default AppBar
+  Widget _buildCompactHeader() {
+    return Container(
+      padding: const EdgeInsets.only(top: 30, left: 16, right: 8, bottom: 4),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Workouts',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.fitness_center),
+            tooltip: 'Browse Exercises',
+            onPressed: _navigateToExerciseBrowse,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Workouts'),
-      ),
+      appBar: null,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadWorkouts,
               child: ListView(
                 children: [
+                // Compact header wrapped in SafeArea to sit below status bar
+                SafeArea(
+                  top: true,
+                  bottom: false,
+                  child: _buildCompactHeader(),
+                ),
                   // Weekly Workout Chart - always show this
                   WorkoutWeekChart(
                     workouts: _workouts,
@@ -623,6 +663,7 @@ class WorkoutPageState extends State<WorkoutPage> {
                     ],
                   ),
                 ]),
-              ));
+            ),
+    );
   }
 }

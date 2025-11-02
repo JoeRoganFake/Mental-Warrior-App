@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/workout/workout_edit_page.dart';
+import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
+import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
 
 class WorkoutDetailsPage extends StatefulWidget {
   final int workoutId;
@@ -37,6 +39,76 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
         .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
         .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
         .trim();
+  }
+
+  // Helper method to extract exercise ID from name
+  String? _extractExerciseId(String name) {
+    // Check for API ID marker
+    final apiIdMatch = RegExp(r'##API_ID:([^#]+)##').firstMatch(name);
+    if (apiIdMatch != null) {
+      return apiIdMatch.group(1);
+    }
+
+    // Check for CUSTOM ID marker
+    final customIdMatch = RegExp(r'##CUSTOM:([^#]+)##').firstMatch(name);
+    if (customIdMatch != null) {
+      return customIdMatch.group(1);
+    }
+
+    return null;
+  }
+
+  // Helper method to check if exercise is custom
+  bool _isCustomExercise(String name) {
+    return name.contains('##CUSTOM:');
+  }
+
+  // Navigate to exercise detail page
+  void _navigateToExerciseDetail(Exercise exercise) {
+    final exerciseId = _extractExerciseId(exercise.name);
+    final cleanName = _cleanExerciseName(exercise.name);
+
+    if (exerciseId == null) {
+      // No marker found, show a message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Cannot view details for this exercise'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (_isCustomExercise(exercise.name)) {
+      // Navigate to custom exercise detail page
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => CustomExerciseDetailPage(
+            exerciseId: exerciseId,
+            exerciseName: cleanName,
+            exerciseEquipment: exercise.equipment,
+          ),
+        ),
+      );
+    } else {
+      // Navigate to API exercise detail page
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ExerciseDetailPage(
+            exerciseId: exerciseId,
+          ),
+          settings: RouteSettings(
+            arguments: {
+              'exerciseName': cleanName,
+              'exerciseEquipment': exercise.equipment,
+              'isTemporary': false,
+            },
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -534,40 +606,43 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
       }
     }
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: _textSecondaryColor.withOpacity(0.1),
-          width: 1,
+    return InkWell(
+      onTap: () => _navigateToExerciseDetail(exercise),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: _cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: _textSecondaryColor.withOpacity(0.1),
+            width: 1,
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: _primaryColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _primaryColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.fitness_center,
+                    color: _primaryColor,
+                    size: 20,
+                  ),
                 ),
-                child: Icon(
-                  Icons.fitness_center,
-                  color: _primaryColor,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _cleanExerciseName(exercise.name),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _cleanExerciseName(exercise.name),
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -659,6 +734,7 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
               ),
             ),
         ],
+      ),
       ),
     );
   }

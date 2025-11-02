@@ -509,9 +509,9 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     final customExerciseId = int.parse(match.group(1)!);
 
     try {
-      // Get the custom exercise data from the database
+      // Get the custom exercise data from the database (include hidden ones since we're editing)
       final customExerciseService = CustomExerciseService();
-      final customExercises = await customExerciseService.getCustomExercises();
+      final customExercises = await customExerciseService.getCustomExercises(includeHidden: true);
       final customExerciseData = customExercises.firstWhere(
         (ex) => ex['id'] == customExerciseId,
         orElse: () => <String, dynamic>{},

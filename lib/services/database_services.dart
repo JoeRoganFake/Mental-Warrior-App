@@ -2149,20 +2149,34 @@ class CustomExerciseService {
   final String _exerciseDescriptionColumnName = "description";
   final String _exerciseSecondaryMusclesColumnName = "secondary_muscles";
   final String _exerciseCreatedAtColumnName = "created_at";
+  final String _exerciseHiddenColumnName = "hidden";
 
   // Create custom exercises table
   Future<void> createCustomExerciseTable(Database db) async {
     await db.execute('''
-      CREATE TABLE $_customExerciseTableName (
+      CREATE TABLE IF NOT EXISTS $_customExerciseTableName (
         $_exerciseIdColumnName INTEGER PRIMARY KEY AUTOINCREMENT,
         $_exerciseNameColumnName TEXT NOT NULL UNIQUE,
         $_exerciseEquipmentColumnName TEXT NOT NULL,
         $_exerciseTypeColumnName TEXT NOT NULL,
         $_exerciseDescriptionColumnName TEXT,
         $_exerciseSecondaryMusclesColumnName TEXT,
-        $_exerciseCreatedAtColumnName TEXT NOT NULL
+        $_exerciseCreatedAtColumnName TEXT NOT NULL,
+        $_exerciseHiddenColumnName INTEGER DEFAULT 0
       )
     ''');
+    
+    // Migration: Add hidden column to existing tables
+    try {
+      await db.execute('''
+        ALTER TABLE $_customExerciseTableName 
+        ADD COLUMN $_exerciseHiddenColumnName INTEGER DEFAULT 0
+      ''');
+      print('✅ Added hidden column to custom exercises table');
+    } catch (e) {
+      // Column might already exist, ignore error
+      print('ℹ️ Hidden column may already exist: $e');
+    }
   }
 
   // Add a new custom exercise
@@ -2182,6 +2196,7 @@ class CustomExerciseService {
       _exerciseDescriptionColumnName: description ?? '',
       _exerciseSecondaryMusclesColumnName: secondaryMuscles?.join(',') ?? '',
       _exerciseCreatedAtColumnName: DateTime.now().toIso8601String(),
+      _exerciseHiddenColumnName: 0, // New exercises are not hidden by default
     };
 
     final id = await db.insert(_customExerciseTableName, exerciseData);
@@ -2191,10 +2206,17 @@ class CustomExerciseService {
   }
 
   // Get all custom exercises
-  Future<List<Map<String, dynamic>>> getCustomExercises() async {
+  Future<List<Map<String, dynamic>>> getCustomExercises({bool includeHidden = true}) async {
     final db = await DatabaseService.instance.database;
+    
+    String? whereClause;
+    if (!includeHidden) {
+      whereClause = '$_exerciseHiddenColumnName = 0';
+    }
+    
     final data = await db.query(
       _customExerciseTableName,
+      where: whereClause,
       orderBy: '$_exerciseNameColumnName ASC',
     );
 
@@ -2216,6 +2238,40 @@ class CustomExerciseService {
             'custom_${exerciseMap[_exerciseIdColumnName]}', // Mark as custom with unique ID
         'isCustom': true, // Flag to identify custom exercises
         'createdAt': exerciseMap[_exerciseCreatedAtColumnName],
+        'hidden': (exerciseMap[_exerciseHiddenColumnName] as int? ?? 0) == 1,
+      };
+    }).toList();
+  }
+
+  // Get only hidden custom exercises
+  Future<List<Map<String, dynamic>>> getHiddenCustomExercises() async {
+    final db = await DatabaseService.instance.database;
+    
+    final data = await db.query(
+      _customExerciseTableName,
+      where: '$_exerciseHiddenColumnName = 1',
+      orderBy: '$_exerciseNameColumnName ASC',
+    );
+
+    return data.map((exerciseMap) {
+      final secondaryMusclesString =
+          exerciseMap[_exerciseSecondaryMusclesColumnName] as String? ?? '';
+      final secondaryMuscles = secondaryMusclesString.isEmpty
+          ? <String>[]
+          : secondaryMusclesString.split(',');
+
+      return {
+        'id': exerciseMap[_exerciseIdColumnName],
+        'name': exerciseMap[_exerciseNameColumnName],
+        'equipment': exerciseMap[_exerciseEquipmentColumnName],
+        'type': exerciseMap[_exerciseTypeColumnName],
+        'description': exerciseMap[_exerciseDescriptionColumnName],
+        'secondaryMuscles': secondaryMuscles,
+        'apiId':
+            'custom_${exerciseMap[_exerciseIdColumnName]}',
+        'isCustom': true,
+        'createdAt': exerciseMap[_exerciseCreatedAtColumnName],
+        'hidden': true,
       };
     }).toList();
   }
@@ -2259,6 +2315,34 @@ class CustomExerciseService {
     );
     customExercisesUpdatedNotifier.value =
         !customExercisesUpdatedNotifier.value;
+  }
+
+  // Hide a custom exercise (soft delete)
+  Future<void> hideCustomExercise(int id) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _customExerciseTableName,
+      {_exerciseHiddenColumnName: 1},
+      where: '$_exerciseIdColumnName = ?',
+      whereArgs: [id],
+    );
+    customExercisesUpdatedNotifier.value =
+        !customExercisesUpdatedNotifier.value;
+    print('✅ Hidden custom exercise with ID: $id');
+  }
+
+  // Unhide a custom exercise
+  Future<void> unhideCustomExercise(int id) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _customExerciseTableName,
+      {_exerciseHiddenColumnName: 0},
+      where: '$_exerciseIdColumnName = ?',
+      whereArgs: [id],
+    );
+    customExercisesUpdatedNotifier.value =
+        !customExercisesUpdatedNotifier.value;
+    print('✅ Unhidden custom exercise with ID: $id');
   }
 
   // Check if a custom exercise with the same name already exists

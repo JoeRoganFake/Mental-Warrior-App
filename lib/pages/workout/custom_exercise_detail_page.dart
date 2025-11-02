@@ -38,6 +38,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
   late TabController _tabController;
   List<ExerciseHistoryEntry> _exerciseHistory = [];
   bool _isLoadingHistory = false;
+  final CustomExerciseService _customExerciseService = CustomExerciseService();
 
   @override
   void initState() {
@@ -219,6 +220,55 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
     }
   }
 
+  // Toggle hide/unhide status of the exercise
+  Future<void> _toggleHideExercise() async {
+    if (_exerciseData == null) return;
+
+    final bool isHidden = _exerciseData!['hidden'] ?? false;
+    final int exerciseId = int.parse(widget.exerciseId.replaceFirst('custom_', ''));
+
+    try {
+      if (isHidden) {
+        // Unhide the exercise
+        await _customExerciseService.unhideCustomExercise(exerciseId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Exercise unhidden successfully'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        // Hide the exercise
+        await _customExerciseService.hideCustomExercise(exerciseId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🔒 Exercise hidden from search'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+
+      // Reload exercise data
+      await _loadExerciseData();
+    } catch (e) {
+      print('❌ Error toggling exercise visibility: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Clean the exercise name for display
@@ -226,6 +276,8 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
         .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
         .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
         .trim();
+    
+    final bool isHidden = _exerciseData?['hidden'] ?? false;
     
     return Scaffold(
       backgroundColor: const Color(0xFF1A1B1E),
@@ -237,6 +289,18 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
         backgroundColor: const Color(0xFF26272B),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
+        actions: _exerciseData != null
+            ? [
+                IconButton(
+                  icon: Icon(
+                    isHidden ? Icons.visibility : Icons.visibility_off,
+                    color: isHidden ? Colors.green : Colors.orange,
+                  ),
+                  tooltip: isHidden ? 'Unhide Exercise' : 'Hide Exercise',
+                  onPressed: _toggleHideExercise,
+                ),
+              ]
+            : null,
         bottom: _exerciseData != null
             ? TabBar(
                 controller: _tabController,
@@ -333,12 +397,61 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
 
     // Remove empty strings
     secondaryMuscles = secondaryMuscles.where((s) => s.isNotEmpty).toList();
+    
+    final bool isHidden = exercise['hidden'] ?? false;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Hidden status badge (if exercise is hidden)
+          if (isHidden)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.orange.withValues(alpha: 0.3),
+                    Colors.orange.withValues(alpha: 0.15),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.orange.withValues(alpha: 0.5),
+                  width: 1.5,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.visibility_off,
+                        color: Colors.orange, size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Hidden from Search',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Custom exercise badge with gradient
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
