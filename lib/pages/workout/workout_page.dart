@@ -470,7 +470,12 @@ class WorkoutPageState extends State<WorkoutPage> {
                                                                 .replaceAll(
                                                                     RegExp(
                                                                         r'##API_ID:[^#]+##'),
-                                                                    ''),
+                                                                    '')
+                                                                .replaceAll(
+                                                                    RegExp(
+                                                                        r'##CUSTOM:[^#]+##'),
+                                                                    '')
+                                                                .trim(),
                                                             style:
                                                                 const TextStyle(
                                                               color:

@@ -349,7 +349,10 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
     // Display exercise details from local JSON
     final exercise = _exercise;
     return Scaffold(
+      backgroundColor: const Color(0xFF1A1B1E),
       appBar: AppBar(
+        backgroundColor: const Color(0xFF26272B),
+        iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
             // Remove API ID marker if present
             exercise?['name'] != null
@@ -357,7 +360,10 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                     .toString()
                     .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
                     .trim()
-                : 'Exercise Details'),
+              : 'Exercise Details',
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         bottom: exercise != null
             ? TabBar(
                 controller: _tabController,
@@ -408,7 +414,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
 
   Widget _buildAboutTab(Map<String, dynamic> exercise) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -416,15 +422,26 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
             Column(
               children: [
                 Container(
-                  height: 300,
+                  height: 320,
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFF1A1B1E),
+                    border: Border.all(
+                      color: Colors.grey[800]!,
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     child: PageView.builder(
+                      controller: _pageController,
                       itemCount: (exercise['images'] as List).length,
                       onPageChanged: (index) {
                         setState(() {
@@ -434,46 +451,61 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                       itemBuilder: (context, index) {
                         final String imagePath =
                             (exercise['images'] as List)[index];
-                        return Image.network(
-                          'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/$imagePath',
-                          fit: BoxFit.contain,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(
-                              child: CircularProgressIndicator(
-                                value: loadingProgress.expectedTotalBytes !=
-                                        null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                    : null,
-                              ),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) {
-                            print('Error loading image: $error for $imagePath');
-                            return Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.error_outline,
-                                      size: 48, color: Colors.red),
-                                  SizedBox(height: 8),
-                                  Text('Unable to load image',
-                                      style: TextStyle(color: Colors.red)),
-                                  SizedBox(height: 8),
-                                  ElevatedButton.icon(
-                                    onPressed: () {
-                                      setState(() {
-                                        // Force a rebuild
-                                      });
-                                    },
-                                    icon: Icon(Icons.refresh),
-                                    label: Text('Retry'),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
+                        return Container(
+                          color: const Color(0xFF1A1B1E),
+                          child: Image.network(
+                            'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/$imagePath',
+                            fit: BoxFit.contain,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Center(
+                                child: CircularProgressIndicator(
+                                  value: loadingProgress.expectedTotalBytes !=
+                                          null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                          loadingProgress.expectedTotalBytes!
+                                      : null,
+                                  color: const Color(0xFF3F8EFC),
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              print(
+                                  'Error loading image: $error for $imagePath');
+                              return Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.error_outline,
+                                        size: 48, color: Colors.red[400]),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'Unable to load image',
+                                      style: TextStyle(
+                                        color: Colors.red[400],
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    ElevatedButton.icon(
+                                      onPressed: () {
+                                        setState(() {
+                                          // Force a rebuild
+                                        });
+                                      },
+                                      icon: const Icon(Icons.refresh),
+                                      label: const Text('Retry'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFF3F8EFC),
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                         );
                       },
                     ),
@@ -481,20 +513,30 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                 ),
                 if ((exercise['images'] as List).length > 1)
                   Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
+                    padding: const EdgeInsets.only(top: 12.0),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: List.generate(
                         (exercise['images'] as List).length,
                         (index) => Container(
-                          width: 8,
-                          height: 8,
-                          margin: EdgeInsets.symmetric(horizontal: 4),
+                          width: 10,
+                          height: 10,
+                          margin: const EdgeInsets.symmetric(horizontal: 5),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: index == _currentImageIndex
-                                ? Theme.of(context).primaryColor
-                                : Colors.grey.shade300,
+                                ? const Color(0xFF3F8EFC)
+                                : Colors.grey[700],
+                            boxShadow: index == _currentImageIndex
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(0xFF3F8EFC)
+                                          .withValues(alpha: 0.4),
+                                      blurRadius: 8,
+                                      spreadRadius: 1,
+                                    ),
+                                  ]
+                                : null,
                           ),
                         ),
                       ),
@@ -502,131 +544,306 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                   ),
               ],
             ),
-          const SizedBox(height: 16),
-          // Primary Muscles Chips
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Primary Muscles:',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).primaryColor,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                children: [
-                  for (var muscle
-                      in (exercise['primaryMuscles'] as List? ?? []))
-                    Chip(
-                      avatar: Icon(Icons.fitness_center, size: 16),
-                      label: Text(muscle),
-                      backgroundColor:
+          const SizedBox(height: 24),
+          // Primary Muscles with card styling
+          _buildInfoCard(
+            icon: Icons.fitness_center,
+            title: 'Primary Muscles',
+            content: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (var muscle in (exercise['primaryMuscles'] as List? ?? []))
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Theme.of(context).primaryColor.withValues(alpha: 0.2),
                           Theme.of(context).primaryColor.withValues(alpha: 0.1),
-                      labelStyle:
-                          TextStyle(color: Theme.of(context).primaryColor),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Theme.of(context)
+                            .primaryColor
+                            .withValues(alpha: 0.3),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.fitness_center,
+                          size: 16,
+                          color: Theme.of(context).primaryColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          muscle,
+                          style: TextStyle(
+                            color: Theme.of(context).primaryColor,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Secondary Muscles
+          if ((exercise['secondaryMuscles'] as List?)?.isNotEmpty ?? false)
+            _buildInfoCard(
+              icon: Icons.fitness_center_outlined,
+              title: 'Secondary Muscles',
+              content: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (var muscle in (exercise['secondaryMuscles'] as List))
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.4),
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.fitness_center_outlined,
+                            size: 16,
+                            color: Colors.orange[300],
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            muscle,
+                            style: TextStyle(
+                              color: Colors.orange[300],
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                 ],
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Secondary Muscles Chips
-          if ((exercise['secondaryMuscles'] as List?)?.isNotEmpty ?? false)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Secondary Muscles:',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange[700],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    for (var muscle in (exercise['secondaryMuscles'] as List))
-                      Chip(
-                        avatar: Icon(Icons.fitness_center_outlined, size: 16),
-                        label: Text(muscle),
-                        backgroundColor: Colors.orange[100],
-                        labelStyle: TextStyle(color: Colors.orange[800]),
-                      ),
-                  ],
-                ),
-              ],
-            )
-          else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Secondary Muscles:',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange[700],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text('None specified',
-                    style: TextStyle(fontStyle: FontStyle.italic)),
-              ],
             ),
           const SizedBox(height: 16),
           // Additional Exercise Information
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              // Mechanic Chip
-              if (exercise['mechanic'] != null)
-                Chip(
-                  avatar: Icon(Icons.engineering, size: 16),
-                  label: Text(exercise['mechanic']),
-                  backgroundColor: Colors.purple[100],
-                  labelStyle: TextStyle(color: Colors.purple[800]),
-                ),
-              // Equipment Chip
-              if (exercise['equipment'] != null && exercise['equipment'] != '')
-                Chip(
-                  avatar: Icon(Icons.sports_gymnastics, size: 16),
-                  label: Text(exercise['equipment']),
-                  backgroundColor: Colors.green[100],
-                  labelStyle: TextStyle(color: Colors.green[800]),
-                ),
-              // Force Chip
-              if (exercise['force'] != null && exercise['force'] != '')
-                Chip(
-                  avatar: Icon(Icons.arrow_forward, size: 16),
-                  label: Text(exercise['force']),
-                  backgroundColor: Colors.amber[100],
-                  labelStyle: TextStyle(color: Colors.amber[800]),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Divider(height: 24),
-          const Text(
-            'Instructions:',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          ...List<String>.from(exercise['instructions'] ?? []).map(
-            // Use original key 'instructions'
-            (step) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4.0),
-              child: Text('• $step', style: const TextStyle(fontSize: 14)),
+          _buildInfoCard(
+            icon: Icons.category,
+            title: 'Equipment & Details',
+            content: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                // Mechanic Chip
+                if (exercise['mechanic'] != null)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.purple.withValues(alpha: 0.4),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.engineering,
+                          size: 16,
+                          color: Colors.purple[300],
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          exercise['mechanic'],
+                          style: TextStyle(
+                            color: Colors.purple[300],
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                // Equipment Chip
+                if (exercise['equipment'] != null &&
+                    exercise['equipment'] != '')
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.green.withValues(alpha: 0.4),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.sports_gymnastics,
+                          size: 16,
+                          color: Colors.green[300],
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          exercise['equipment'],
+                          style: TextStyle(
+                            color: Colors.green[300],
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                // Force Chip
+                if (exercise['force'] != null && exercise['force'] != '')
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.amber.withValues(alpha: 0.4),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.arrow_forward,
+                          size: 16,
+                          color: Colors.amber[300],
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          exercise['force'],
+                          style: TextStyle(
+                            color: Colors.amber[300],
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ),
+          const SizedBox(height: 24),
+          // Instructions
+          _buildInfoCard(
+            icon: Icons.list_alt,
+            title: 'Instructions',
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: List<String>.from(exercise['instructions'] ?? [])
+                  .map(
+                    (step) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.only(top: 6, right: 12),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF3F8EFC),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              step,
+                              style: TextStyle(
+                                fontSize: 15,
+                                height: 1.5,
+                                color: Colors.grey[300],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard({
+    required IconData icon,
+    required String title,
+    required Widget content,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFF26272B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.grey[800]!,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: const Color(0xFF3F8EFC),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          content,
         ],
       ),
     );
@@ -638,9 +855,18 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Loading exercise history...'),
+            CircularProgressIndicator(
+              color: Color(0xFF3F8EFC),
+            ),
+            SizedBox(height: 20),
+            Text(
+              'Loading exercise history...',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFFBDBDBD),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       );
@@ -648,64 +874,94 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
 
     if (_exerciseHistory.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.history,
-              size: 64,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No History Found',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[600],
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF3F8EFC).withValues(alpha: 0.1),
+                      const Color(0xFF3F8EFC).withValues(alpha: 0.05),
+                    ],
+                  ),
+                ),
+                child: Icon(
+                  Icons.history,
+                  size: 64,
+                  color: Colors.grey[500],
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Complete and save workouts with this exercise to see your history.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[500],
+              const SizedBox(height: 24),
+              const Text(
+                'No History Found',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              margin: const EdgeInsets.symmetric(horizontal: 32),
-              decoration: BoxDecoration(
-                color: Colors.blue[50],
-                border: Border.all(color: Colors.blue[200]!),
-                borderRadius: BorderRadius.circular(8),
+              const SizedBox(height: 12),
+              Text(
+                'Complete and save workouts with this exercise to see your history.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.grey[400],
+                  height: 1.5,
+                ),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: Colors.blue[600], size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'History shows only completed workouts that were saved using "End & Save".',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue[800],
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF3F8EFC).withValues(alpha: 0.1),
+                      const Color(0xFF3F8EFC).withValues(alpha: 0.05),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: const Color(0xFF3F8EFC).withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.info_outline,
+                      color: Color(0xFF3F8EFC),
+                      size: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    Flexible(
+                      child: Text(
+                        'History is only recorded for finished workouts.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[300],
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       itemCount: _exerciseHistory.length,
       itemBuilder: (context, index) {
         final historyEntry = _exerciseHistory[index];
@@ -713,75 +969,245 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
         final String formattedDate =
             '${_getWeekday(date.weekday)}, ${_getMonth(date.month)} ${date.day}, ${date.year}';
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 16),
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+        return Container(
+          margin: const EdgeInsets.only(bottom: 20),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFF1E1E1E),
+                Color(0xFF1A1A1A),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.grey[800]!,
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header with workout name and date
-                Text(
-                  historyEntry.workoutName,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  formattedDate,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Sets performed header
+                // Workout name and date header
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Sets Performed',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                    Expanded(
+                      child: Text(
+                        historyEntry.workoutName,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -0.3,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Text(
-                      '1RM',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                    const SizedBox(width: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF3F8EFC).withValues(alpha: 0.15),
+                            const Color(0xFF3F8EFC).withValues(alpha: 0.08),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: const Color(0xFF3F8EFC).withValues(alpha: 0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.calendar_today,
+                            size: 12,
+                            color: Color(0xFF3F8EFC),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            formattedDate,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF3F8EFC),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
 
-                // Sets data
+                Container(
+                  height: 1,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.grey[800]!,
+                        Colors.grey[800]!.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Sets information with improved design
                 ...historyEntry.sets.asMap().entries.map((entry) {
                   final setIndex = entry.key;
                   final set = entry.value;
                   final oneRM = _calculateOneRM(set.weight, set.reps);
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[850]!.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Colors.grey[800]!,
+                        width: 1,
+                      ),
+                    ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          '${setIndex + 1}  ${set.weight}kg × ${set.reps}',
-                          style: const TextStyle(fontSize: 14),
+                        // Set number with gradient
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                const Color(0xFF3F8EFC).withValues(alpha: 0.2),
+                                const Color(0xFF3F8EFC).withValues(alpha: 0.1),
+                              ],
+                            ),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF3F8EFC)
+                                  .withValues(alpha: 0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${setIndex + 1}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF3F8EFC),
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
                         ),
-                        Text(
-                          oneRM.toStringAsFixed(0),
-                          style: const TextStyle(fontSize: 14),
+                        const SizedBox(width: 16),
+
+                        // Weight
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Weight',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[500],
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${set.weight} kg',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Reps
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Reps',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[500],
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${set.reps}',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // 1RM badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.green.withValues(alpha: 0.4),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(
+                                '1RM',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.green[300],
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              Text(
+                                '$oneRM kg',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.green[300],
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

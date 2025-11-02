@@ -20,10 +20,12 @@ class CreateExercisePage extends StatefulWidget {
 class CreateExercisePageState extends State<CreateExercisePage> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _instructionController = TextEditingController();
   
   String _selectedEquipment = 'None';
   String _selectedPrimaryMuscle = 'Chest';
   final List<String> _selectedSecondaryMuscles = [];
+  final List<String> _instructionSteps = [];
   
   // Equipment options
   final List<String> _equipmentOptions = [
@@ -86,13 +88,48 @@ class CreateExercisePageState extends State<CreateExercisePage> {
         _selectedSecondaryMuscles.clear();
         _selectedSecondaryMuscles.addAll(secondaryMuscles.cast<String>());
       }
+      
+      // Populate instruction steps if they exist
+      final description = widget.exerciseData!['description'];
+      if (description is String && description.isNotEmpty) {
+        // Split by numbered steps (e.g., "1. ", "2. ", etc.)
+        final steps = description
+            .split(RegExp(r'\d+\.\s+'))
+            .where((s) => s.trim().isNotEmpty)
+            .toList();
+        _instructionSteps.clear();
+        _instructionSteps.addAll(steps);
+      }
     }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _instructionController.dispose();
     super.dispose();
+  }
+
+  void _addInstructionStep() {
+    if (_instructionController.text.trim().isNotEmpty) {
+      setState(() {
+        _instructionSteps.add(_instructionController.text.trim());
+        _instructionController.clear();
+      });
+    }
+  }
+
+  void _removeInstructionStep(int index) {
+    setState(() {
+      _instructionSteps.removeAt(index);
+    });
+  }
+
+  void _editInstructionStep(int index) {
+    _instructionController.text = _instructionSteps[index];
+    setState(() {
+      _instructionSteps.removeAt(index);
+    });
   }
 
   void _toggleSecondaryMuscle(String muscle) {
@@ -122,6 +159,15 @@ class CreateExercisePageState extends State<CreateExercisePage> {
     try {
       final customExerciseService = CustomExerciseService();
       
+      // Combine instruction steps into a formatted description
+      final description = _instructionSteps.isEmpty
+          ? ''
+          : _instructionSteps
+              .asMap()
+              .entries
+              .map((entry) => '${entry.key + 1}. ${entry.value}')
+              .join('\n');
+      
       if (widget.editMode && widget.exerciseData != null) {
         // Update existing custom exercise
         await customExerciseService.updateCustomExercise(
@@ -129,6 +175,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
           name: _nameController.text.trim(),
           equipment: _selectedEquipment,
           type: _selectedPrimaryMuscle,
+          description: description,
           secondaryMuscles: _selectedSecondaryMuscles,
         );
         
@@ -147,7 +194,6 @@ class CreateExercisePageState extends State<CreateExercisePage> {
         // Check if exercise already exists
         final exerciseExists = await customExerciseService.exerciseExists(
           _nameController.text.trim(),
-          _selectedEquipment,
         );
         
         if (exerciseExists) {
@@ -155,7 +201,8 @@ class CreateExercisePageState extends State<CreateExercisePage> {
             Navigator.of(context).pop(); // Close loading dialog
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text('An exercise with this name and equipment already exists'),
+                content:
+                    const Text('An exercise with this name already exists'),
                 backgroundColor: _dangerColor,
                 behavior: SnackBarBehavior.floating,
               ),
@@ -169,6 +216,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
           name: _nameController.text.trim(),
           equipment: _selectedEquipment,
           type: _selectedPrimaryMuscle,
+          description: description,
           secondaryMuscles: _selectedSecondaryMuscles,
         );
         
@@ -181,7 +229,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
             'name': _nameController.text.trim(),
             'equipment': _selectedEquipment,
             'type': _selectedPrimaryMuscle,
-            'description': '',
+            'description': description,
             'secondaryMuscles': _selectedSecondaryMuscles,
             'apiId': 'custom_$exerciseId',
             'isCustom': true,
@@ -318,6 +366,12 @@ class CreateExercisePageState extends State<CreateExercisePage> {
               _buildSectionTitle('Secondary Muscle Groups (Optional)'),
               const SizedBox(height: 8),
               _buildSecondaryMuscleSelector(),
+              const SizedBox(height: 24),
+
+              // Instructions Section
+              _buildSectionTitle('Exercise Instructions (Optional)'),
+              const SizedBox(height: 8),
+              _buildInstructionsSection(),
               const SizedBox(height: 32),
 
               // Create Button
@@ -529,6 +583,183 @@ class CreateExercisePageState extends State<CreateExercisePage> {
               );
             }).toList(),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstructionsSection() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _inputBgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Instruction input field with add button
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _instructionController,
+                  style: TextStyle(color: _textPrimaryColor),
+                  textCapitalization: TextCapitalization.sentences,
+                  maxLines: null,
+                  decoration: InputDecoration(
+                    hintText: 'Enter step instruction...',
+                    hintStyle: TextStyle(color: _textSecondaryColor),
+                    filled: true,
+                    fillColor: _surfaceColor,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                  ),
+                  onSubmitted: (_) => _addInstructionStep(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: _primaryColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.add, color: Colors.white),
+                  onPressed: _addInstructionStep,
+                  tooltip: 'Add Step',
+                ),
+              ),
+            ],
+          ),
+
+          if (_instructionSteps.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Steps (${_instructionSteps.length})',
+              style: TextStyle(
+                color: _textSecondaryColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // List of instruction steps
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _instructionSteps.length,
+              onReorder: (oldIndex, newIndex) {
+                setState(() {
+                  if (newIndex > oldIndex) {
+                    newIndex -= 1;
+                  }
+                  final item = _instructionSteps.removeAt(oldIndex);
+                  _instructionSteps.insert(newIndex, item);
+                });
+              },
+              itemBuilder: (context, index) {
+                return Container(
+                  key: ValueKey('instruction_$index'),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  decoration: BoxDecoration(
+                    color: _surfaceColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _primaryColor.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    leading: Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: _primaryColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${index + 1}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      _instructionSteps[index],
+                      style: TextStyle(
+                        color: _textPrimaryColor,
+                        fontSize: 14,
+                      ),
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon:
+                              Icon(Icons.edit, color: _primaryColor, size: 20),
+                          onPressed: () => _editInstructionStep(index),
+                          tooltip: 'Edit',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon:
+                              Icon(Icons.delete, color: _dangerColor, size: 20),
+                          onPressed: () => _removeInstructionStep(index),
+                          tooltip: 'Delete',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(Icons.drag_handle,
+                            color: _textSecondaryColor, size: 20),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            // Helper text
+            const SizedBox(height: 8),
+            Text(
+              'Tip: Long press and drag to reorder steps',
+              style: TextStyle(
+                color: _textSecondaryColor.withOpacity(0.7),
+                fontSize: 12,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Center(
+              child: Text(
+                'No instructions added yet',
+                style: TextStyle(
+                  color: _textSecondaryColor.withOpacity(0.7),
+                  fontSize: 14,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

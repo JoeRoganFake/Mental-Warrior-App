@@ -31,7 +31,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 7, // Increment version for custom exercises table
+      version: 8, // Increment version for unique constraint on custom exercises
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -67,6 +67,19 @@ class DatabaseService {
         if (oldVersion < 7) {
           // Create custom exercises table
           await CustomExerciseService().createCustomExerciseTable(db);
+        }
+        if (oldVersion < 8) {
+          // Add unique constraint to custom exercises name
+          // Need to recreate the table since SQLite doesn't support ALTER TABLE ADD CONSTRAINT
+          await db.execute(
+              'ALTER TABLE custom_exercises RENAME TO custom_exercises_old');
+          await CustomExerciseService().createCustomExerciseTable(db);
+          await db.execute('''
+            INSERT INTO custom_exercises (id, name, equipment, type, description, secondary_muscles, created_at)
+            SELECT id, name, equipment, type, description, secondary_muscles, created_at
+            FROM custom_exercises_old
+          ''');
+          await db.execute('DROP TABLE custom_exercises_old');
         }
       },
     );
@@ -2142,7 +2155,7 @@ class CustomExerciseService {
     await db.execute('''
       CREATE TABLE $_customExerciseTableName (
         $_exerciseIdColumnName INTEGER PRIMARY KEY AUTOINCREMENT,
-        $_exerciseNameColumnName TEXT NOT NULL,
+        $_exerciseNameColumnName TEXT NOT NULL UNIQUE,
         $_exerciseEquipmentColumnName TEXT NOT NULL,
         $_exerciseTypeColumnName TEXT NOT NULL,
         $_exerciseDescriptionColumnName TEXT,
@@ -2248,14 +2261,13 @@ class CustomExerciseService {
         !customExercisesUpdatedNotifier.value;
   }
 
-  // Check if a custom exercise with the same name and equipment already exists
-  Future<bool> exerciseExists(String name, String equipment) async {
+  // Check if a custom exercise with the same name already exists
+  Future<bool> exerciseExists(String name) async {
     final db = await DatabaseService.instance.database;
     final result = await db.query(
       _customExerciseTableName,
-      where:
-          '$_exerciseNameColumnName = ? AND $_exerciseEquipmentColumnName = ?',
-      whereArgs: [name, equipment],
+      where: '$_exerciseNameColumnName = ?',
+      whereArgs: [name],
       limit: 1,
     );
     return result.isNotEmpty;
