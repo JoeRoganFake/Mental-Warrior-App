@@ -1477,10 +1477,6 @@ class WorkoutService {
         .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
         .trim();
 
-    // NOTE: We do NOT clear existing PR flags
-    // PRs are historical markers - if a set was a PR when performed, it stays marked
-    // We only add new PR flags for sets that exceed all previous records
-
     // Get all completed sets for this exercise, ordered chronologically
     final result = await db.rawQuery('''
       SELECT es.id, es.volume, es.weight, es.reps, e.name, w.date, w.id as workout_id
@@ -1509,51 +1505,44 @@ class WorkoutService {
 
     if (exerciseSets.isEmpty) return;
 
-    // Find the maximum volume that's already marked as PR (historical max)
-    double historicalMaxPR = 0.0;
-    for (final set in exerciseSets) {
-      final bool isPR = (set['isPR'] as int? ?? 0) == 1;
-      final double volume = set['volume'] as double;
-      if (isPR && volume > historicalMaxPR) {
-        historicalMaxPR = volume;
-      }
-    }
+    // First, clear all existing PR flags for this exercise
+    await db.rawUpdate('''
+      UPDATE $_setTableName
+      SET $_setIsPRColumnName = 0
+      WHERE $_setIdColumnName IN (
+        SELECT es.id
+        FROM exercise_sets es
+        INNER JOIN exercises e ON es.exerciseId = e.id
+        WHERE e.name LIKE ? OR e.name LIKE ?
+      )
+    ''', ['%$cleanExerciseName%', cleanExerciseName]);
 
-    // Now find sets that exceed the historical max PR and mark them as new PRs
-    List<int> newPRSetIds = [];
+    // Find the set with maximum volume (only one PR per exercise)
+    double maxVolume = 0.0;
+    int? maxSetId;
     
     for (final set in exerciseSets) {
       final int setId = set['id'] as int;
       final double volume = set['volume'] as double;
       final double weight = set['weight'] as double;
       final int reps = set['reps'] as int;
-      final bool alreadyPR = (set['isPR'] as int? ?? 0) == 1;
-
-      // Skip if already marked as PR (preserve historical PRs)
-      if (alreadyPR) continue;
 
       // Only consider valid volumes (weight > 0 and reps > 0)
       if (weight > 0 && reps > 0 && volume > 0) {
-        // Mark as new PR if it exceeds the historical max
-        if (volume > historicalMaxPR) {
-          newPRSetIds.add(setId);
-          // Update the historical max so subsequent sets in same workout
-          // with equal volume also get marked
-          if (volume > historicalMaxPR) {
-            historicalMaxPR = volume;
-          }
+        if (volume > maxVolume) {
+          maxVolume = volume;
+          maxSetId = setId;
         }
       }
     }
 
-    // Mark only the new PRs (don't touch existing PR flags)
-    if (newPRSetIds.isNotEmpty) {
-      String placeholders = List.filled(newPRSetIds.length, '?').join(',');
+    // Mark only the single set with maximum volume as PR
+    if (maxSetId != null) {
       await db.rawUpdate('''
         UPDATE $_setTableName 
         SET $_setIsPRColumnName = 1 
-        WHERE $_setIdColumnName IN ($placeholders)
-      ''', newPRSetIds);
+        WHERE $_setIdColumnName = ?
+      ''', [maxSetId]);
     }
 
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;

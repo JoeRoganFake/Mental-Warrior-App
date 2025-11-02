@@ -761,57 +761,56 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
 
   Future<void> _showEditNameDialog() async {
     final dialogController = TextEditingController(text: _workout!.name);
-    String? result;
-
-    try {
-      result = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: _cardColor,
-          title: Text(
-            'Edit Workout Name',
-            style: TextStyle(color: _textPrimaryColor),
-          ),
-          content: TextField(
-            controller: dialogController,
-            style: TextStyle(color: _textPrimaryColor),
-            decoration: InputDecoration(
-              labelText: 'Workout Name',
-              labelStyle: TextStyle(color: _textSecondaryColor),
-              filled: true,
-              fillColor: _inputBgColor,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(
-                'Cancel',
-                style: TextStyle(color: _textSecondaryColor),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, dialogController.text),
-              child: Text(
-                'Save',
-                style: TextStyle(color: _primaryColor),
-              ),
-            ),
-          ],
+    
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _cardColor,
+        title: Text(
+          'Edit Workout Name',
+          style: TextStyle(color: _textPrimaryColor),
         ),
-      );
-    } finally {
-      dialogController.dispose();
-    }
+        content: TextField(
+          controller: dialogController,
+          style: TextStyle(color: _textPrimaryColor),
+          decoration: InputDecoration(
+            labelText: 'Workout Name',
+            labelStyle: TextStyle(color: _textSecondaryColor),
+            filled: true,
+            fillColor: _inputBgColor,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: _textSecondaryColor),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, dialogController.text),
+            child: Text(
+              'Save',
+              style: TextStyle(color: _primaryColor),
+            ),
+          ),
+        ],
+      ),
+    );
 
+    // Dispose the controller immediately after dialog closes
+    dialogController.dispose();
+
+    // Process result after controller is disposed
     if (result != null && result.isNotEmpty && result != _workout!.name) {
       // Update the workout name in the database
       setState(() {
-        _workoutNameController.text = result!;
+        _workoutNameController.text = result;
       });
       _markAsChanged();
     }
