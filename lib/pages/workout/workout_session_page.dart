@@ -84,11 +84,37 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   
   // Cache for previous exercise history to show as greyed out placeholders
   final Map<String, List<ExerciseSet>> _exerciseHistoryCache = {};
+  
+  // Listener for temp workout data changes
+  void _onTempWorkoutDataChanged() {
+    // Only reload if this is still the active temporary workout and we're not disposing
+    if (widget.isTemporary && !_isDisposing && mounted) {
+      final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+      if (tempWorkouts.containsKey(widget.workoutId)) {
+        print('🔄 Temp workout data changed, reloading workout...');
+        // Force a setState first to trigger immediate rebuild
+        if (mounted) {
+          setState(() {
+            // Mark as loading to show visual feedback
+            _isLoading = true;
+          });
+        }
+        // Then load the updated workout data
+        _loadWorkout();
+      }
+    }
+  }
+  
   @override
   void initState() {
     super.initState();
     // Add app lifecycle observer for better handling of background/foreground transitions
     WidgetsBinding.instance.addObserver(this);
+    
+    // Add listener for temporary workouts to auto-reload when data changes
+    if (widget.isTemporary) {
+      WorkoutService.tempWorkoutsNotifier.addListener(_onTempWorkoutDataChanged);
+    }
     
     // If this was a minimized workout being restored, set up restoration data FIRST
     if (widget.minimized) {
@@ -300,6 +326,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   void dispose() {
     // Set disposal flag to prevent any setState calls
     _isDisposing = true;
+
+    // Remove listener for temporary workouts
+    if (widget.isTemporary) {
+      WorkoutService.tempWorkoutsNotifier.removeListener(_onTempWorkoutDataChanged);
+    }
 
     // Cancel timers immediately to prevent callbacks during disposal
     _timer?.cancel();
@@ -3882,7 +3913,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             Padding(
               padding: EdgeInsets.all(16),
               child: InkWell(
-                onTap: () {
+                onTap: () async {
                   // Check if the exercise name contains API ID or custom markers
                   final String exerciseName = exercise.name;
                   print('📖 TAPPED exercise - Raw name from DB: "$exerciseName"');
@@ -3928,7 +3959,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   // Navigate to different pages based on exercise type
                   if (isCustomExercise) {
                     // Navigate to custom exercise detail page
-                    Navigator.push(
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => CustomExerciseDetailPage(
@@ -3938,9 +3969,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         ),
                       ),
                     );
+                    // Note: For temporary workouts, the listener (_onTempWorkoutDataChanged) 
+                    // will automatically reload when the data changes
                   } else {
                     // Navigate to the regular exercise detail page
-                    Navigator.push(
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => ExerciseDetailPage(

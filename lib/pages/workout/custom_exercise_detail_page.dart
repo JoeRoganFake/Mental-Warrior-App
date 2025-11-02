@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/models/workouts.dart';
+import 'package:mental_warior/pages/workout/edit_exercise_page.dart';
 
 // Helper class to represent exercise history entries
 class ExerciseHistoryEntry {
@@ -225,7 +226,8 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
     if (_exerciseData == null) return;
 
     final bool isHidden = _exerciseData!['hidden'] ?? false;
-    final int exerciseId = int.parse(widget.exerciseId.replaceFirst('custom_', ''));
+    final int exerciseId =
+        int.parse(widget.exerciseId.replaceFirst('custom_', ''));
 
     try {
       if (isHidden) {
@@ -271,11 +273,17 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
 
   @override
   Widget build(BuildContext context) {
-    // Clean the exercise name for display
-    String cleanAppBarName = widget.exerciseName
-        .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
-        .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
-        .trim();
+    // Clean the exercise name for display - use loaded data if available, otherwise use passed name
+    String cleanAppBarName = _exerciseData != null
+        ? (_exerciseData!['name'] ?? widget.exerciseName)
+            .toString()
+            .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+            .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+            .trim()
+        : widget.exerciseName
+            .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+            .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+            .trim();
     
     final bool isHidden = _exerciseData?['hidden'] ?? false;
     
@@ -298,6 +306,25 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   ),
                   tooltip: isHidden ? 'Unhide Exercise' : 'Hide Exercise',
                   onPressed: _toggleHideExercise,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.white),
+                  tooltip: 'Edit Exercise',
+                  onPressed: () async {
+                    if (_exerciseData == null) return;
+                    final result = await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => EditExercisePage(
+                          exerciseData: _exerciseData!,
+                        ),
+                      ),
+                    );
+
+                    // Reload exercise data if edit was successful
+                    if (result == true && mounted) {
+                      await _loadExerciseData();
+                    }
+                  },
                 ),
               ]
             : null,

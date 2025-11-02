@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mental_warior/data/exercises_data.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
+import 'package:mental_warior/pages/workout/create_exercise_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 
 class ExerciseBrowsePage extends StatefulWidget {
@@ -194,6 +195,38 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
     }
   }
 
+  Future<void> _openCreateExercise() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CreateExercisePage(),
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (result is Map<String, dynamic>) {
+      setState(() {
+        final existingIndex =
+            _customExercises.indexWhere((e) => e['id'] == result['id']);
+        if (existingIndex >= 0) {
+          _customExercises[existingIndex] = result;
+        } else {
+          _customExercises.add(result);
+        }
+        _updateFilterLists();
+      });
+
+      final name = (result['name'] ?? 'Custom exercise').toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Created "$name"'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -285,16 +318,23 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
           // Exercises list
           Expanded(
             child: _filteredExercises.isEmpty
-          ? const Center(
+                ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.fitness_center, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text(
+                        const Icon(Icons.fitness_center,
+                            size: 64, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        const Text(
                     'No exercises found',
                     style: TextStyle(fontSize: 18),
                   ),
+                        const SizedBox(height: 12),
+                        ElevatedButton.icon(
+                          onPressed: _openCreateExercise,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Create a custom exercise'),
+                        ),
                 ],
               ),
             )
@@ -401,6 +441,11 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
             ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openCreateExercise,
+        tooltip: 'Create custom exercise',
+        child: const Icon(Icons.add),
       ),
     );
   }
