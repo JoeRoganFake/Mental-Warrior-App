@@ -1388,8 +1388,12 @@ class WorkoutService {
     final db = await DatabaseService.instance.database;
 
     // Clean the exercise name to ensure consistent comparison
+    // Remove both API_ID and CUSTOM markers
     final String cleanExerciseName =
-        exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+        exerciseName
+        .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+        .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+        .trim();
 
     // Query to find all completed sets for exercises that match the clean name
     // We'll clean the names in Dart for more reliable comparison
@@ -1417,7 +1421,10 @@ class WorkoutService {
     for (final row in result) {
       final String dbExerciseName = row['name'] as String;
       final String cleanDbExerciseName =
-          dbExerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+          dbExerciseName
+          .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+          .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+          .trim();
 
       if (cleanDbExerciseName == cleanExerciseName) {
         hasAnyResults = true;
@@ -1458,25 +1465,21 @@ class WorkoutService {
   }
 
   // Recalculate PR status for all completed sets of a specific exercise
-  // This ensures only sets that exceed previous records are marked as PRs
+  // This marks new PRs without removing old PR flags (preserves historical context)
   Future<void> recalculatePRStatusForExercise(String exerciseName) async {
     final db = await DatabaseService.instance.database;
 
     // Clean the exercise name to ensure consistent comparison
+    // Remove both API_ID and CUSTOM markers
     final String cleanExerciseName =
-        exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+        exerciseName
+        .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+        .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+        .trim();
 
-    // First, clear ALL PR flags for this exercise to start fresh
-    await db.rawUpdate('''
-      UPDATE $_setTableName 
-      SET $_setIsPRColumnName = 0 
-      WHERE id IN (
-        SELECT es.id 
-        FROM $_setTableName es
-        INNER JOIN exercises e ON es.exerciseId = e.id
-        WHERE e.name LIKE ? OR e.name LIKE ?
-      )
-    ''', ['%$cleanExerciseName%', cleanExerciseName]);
+    // NOTE: We do NOT clear existing PR flags
+    // PRs are historical markers - if a set was a PR when performed, it stays marked
+    // We only add new PR flags for sets that exceed all previous records
 
     // Get all completed sets for this exercise, ordered chronologically
     final result = await db.rawQuery('''
@@ -1494,7 +1497,10 @@ class WorkoutService {
     for (final row in result) {
       final String dbExerciseName = row['name'] as String;
       final String cleanDbExerciseName =
-          dbExerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '');
+          dbExerciseName
+          .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+          .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+          .trim();
 
       if (cleanDbExerciseName == cleanExerciseName) {
         exerciseSets.add(row);
@@ -1503,28 +1509,51 @@ class WorkoutService {
 
     if (exerciseSets.isEmpty) return;
 
-    // Track the maximum volume seen so far (chronologically)
-    double currentMaxVolume = 0.0;
-    List<int> prSetIds = [];
-    
+    // Find the maximum volume that's already marked as PR (historical max)
+    double historicalMaxPR = 0.0;
     for (final set in exerciseSets) {
+      final bool isPR = (set['isPR'] as int? ?? 0) == 1;
       final double volume = set['volume'] as double;
-
-      // Only consider valid volumes (weight > 0 and reps > 0)
-      if (volume > 0 && volume > currentMaxVolume) {
-        currentMaxVolume = volume;
-        prSetIds.add(set['id'] as int);
+      if (isPR && volume > historicalMaxPR) {
+        historicalMaxPR = volume;
       }
     }
 
-    // Mark only the true PRs (sets that exceeded previous records)
-    if (prSetIds.isNotEmpty) {
-      String placeholders = List.filled(prSetIds.length, '?').join(',');
+    // Now find sets that exceed the historical max PR and mark them as new PRs
+    List<int> newPRSetIds = [];
+    
+    for (final set in exerciseSets) {
+      final int setId = set['id'] as int;
+      final double volume = set['volume'] as double;
+      final double weight = set['weight'] as double;
+      final int reps = set['reps'] as int;
+      final bool alreadyPR = (set['isPR'] as int? ?? 0) == 1;
+
+      // Skip if already marked as PR (preserve historical PRs)
+      if (alreadyPR) continue;
+
+      // Only consider valid volumes (weight > 0 and reps > 0)
+      if (weight > 0 && reps > 0 && volume > 0) {
+        // Mark as new PR if it exceeds the historical max
+        if (volume > historicalMaxPR) {
+          newPRSetIds.add(setId);
+          // Update the historical max so subsequent sets in same workout
+          // with equal volume also get marked
+          if (volume > historicalMaxPR) {
+            historicalMaxPR = volume;
+          }
+        }
+      }
+    }
+
+    // Mark only the new PRs (don't touch existing PR flags)
+    if (newPRSetIds.isNotEmpty) {
+      String placeholders = List.filled(newPRSetIds.length, '?').join(',');
       await db.rawUpdate('''
         UPDATE $_setTableName 
         SET $_setIsPRColumnName = 1 
         WHERE $_setIdColumnName IN ($placeholders)
-      ''', prSetIds);
+      ''', newPRSetIds);
     }
 
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
@@ -1555,7 +1584,8 @@ class WorkoutService {
       _setCompletedColumnName: completed ? 1 : 0
     };
 
-    // If uncompleting the set, it's no longer a PR
+    // If uncompleting the set, clear the PR flag
+    // (uncompleted sets shouldn't count in statistics, even if they were PRs)
     if (!completed) {
       updateData[_setIsPRColumnName] = 0;
     }
@@ -1994,9 +2024,12 @@ class WorkoutService {
     try {
       final workouts = await getWorkouts();
 
-      // Clean the exercise name to remove API ID markers
+      // Clean the exercise name to remove API ID and CUSTOM markers
       final String cleanExerciseName =
-          exerciseName.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+          exerciseName
+          .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+          .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+          .trim();
 
       print('🔍 EXERCISE HISTORY SEARCH STARTING');
       print('🔍 Looking for: "$cleanExerciseName"');
@@ -2036,7 +2069,10 @@ class WorkoutService {
           final exercise = workout.exercises[j];
           // Clean the database exercise name for comparison
           final String cleanDbExerciseName =
-              exercise.name.replaceAll(RegExp(r'##API_ID:[^#]+##'), '').trim();
+              exercise.name
+              .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+              .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+              .trim();
 
           print('🔍   Exercise ${j + 1}: "$cleanDbExerciseName"');
           print('🔍     Finished: ${exercise.finished}');

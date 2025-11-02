@@ -207,36 +207,11 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
     
     int totalPRs = 0;
     for (var exercise in _workout!.exercises) {
-      final validSets =
-          exercise.sets.where((set) => set.weight > 0 && set.reps > 0).toList();
-
-      if (validSets.isNotEmpty) {
-        // Find the maximum volume among all sets in this exercise
-        double maxVolume = validSets
-            .map((set) => set.weight * set.reps)
-            .reduce((a, b) => a > b ? a : b);
-
-        // Check if any set is marked as PR in database with max volume
-        bool hasDatabasePRWithMaxVolume = validSets
-            .any((set) => set.isPR && (set.weight * set.reps) == maxVolume);
-
-        if (hasDatabasePRWithMaxVolume) {
-          // If there's a database PR with max volume, only count those
-          for (final set in validSets) {
-            final volume = set.weight * set.reps;
-            if (set.isPR && volume == maxVolume) {
-              totalPRs++;
-            }
-          }
-        } else {
-          // If no database PR has max volume, count all sets with max volume as PRs
-          // This handles newly added sets that should be PRs but haven't been flagged yet
-          for (final set in validSets) {
-            final volume = set.weight * set.reps;
-            if (volume == maxVolume) {
-              totalPRs++;
-            }
-          }
+      for (var set in exercise.sets) {
+        // Only count sets that are marked as PR in the database
+        // and have valid weight/reps data
+        if (set.isPR && set.weight > 0 && set.reps > 0) {
+          totalPRs++;
         }
       }
     }
@@ -588,37 +563,8 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
             (a.weight * a.reps) > (b.weight * b.reps) ? a : b)
         : null;
 
-    // Calculate which sets are actually PRs based on volume and database flags
-    Set<int> actualPRSetIds = {};
-    if (validSets.isNotEmpty) {
-      // Find the maximum volume among all sets in this exercise
-      double maxVolume = validSets
-          .map((set) => set.weight * set.reps)
-          .reduce((a, b) => a > b ? a : b);
-
-      // Check if any set is marked as PR in database with max volume
-      bool hasDatabasePRWithMaxVolume = validSets
-          .any((set) => set.isPR && (set.weight * set.reps) == maxVolume);
-
-      if (hasDatabasePRWithMaxVolume) {
-        // If there's a database PR with max volume, only show those
-        for (final set in validSets) {
-          final volume = set.weight * set.reps;
-          if (set.isPR && volume == maxVolume) {
-            actualPRSetIds.add(set.id);
-          }
-        }
-      } else {
-        // If no database PR has max volume, show all sets with max volume as PRs
-        // This handles newly added sets that should be PRs but haven't been flagged yet
-        for (final set in validSets) {
-          final volume = set.weight * set.reps;
-          if (volume == maxVolume) {
-            actualPRSetIds.add(set.id);
-          }
-        }
-      }
-    }
+    // Use only database PR flags - no calculation needed
+    // The database service handles PR calculation correctly
 
     return InkWell(
       onTap: () => _navigateToExerciseDetail(exercise),
@@ -718,7 +664,8 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
               separatorBuilder: (context, index) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final set = allSets[index];
-                final isActualPR = actualPRSetIds.contains(set.id);
+                  // Use the database isPR flag directly
+                  final isActualPR = set.isPR;
                 return _buildSetRow(set, index + 1, isActualPR);
               },
             ),

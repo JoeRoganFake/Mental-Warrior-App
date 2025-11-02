@@ -1793,13 +1793,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
 
     // Determine which sets should be PRs
+    // Mark all sets that match or exceed the historical max volume as PRs
     double prVolume =
         currentMaxVolume > historicalMaxVolume ? currentMaxVolume : 0.0;
 
     // Update PR status for all sets
+    // All sets with the max volume in current workout should be marked as PR
+    // if they exceed or match historical records
     for (final setData in completedSets) {
       final set = setData['set'];
       final volume = setData['volume'];
+      
+      // Mark as PR if:
+      // 1. Current workout has sets that exceed historical max (prVolume > 0)
+      // 2. This set matches the max volume in current workout
       set['isPR'] = (prVolume > 0 && volume == prVolume);
     }
 
@@ -3511,9 +3518,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         WorkoutService.tempWorkoutsNotifier.value =
                             Map.from(tempWorkouts);
 
-                        // Save to database
-                        await _workoutService
+                          // Save to database and get the new workout ID
+                          final savedWorkoutId = await _workoutService
                             .saveTemporaryWorkout(widget.workoutId);
+                        
+                          // Reload the workout from database to get updated PR flags
+                          // This ensures the completion page shows accurate PR counts
+                          final savedWorkout =
+                              await _workoutService.getWorkout(savedWorkoutId);
+                          if (savedWorkout != null) {
+                            _workout = savedWorkout.copyWith(
+                                duration: _elapsedSeconds);
+                          }
                       } catch (e) {
                         print('Error saving temporary workout: $e');
                         // Even if there's an error, we'll dismiss this screen
@@ -3566,6 +3582,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     
                     // FINALLY: Clear saved foreground service data to prevent restoration
                     await WorkoutForegroundService.clearSavedWorkoutData();
+                    
+                    // Reload workout from database to get updated PR flags
+                    // PR recalculation happens automatically when sets are marked as completed
+                    if (!widget.isTemporary) {
+                      final freshWorkout =
+                          await _workoutService.getWorkout(widget.workoutId);
+                      if (freshWorkout != null) {
+                        _workout =
+                            freshWorkout.copyWith(duration: _elapsedSeconds);
+                      }
+                    }
                     
                     // Get workout count for completion screen
                     final workoutCount = await _workoutService.getWorkoutCount();
