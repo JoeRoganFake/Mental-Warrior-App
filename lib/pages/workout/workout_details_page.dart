@@ -41,73 +41,87 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
         .trim();
   }
 
-  // Helper method to extract exercise ID from name
-  String? _extractExerciseId(String name) {
-    // Check for API ID marker
-    final apiIdMatch = RegExp(r'##API_ID:([^#]+)##').firstMatch(name);
-    if (apiIdMatch != null) {
-      return apiIdMatch.group(1);
-    }
-
-    // Check for CUSTOM ID marker
-    final customIdMatch = RegExp(r'##CUSTOM:([^#]+)##').firstMatch(name);
-    if (customIdMatch != null) {
-      return customIdMatch.group(1);
-    }
-
-    return null;
-  }
-
-  // Helper method to check if exercise is custom
-  bool _isCustomExercise(String name) {
-    return name.contains('##CUSTOM:');
-  }
-
   // Navigate to exercise detail page
-  void _navigateToExerciseDetail(Exercise exercise) {
-    final exerciseId = _extractExerciseId(exercise.name);
-    final cleanName = _cleanExerciseName(exercise.name);
+  void _navigateToExerciseDetail(Exercise exercise) async {
+    final String exerciseName = exercise.name;
+    
+    final RegExp apiIdRegex = RegExp(r'##API_ID:([^#]+)##');
+    final RegExp customRegex = RegExp(r'##CUSTOM:([^#]+)##');
+    final Match? apiMatch = apiIdRegex.firstMatch(exerciseName);
+    final Match? customMatch = customRegex.firstMatch(exerciseName);
 
-    if (exerciseId == null) {
-      // No marker found, show a message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Cannot view details for this exercise'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
+    String apiId = '';
+    bool isCustomExercise = false;
+
+    if (apiMatch != null) {
+      // Extract the API ID
+      apiId = apiMatch.group(1) ?? '';
+      print('   Found API ID marker: $apiId');
+      // Check if this is a custom exercise (API ID starts with 'custom_')
+      isCustomExercise = apiId.startsWith('custom_');
     }
+    
+    // Also check for explicit custom marker
+    if (customMatch != null) {
+      final customFlag = customMatch.group(1) ?? 'false';
+      print('   Found CUSTOM marker: $customFlag');
+      isCustomExercise = isCustomExercise || customFlag.toLowerCase() == 'true';
+    }
+    
+    // Get the clean exercise name without any markers
+    final String cleanName = exerciseName
+        .replaceAll(apiIdRegex, '')
+        .replaceAll(customRegex, '')
+        .trim();
 
-    if (_isCustomExercise(exercise.name)) {
+    // Debug print
+    print(
+        'Exercise ID: ${exercise.id}, Is Custom: $isCustomExercise, API ID: $apiId');
+    
+    // Check if this is a temporary exercise (negative ID)
+    final bool isTemporary = exercise.id < 0;
+
+    print(
+        'Exercise ID: ${exercise.id}, Is Temporary: $isTemporary, Is Custom: $isCustomExercise, API ID: $apiId');
+
+    // Navigate to different pages based on exercise type
+    if (isCustomExercise) {
       // Navigate to custom exercise detail page
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => CustomExerciseDetailPage(
-            exerciseId: exerciseId,
+          builder: (_) => CustomExerciseDetailPage(
+            exerciseId: apiId.isNotEmpty ? apiId : exercise.id.toString(),
             exerciseName: cleanName,
             exerciseEquipment: exercise.equipment,
           ),
         ),
       );
+      
+      // Reload workout data after returning from custom exercise detail
+      // This ensures any changes to the exercise name are reflected
+      await _loadWorkout();
     } else {
-      // Navigate to API exercise detail page
-      Navigator.push(
+      // Navigate to the regular exercise detail page
+      await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => ExerciseDetailPage(
-            exerciseId: exerciseId,
+          builder: (_) => ExerciseDetailPage(
+            exerciseId: apiId.isNotEmpty ? apiId : exercise.id.toString(),
           ),
           settings: RouteSettings(
             arguments: {
               'exerciseName': cleanName,
               'exerciseEquipment': exercise.equipment,
-              'isTemporary': false,
+              'isTemporary': isTemporary,
             },
           ),
         ),
       );
+      
+      // Reload workout data after returning from exercise detail
+      // This ensures any changes are reflected
+      await _loadWorkout();
     }
   }
 
