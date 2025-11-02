@@ -978,16 +978,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                                 itemCount: _workout!.exercises.length,
                                 itemBuilder: (context, index) {
                                   final exercise = _workout!.exercises[index];
-                                  // Use custom exercise card for custom exercises, regular card for others
-                                  final isCustomExercise = exercise.name
-                                          .contains('##API_ID:custom_') ||
-                                      exercise.id < 0;
-
-                                  if (isCustomExercise) {
-
-                                    return _buildExerciseCard(exercise);
-                                  }
-                                  return null;
+                                  return _buildExerciseCard(exercise);
                                 },
                               ),
                       ),
