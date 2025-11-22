@@ -31,7 +31,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 8, // Increment version for unique constraint on custom exercises
+      version: 10, // Increment version for exercise sticky notes table
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -49,6 +49,8 @@ class DatabaseService {
             db); // Added active sessions table
         CustomExerciseService()
             .createCustomExerciseTable(db); // Added custom exercises table
+        ExerciseStickyNoteService()
+            .createStickyNotesTable(db); // Added sticky notes table
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 4) {
@@ -80,6 +82,14 @@ class DatabaseService {
             FROM custom_exercises_old
           ''');
           await db.execute('DROP TABLE custom_exercises_old');
+        }
+        if (oldVersion < 9) {
+          // Add notes column to exercises table
+          await db.execute('ALTER TABLE exercises ADD COLUMN notes TEXT');
+        }
+        if (oldVersion < 10) {
+          // Create sticky notes table
+          await ExerciseStickyNoteService().createStickyNotesTable(db);
         }
       },
     );
@@ -870,6 +880,7 @@ class WorkoutService {
   final String _exerciseNameColumnName = "name";
   final String _exerciseEquipmentColumnName = "equipment";
   final String _exerciseFinishedColumnName = "finished";
+  final String _exerciseNotesColumnName = "notes";
 
   final String _setTableName = "exercise_sets";
   final String _setIdColumnName = "id";
@@ -913,6 +924,7 @@ class WorkoutService {
         $_exerciseNameColumnName TEXT NOT NULL,
         $_exerciseEquipmentColumnName TEXT NOT NULL,
         $_exerciseFinishedColumnName INTEGER DEFAULT 0,
+        $_exerciseNotesColumnName TEXT,
         FOREIGN KEY ($_exerciseWorkoutIdColumnName) REFERENCES $_workoutTableName ($_workoutIdColumnName) ON DELETE CASCADE
       )
     ''');
@@ -1129,7 +1141,8 @@ class WorkoutService {
       // Only save the exercise if it has at least one valid set
       if (hasValidSets) {
         final exerciseId = await addExercise(
-            workoutId, exercise['name'], exercise['equipment']);
+            workoutId, exercise['name'], exercise['equipment'],
+            notes: exercise['notes'] as String?);
 
         // Save all valid sets for this exercise
         for (final set in validSets) {
@@ -1265,7 +1278,8 @@ class WorkoutService {
     return workoutId < 0;
   }
   // Add a new exercise to a workout
-  Future<int> addExercise(int workoutId, String name, String equipment) async {
+  Future<int> addExercise(int workoutId, String name, String equipment,
+      {String? notes}) async {
     // Handle temporary workouts
     if (isTemporaryWorkout(workoutId)) {
       // Generate a unique negative ID for the temporary exercise using counter and microseconds
@@ -1294,6 +1308,7 @@ class WorkoutService {
         'equipment': equipment,
         'finished': false,
         'sets': [],
+        'notes': notes,
       });
 
       // Update the notifier to trigger UI refresh
@@ -1312,6 +1327,7 @@ class WorkoutService {
         _exerciseNameColumnName: name,
         _exerciseEquipmentColumnName: equipment,
         _exerciseFinishedColumnName: 0, // Not finished by default
+        _exerciseNotesColumnName: notes,
       },
     );
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
@@ -1665,13 +1681,15 @@ class WorkoutService {
 
   // Add updateExercise method to WorkoutService
   Future<void> updateExercise(
-      int exerciseId, String name, String equipment) async {
+      int exerciseId, String name, String equipment,
+      {String? notes}) async {
     final db = await DatabaseService.instance.database;
     await db.update(
       _exerciseTableName,
       {
         _exerciseNameColumnName: name,
         _exerciseEquipmentColumnName: equipment,
+        _exerciseNotesColumnName: notes,
       },
       where: "$_exerciseIdColumnName = ?",
       whereArgs: [exerciseId],
@@ -1851,6 +1869,7 @@ class WorkoutService {
           equipment: exerciseData['equipment'],
           finished: exerciseData['finished'] ?? false,
           sets: sets,
+          notes: exerciseData['notes'] as String?,
         ));
       }
 
@@ -2380,5 +2399,132 @@ class CustomExerciseService {
       limit: 1,
     );
     return result.isNotEmpty;
+  }
+}
+
+// Service for managing sticky notes on exercises
+class ExerciseStickyNoteService {
+  // Singleton instance
+  static final ExerciseStickyNoteService _instance =
+      ExerciseStickyNoteService._internal();
+  factory ExerciseStickyNoteService() => _instance;
+  ExerciseStickyNoteService._internal();
+
+  // Notifier to inform listeners when sticky notes change
+  static final ValueNotifier<bool> stickyNotesUpdatedNotifier =
+      ValueNotifier(false);
+
+  // Table & column names
+  final String _stickyNotesTableName = "exercise_sticky_notes";
+  final String _idColumnName = "id";
+  final String _exerciseNameColumnName =
+      "exercise_name"; // Clean name without markers
+  final String _noteColumnName = "note";
+  final String _createdAtColumnName = "created_at";
+  final String _updatedAtColumnName = "updated_at";
+
+  // Create sticky notes table
+  Future<void> createStickyNotesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_stickyNotesTableName (
+        $_idColumnName INTEGER PRIMARY KEY AUTOINCREMENT,
+        $_exerciseNameColumnName TEXT NOT NULL UNIQUE,
+        $_noteColumnName TEXT NOT NULL,
+        $_createdAtColumnName TEXT NOT NULL,
+        $_updatedAtColumnName TEXT NOT NULL
+      )
+    ''');
+    print('✅ Created exercise_sticky_notes table');
+  }
+
+  // Helper to clean exercise name (remove API_ID and CUSTOM markers)
+  String _cleanExerciseName(String name) {
+    return name
+        .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+        .replaceAll('##CUSTOM##', '')
+        .trim();
+  }
+
+  // Get sticky note for an exercise
+  Future<String?> getStickyNote(String exerciseName) async {
+    final db = await DatabaseService.instance.database;
+    final cleanName = _cleanExerciseName(exerciseName);
+
+    final result = await db.query(
+      _stickyNotesTableName,
+      where: '$_exerciseNameColumnName = ?',
+      whereArgs: [cleanName],
+    );
+
+    if (result.isNotEmpty) {
+      return result.first[_noteColumnName] as String?;
+    }
+    return null;
+  }
+
+  // Set or update sticky note for an exercise
+  Future<void> setStickyNote(String exerciseName, String note) async {
+    final db = await DatabaseService.instance.database;
+    final cleanName = _cleanExerciseName(exerciseName);
+    final now = DateTime.now().toIso8601String();
+
+    // Check if sticky note already exists
+    final existing = await db.query(
+      _stickyNotesTableName,
+      where: '$_exerciseNameColumnName = ?',
+      whereArgs: [cleanName],
+    );
+
+    if (existing.isNotEmpty) {
+      // Update existing sticky note
+      await db.update(
+        _stickyNotesTableName,
+        {
+          _noteColumnName: note,
+          _updatedAtColumnName: now,
+        },
+        where: '$_exerciseNameColumnName = ?',
+        whereArgs: [cleanName],
+      );
+    } else {
+      // Insert new sticky note
+      await db.insert(
+        _stickyNotesTableName,
+        {
+          _exerciseNameColumnName: cleanName,
+          _noteColumnName: note,
+          _createdAtColumnName: now,
+          _updatedAtColumnName: now,
+        },
+      );
+    }
+
+    stickyNotesUpdatedNotifier.value = !stickyNotesUpdatedNotifier.value;
+  }
+
+  // Delete sticky note for an exercise
+  Future<void> deleteStickyNote(String exerciseName) async {
+    final db = await DatabaseService.instance.database;
+    final cleanName = _cleanExerciseName(exerciseName);
+
+    await db.delete(
+      _stickyNotesTableName,
+      where: '$_exerciseNameColumnName = ?',
+      whereArgs: [cleanName],
+    );
+
+    stickyNotesUpdatedNotifier.value = !stickyNotesUpdatedNotifier.value;
+  }
+
+  // Check if an exercise has a sticky note
+  Future<bool> hasStickyNote(String exerciseName) async {
+    final note = await getStickyNote(exerciseName);
+    return note != null && note.isNotEmpty;
+  }
+
+  // Get all sticky notes
+  Future<List<Map<String, dynamic>>> getAllStickyNotes() async {
+    final db = await DatabaseService.instance.database;
+    return await db.query(_stickyNotesTableName);
   }
 }

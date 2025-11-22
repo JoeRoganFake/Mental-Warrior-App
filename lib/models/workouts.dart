@@ -57,6 +57,7 @@ class Exercise {
   final bool
       finished; // Flag to indicate if exercise is part of a finished workout
   final List<ExerciseSet> sets;
+  final String? notes; // Optional notes for this specific exercise instance
 
   Exercise({
     required this.id,
@@ -65,6 +66,7 @@ class Exercise {
     required this.equipment,
     required this.sets,
     this.finished = false,
+    this.notes,
   });
 
   factory Exercise.fromMap(Map<String, dynamic> map, List<ExerciseSet> sets) {
@@ -75,6 +77,7 @@ class Exercise {
       equipment: map['equipment'] as String,
       finished: (map['finished'] as int?) == 1,
       sets: sets,
+      notes: map['notes'] as String?,
     );
   }
 
@@ -85,6 +88,7 @@ class Exercise {
       'name': name,
       'equipment': equipment,
       'finished': finished ? 1 : 0,
+      'notes': notes,
     };
   }
 }

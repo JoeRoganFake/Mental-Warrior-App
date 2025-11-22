@@ -19,6 +19,8 @@ class WorkoutEditPage extends StatefulWidget {
 
 class WorkoutEditPageState extends State<WorkoutEditPage> {
   final WorkoutService _workoutService = WorkoutService();
+  final ExerciseStickyNoteService _stickyNoteService =
+      ExerciseStickyNoteService();
   Workout? _workout;
   bool _isLoading = true;
   bool _hasChanges = false;
@@ -28,6 +30,16 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
   final Map<int, TextEditingController> _repsControllers = {};
   late TextEditingController _workoutNameController;
   late TextEditingController _workoutDateController;
+  
+  // Exercise notes tracking (exerciseId -> note text)
+  final Map<int, String> _exerciseNotes = {};
+
+  // Sticky notes tracking (exerciseId -> whether note is sticky)
+  final Map<int, bool> _isNoteSticky = {};
+
+  // Note editing state
+  final Map<int, bool> _noteEditingState = {};
+  final Map<int, TextEditingController> _noteControllers = {};
 
   // Draft system - track pending operations
   final List<Exercise> _pendingExercisesToAdd = [];
@@ -99,6 +111,24 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
         _workoutNameController.text = _workout!.name;
         _workoutDateController.text = _workout!.date;
         _initializeControllers();
+        
+        // Load notes from exercises
+        for (final exercise in _workout!.exercises) {
+          if (exercise.notes != null && exercise.notes!.isNotEmpty) {
+            _exerciseNotes[exercise.id] = exercise.notes!;
+          }
+
+          // Load sticky note if exists
+          final stickyNote =
+              await _stickyNoteService.getStickyNote(exercise.name);
+          if (stickyNote != null && stickyNote.isNotEmpty) {
+            // If no instance note exists, use sticky note
+            if (!_exerciseNotes.containsKey(exercise.id)) {
+              _exerciseNotes[exercise.id] = stickyNote;
+            }
+            _isNoteSticky[exercise.id] = true;
+          }
+        }
       }
     } catch (e) {
       setState(() {
@@ -142,10 +172,14 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     for (var controller in _repsControllers.values) {
       controller.dispose();
     }
+    for (var controller in _noteControllers.values) {
+      controller.dispose();
+    }
 
     // Clear the maps
     _weightControllers.clear();
     _repsControllers.clear();
+    _noteControllers.clear();
   }
 
   void _markAsChanged() {
@@ -250,6 +284,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
           widget.workoutId,
           tempExercise.name,
           tempExercise.equipment,
+          notes: _exerciseNotes[tempExercise.id],
         );
         tempIdToRealId[tempExercise.id] = realExerciseId;
 
@@ -257,6 +292,18 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
         final exerciseIndex =
             _workout!.exercises.indexWhere((e) => e.id == tempExercise.id);
         if (exerciseIndex != -1) {
+          // Transfer notes from temp ID to real ID
+          if (_exerciseNotes.containsKey(tempExercise.id)) {
+            _exerciseNotes[realExerciseId] = _exerciseNotes[tempExercise.id]!;
+            _exerciseNotes.remove(tempExercise.id);
+          }
+
+          // Transfer sticky status from temp ID to real ID
+          if (_isNoteSticky.containsKey(tempExercise.id)) {
+            _isNoteSticky[realExerciseId] = _isNoteSticky[tempExercise.id]!;
+            _isNoteSticky.remove(tempExercise.id);
+          }
+          
           _workout!.exercises[exerciseIndex] = Exercise(
             id: realExerciseId,
             workoutId: tempExercise.workoutId,
@@ -264,7 +311,21 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             equipment: tempExercise.equipment,
             finished: tempExercise.finished,
             sets: _workout!.exercises[exerciseIndex].sets,
+            notes: _exerciseNotes[realExerciseId],
           );
+          
+          // Update sticky note if marked as sticky
+          if (_isNoteSticky[realExerciseId] == true) {
+            if (_exerciseNotes.containsKey(realExerciseId) &&
+                _exerciseNotes[realExerciseId]!.isNotEmpty) {
+              await _stickyNoteService.setStickyNote(
+                tempExercise.name,
+                _exerciseNotes[realExerciseId]!,
+              );
+            } else {
+              await _stickyNoteService.deleteStickyNote(tempExercise.name);
+            }
+          }
         }
       }
 
@@ -373,13 +434,27 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
           }
         }
 
-        // Update exercise name if needed (existing exercises only)
+        // Update exercise name and notes if needed (existing exercises only)
         if (!tempIdToRealId.containsKey(exercise.id)) {
           await _workoutService.updateExercise(
             exercise.id,
             exercise.name,
             exercise.equipment,
+            notes: _exerciseNotes[exercise.id],
           );
+          
+          // Update sticky note if marked as sticky
+          if (_isNoteSticky[exercise.id] == true) {
+            if (_exerciseNotes.containsKey(exercise.id) &&
+                _exerciseNotes[exercise.id]!.isNotEmpty) {
+              await _stickyNoteService.setStickyNote(
+                exercise.name,
+                _exerciseNotes[exercise.id]!,
+              );
+            } else {
+              await _stickyNoteService.deleteStickyNote(exercise.name);
+            }
+          }
         }
       }
 
@@ -757,6 +832,76 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     );
 
     return shouldDiscard ?? false;
+  }
+
+  // Toggle exercise note visibility
+  void _toggleExerciseNote(int exerciseId) {
+    setState(() {
+      if (_noteEditingState.containsKey(exerciseId)) {
+        // Remove note completely
+        _noteEditingState.remove(exerciseId);
+        _exerciseNotes.remove(exerciseId);
+        if (_noteControllers.containsKey(exerciseId)) {
+          _noteControllers[exerciseId]!.dispose();
+          _noteControllers.remove(exerciseId);
+        }
+      } else {
+        // Start editing a new note
+        _noteEditingState[exerciseId] = true;
+        _noteControllers[exerciseId] = TextEditingController(
+          text: _exerciseNotes[exerciseId] ?? '',
+        );
+      }
+    });
+    _markAsChanged();
+  }
+
+  // Start editing a note
+  void _startEditingNote(int exerciseId) {
+    if (!_noteControllers.containsKey(exerciseId)) {
+      _noteControllers[exerciseId] = TextEditingController(
+        text: _exerciseNotes[exerciseId] ?? '',
+      );
+    }
+    setState(() {
+      _noteEditingState[exerciseId] = true;
+    });
+  }
+
+  // Finish editing a note
+  void _finishEditingNote(int exerciseId) {
+    if (_noteControllers.containsKey(exerciseId)) {
+      final newText = _noteControllers[exerciseId]!.text.trim();
+
+      setState(() {
+        _exerciseNotes[exerciseId] = newText;
+        _noteEditingState[exerciseId] = false;
+      });
+
+      _markAsChanged();
+    }
+  }
+
+  // Remove a note completely
+  void _removeExerciseNote(int exerciseId) {
+    setState(() {
+      _exerciseNotes.remove(exerciseId);
+      _noteEditingState.remove(exerciseId);
+      _isNoteSticky.remove(exerciseId);
+      if (_noteControllers.containsKey(exerciseId)) {
+        _noteControllers[exerciseId]!.dispose();
+        _noteControllers.remove(exerciseId);
+      }
+    });
+    _markAsChanged();
+  }
+
+  // Toggle sticky note status
+  void _toggleStickyNote(int exerciseId) {
+    setState(() {
+      _isNoteSticky[exerciseId] = !(_isNoteSticky[exerciseId] ?? false);
+    });
+    _markAsChanged();
   }
 
   Future<void> _showEditNameDialog() async {
@@ -1158,6 +1303,29 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                 color: _cardColor,
                 icon: Icon(Icons.more_vert, color: _textSecondaryColor),
                 itemBuilder: (context) => [
+                  // Add/Edit note option
+                  PopupMenuItem(
+                    value: 'toggle_note',
+                    child: Row(
+                      children: [
+                        Icon(
+                          _exerciseNotes.containsKey(exercise.id) ||
+                                  _noteEditingState.containsKey(exercise.id)
+                              ? Icons.note
+                              : Icons.note_add,
+                          color: _primaryColor,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          _exerciseNotes.containsKey(exercise.id) ||
+                                  _noteEditingState.containsKey(exercise.id)
+                              ? 'Remove Note'
+                              : 'Add Note',
+                          style: TextStyle(color: _primaryColor),
+                        ),
+                      ],
+                    ),
+                  ),
                   // Edit option for custom exercises
                   if (isCustomExercise)
                     PopupMenuItem(
@@ -1188,7 +1356,9 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                   ),
                 ],
                 onSelected: (value) {
-                  if (value == 'delete_exercise') {
+                  if (value == 'toggle_note') {
+                    _toggleExerciseNote(exercise.id);
+                  } else if (value == 'delete_exercise') {
                     _deleteExercise(exercise.id);
                   } else if (value == 'edit_exercise' && isCustomExercise) {
                     _editCustomExercise(exercise);
@@ -1198,6 +1368,126 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             ],
           ),
           const SizedBox(height: 16),
+          
+          // Notes section
+          if (_exerciseNotes.containsKey(exercise.id) ||
+              _noteEditingState.containsKey(exercise.id)) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _primaryColor.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.note,
+                        color: _primaryColor,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _isNoteSticky[exercise.id] == true
+                              ? 'Sticky Note'
+                              : 'Exercise Note',
+                          style: TextStyle(
+                            color: _primaryColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      // Pin icon to toggle sticky status
+                      IconButton(
+                        icon: Icon(
+                          _isNoteSticky[exercise.id] == true
+                              ? Icons.push_pin
+                              : Icons.push_pin_outlined,
+                          size: 18,
+                          color: _isNoteSticky[exercise.id] == true
+                              ? Colors.amber
+                              : _textSecondaryColor,
+                        ),
+                        onPressed: () => _toggleStickyNote(exercise.id),
+                        visualDensity: VisualDensity.compact,
+                        tooltip: _isNoteSticky[exercise.id] == true
+                            ? 'Unpin note (make instance-specific)'
+                            : 'Pin note (save to exercise)',
+                      ),
+                      if (_noteEditingState[exercise.id] == true) ...[
+                        TextButton(
+                          onPressed: () => _finishEditingNote(exercise.id),
+                          child: Text(
+                            'Done',
+                            style: TextStyle(color: _successColor),
+                          ),
+                        ),
+                      ] else ...[
+                        IconButton(
+                          icon:
+                              Icon(Icons.edit, size: 18, color: _primaryColor),
+                          onPressed: () => _startEditingNote(exercise.id),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                      IconButton(
+                        icon: Icon(Icons.close, size: 18, color: _dangerColor),
+                        onPressed: () => _removeExerciseNote(exercise.id),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (_noteEditingState[exercise.id] == true)
+                    TextField(
+                      controller: _noteControllers[exercise.id],
+                      style: TextStyle(color: _textPrimaryColor, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Add a note for this exercise...',
+                        hintStyle: TextStyle(
+                          color: _textSecondaryColor.withOpacity(0.5),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: _primaryColor.withOpacity(0.3),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(
+                            color: _primaryColor,
+                            width: 2,
+                          ),
+                        ),
+                        filled: true,
+                        fillColor: _inputBgColor,
+                        contentPadding: const EdgeInsets.all(12),
+                      ),
+                      maxLines: 3,
+                      onSubmitted: (_) => _finishEditingNote(exercise.id),
+                    )
+                  else
+                    Text(
+                      _exerciseNotes[exercise.id] ?? '',
+                      style: TextStyle(
+                        color: _textPrimaryColor,
+                        fontSize: 14,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           
           // Sets section
           if (exercise.sets.isNotEmpty) ...[

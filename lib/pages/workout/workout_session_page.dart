@@ -34,6 +34,8 @@ class WorkoutSessionPage extends StatefulWidget {
 class WorkoutSessionPageState extends State<WorkoutSessionPage>
     with WidgetsBindingObserver {
   final WorkoutService _workoutService = WorkoutService();
+  final ExerciseStickyNoteService _stickyNoteService =
+      ExerciseStickyNoteService();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   Workout? _workout;
@@ -50,6 +52,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   
   // Exercise notes tracking (exerciseId -> note text)
   final Map<int, String> _exerciseNotes = {};
+  
+  // Sticky notes tracking (exerciseId -> whether note is sticky)
+  final Map<int, bool> _isNoteSticky = {};
 
   // Note editing state
   final Map<int, bool> _noteEditingState = {};
@@ -465,7 +470,22 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 name: exerciseData['name'] ?? 'Exercise',
                 equipment: exerciseData['equipment'] ?? '',
                 sets: sets,
+                notes: exerciseData['notes'] as String?,
               ));
+              
+              // Restore notes to the tracking map
+              if (exerciseData['notes'] != null &&
+                  exerciseData['notes'] is String) {
+                _exerciseNotes[exerciseId] = exerciseData['notes'] as String;
+              }
+
+              // Check if this exercise has a sticky note
+              final exerciseName = exerciseData['name'] ?? 'Exercise';
+              final hasStickyNote =
+                  await _stickyNoteService.hasStickyNote(exerciseName);
+              if (hasStickyNote) {
+                _isNoteSticky[exerciseId] = true;
+              }
             }
           }
 
@@ -522,7 +542,22 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   name: exerciseData['name'] ?? 'Exercise',
                   equipment: exerciseData['equipment'] ?? '',
                   sets: sets,
+                  notes: exerciseData['notes'] as String?,
                 ));
+                
+                // Load notes into the tracking map
+                if (exerciseData['notes'] != null &&
+                    exerciseData['notes'] is String) {
+                  _exerciseNotes[exerciseId] = exerciseData['notes'] as String;
+                }
+
+                // Check if this exercise has a sticky note
+                final exerciseName = exerciseData['name'] ?? 'Exercise';
+                final hasStickyNote =
+                    await _stickyNoteService.hasStickyNote(exerciseName);
+                if (hasStickyNote) {
+                  _isNoteSticky[exerciseId] = true;
+                }
               }
             }
 
@@ -541,6 +576,22 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         workout = await _workoutService.getWorkout(widget.workoutId);
         print(
             'LOAD DEBUG: Loaded workout from database - exercises count: ${workout?.exercises.length ?? 0}');
+        
+        // Load notes from database exercises into tracking map
+        if (workout != null) {
+          for (var exercise in workout.exercises) {
+            if (exercise.notes != null && exercise.notes!.isNotEmpty) {
+              _exerciseNotes[exercise.id] = exercise.notes!;
+            }
+
+            // Check if this exercise has a sticky note
+            final hasStickyNote =
+                await _stickyNoteService.hasStickyNote(exercise.name);
+            if (hasStickyNote) {
+              _isNoteSticky[exercise.id] = true;
+            }
+          }
+        }
       }
 
       if (workout != null) {
@@ -1238,6 +1289,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             exerciseName,
             equipment,
           );
+          
+          // Load sticky note for this exercise if it exists
+          final stickyNote =
+              await _stickyNoteService.getStickyNote(exerciseName);
+          if (stickyNote != null && stickyNote.isNotEmpty) {
+            _exerciseNotes[exerciseId] = stickyNote;
+            _isNoteSticky[exerciseId] = true;
+          }
 
           // Store the API ID and custom flag in the exercise name with special markers
           if (apiId.isNotEmpty || isCustom) {
@@ -2453,6 +2512,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       // Skip if exercise not found
       if (exerciseData.isEmpty) continue;
       
+      // Update exercise notes if present
+      if (_exerciseNotes.containsKey(exercise.id) &&
+          _exerciseNotes[exercise.id]!.isNotEmpty) {
+        exerciseData['notes'] = _exerciseNotes[exercise.id];
+      } else {
+        exerciseData['notes'] = null;
+      }
+      
       // Update each set
       for (var set in exercise.sets) {
         var setsList =
@@ -2505,6 +2572,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         'id': exercise.id,
         'name': exercise.name,
         'equipment': exercise.equipment,
+        'notes':
+            _exerciseNotes[exercise.id], // Include notes from the tracking map
         'sets': [],
       };
       
@@ -2766,6 +2835,19 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       
       // Get the exercise reference
       final exercise = exerciseMap[exerciseId]!;
+      
+      // Restore exercise notes if present
+      if (exerciseData.containsKey('notes') && exerciseData['notes'] != null) {
+        final String note = exerciseData['notes'] as String;
+        _exerciseNotes[exerciseId] = note;
+
+        // Initialize note controller if it doesn't exist
+        if (!_noteControllers.containsKey(exerciseId)) {
+          _noteControllers[exerciseId] = TextEditingController(text: note);
+        } else {
+          _noteControllers[exerciseId]!.text = note;
+        }
+      }
 
       // Map sets by ID for quick lookup
       final Map<int, ExerciseSet> setMap = {};
@@ -3490,6 +3572,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                             return {
                               'name': exercise.name,
                               'equipment': exercise.equipment,
+                                'notes': _exerciseNotes[exercise
+                                    .id], // Include notes from the tracking map
                                 'sets': exercise.sets.where((set) {
                                   // Include sets that have valid data (weight >= 0 AND reps >= 0) OR are completed
                                   // 0 is a valid value for both weight and reps
@@ -3909,6 +3993,25 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                           ),
                                         ),
                                       ),
+                              ),
+                              // Pin icon to toggle sticky status
+                              IconButton(
+                                icon: Icon(
+                                  _isNoteSticky[exercise.id] == true
+                                      ? Icons.push_pin
+                                      : Icons.push_pin_outlined,
+                                  size: 16,
+                                  color: _isNoteSticky[exercise.id] == true
+                                      ? Colors.amber
+                                      : _textSecondaryColor,
+                                ),
+                                onPressed: () => _toggleStickyNote(exercise.id),
+                                visualDensity: VisualDensity.compact,
+                                tooltip: _isNoteSticky[exercise.id] == true
+                                    ? 'Sticky note (saved to exercise)'
+                                    : 'Instance note (tap to make sticky)',
+                                padding: EdgeInsets.zero,
+                                constraints: BoxConstraints(),
                               ),
                             ],
                           ),
@@ -4825,7 +4928,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   }
 
   // Finish editing a note
-  void _finishEditingNote(int exerciseId) {
+  void _finishEditingNote(int exerciseId) async {
     if (_noteControllers.containsKey(exerciseId)) {
       final newText = _noteControllers[exerciseId]!.text.trim();
 
@@ -4834,19 +4937,73 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         _exerciseNotes[exerciseId] = newText;
         _noteEditingState[exerciseId] = false;
       });
+      
+      // Update sticky note if marked as sticky
+      if (_isNoteSticky[exerciseId] == true && _workout != null) {
+        final exercise =
+            _workout!.exercises.firstWhere((e) => e.id == exerciseId);
+        if (newText.isNotEmpty) {
+          await _stickyNoteService.setStickyNote(exercise.name, newText);
+        } else {
+          await _stickyNoteService.deleteStickyNote(exercise.name);
+        }
+      }
+
+      // Update temporary workout data to persist the note
+      _updateTemporaryWorkoutData();
     }
   }
 
   // Remove a note completely
-  void _removeExerciseNote(int exerciseId) {
+  void _removeExerciseNote(int exerciseId) async {
     setState(() {
       _exerciseNotes.remove(exerciseId);
       _noteEditingState.remove(exerciseId);
+      _isNoteSticky.remove(exerciseId);
       if (_noteControllers.containsKey(exerciseId)) {
         _noteControllers[exerciseId]!.dispose();
         _noteControllers.remove(exerciseId);
       }
     });
+    
+    // Delete sticky note if it exists
+    if (_workout != null) {
+      try {
+        final exercise =
+            _workout!.exercises.firstWhere((e) => e.id == exerciseId);
+        await _stickyNoteService.deleteStickyNote(exercise.name);
+      } catch (e) {
+        // Exercise not found, ignore
+      }
+    }
+
+    // Update temporary workout data to persist the removal
+    _updateTemporaryWorkoutData();
+  }
+
+  // Toggle sticky note status
+  void _toggleStickyNote(int exerciseId) async {
+    final wasSticky = _isNoteSticky[exerciseId] ?? false;
+
+    setState(() {
+      _isNoteSticky[exerciseId] = !wasSticky;
+    });
+
+    // If making sticky and note exists, save to sticky notes
+    if (!wasSticky && _workout != null) {
+      final exercise =
+          _workout!.exercises.firstWhere((e) => e.id == exerciseId);
+      final noteText = _exerciseNotes[exerciseId];
+      if (noteText != null && noteText.isNotEmpty) {
+        await _stickyNoteService.setStickyNote(exercise.name, noteText);
+      }
+    }
+    // If unsticking, remove from sticky notes
+    else if (wasSticky && _workout != null) {
+      final exercise =
+          _workout!.exercises.firstWhere((e) => e.id == exerciseId);
+      await _stickyNoteService.deleteStickyNote(exercise.name);
+    }
   }
 
   // Shows "Empty workout discarded" notification

@@ -647,6 +647,41 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
             ],
           ),
           const SizedBox(height: 16),
+            if (exercise.notes != null && exercise.notes!.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _primaryColor.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.note,
+                      color: _primaryColor,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        exercise.notes!,
+                        style: TextStyle(
+                          color: _textPrimaryColor,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
           if (allSets.isNotEmpty) ...[
             Text(
               'Sets (${allSets.length})',

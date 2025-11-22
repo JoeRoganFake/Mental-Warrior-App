@@ -10,11 +10,13 @@ class ExerciseHistoryEntry {
   final String workoutName;
   final String date;
   final List<ExerciseSet> sets;
+  final String? notes; // Add notes field
 
   ExerciseHistoryEntry({
     required this.workoutName,
     required this.date,
     required this.sets,
+    this.notes,
   });
 }
 
@@ -30,6 +32,8 @@ class ExerciseDetailPage extends StatefulWidget {
 
 class _ExerciseDetailPageState extends State<ExerciseDetailPage>
     with SingleTickerProviderStateMixin {
+  final ExerciseStickyNoteService _stickyNoteService =
+      ExerciseStickyNoteService();
   Map<String, dynamic>? _exercise;
   int _currentImageIndex = 0;
   final PageController _pageController = PageController();
@@ -38,6 +42,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
   late TabController _tabController;
   List<ExerciseHistoryEntry> _exerciseHistory = [];
   bool _isLoadingHistory = false;
+  String? _stickyNote;
 
   @override
   void initState() {
@@ -113,13 +118,16 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
     
     // Only process once when dependencies are first available
     if (!_didInitialLoad) {
-      _loadExerciseData();
-      _loadExerciseHistory();
       _didInitialLoad = true;
+      // Load exercise data first (includes sticky note)
+      _loadExerciseData().then((_) {
+        // Then load history after exercise data is ready
+        _loadExerciseHistory();
+      });
     }
   }
   
-  void _loadExerciseData() {
+  Future<void> _loadExerciseData() async {
     if (_exercisesList == null) return;
     
     final List<dynamic> list = _exercisesList!;
@@ -263,6 +271,21 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
       if (_exercise != null && _exercise!.isEmpty) {
         _exercise = null; // if the map is empty (exercise not found), set to null
       }
+      
+      // Load sticky note if exercise is found (before setState to avoid delay)
+      if (_exercise != null && _exercise!['name'] != null) {
+        final stickyNote = await _stickyNoteService
+            .getStickyNote(_exercise!['name'] as String);
+        _stickyNote = stickyNote;
+        print('📌 Sticky note loaded: ${stickyNote ?? "(none)"}');
+      }
+
+      // Update state once with both exercise and sticky note
+      if (mounted) {
+        setState(() {
+          // State updated
+        });
+      }
     } catch (e) {
       print('❌ Error loading exercise "${widget.exerciseId}": $e');
       // Emergency fallback - use the first exercise to prevent crashes
@@ -274,7 +297,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
       }
     }
   }
-
+  
   // Load exercise history from database
   Future<void> _loadExerciseHistory() async {
     if (_exercise == null) return;
@@ -330,6 +353,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                 workoutName: workout.name,
                 date: workout.date,
                 sets: exercise.sets, // Include all sets from finished workouts
+                notes: exercise.notes, // Include notes
               ));
               print('  ➕ Added to history with ${exercise.sets.length} sets');
             } else {
@@ -560,6 +584,63 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
               ],
             ),
           const SizedBox(height: 24),
+          // Sticky Note Section
+          if (_stickyNote != null && _stickyNote!.isNotEmpty)
+            Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.amber.withValues(alpha: 0.15),
+                        Colors.amber.withValues(alpha: 0.08),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.amber.withValues(alpha: 0.4),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.push_pin,
+                            color: Colors.amber.shade700,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Sticky Note',
+                            style: TextStyle(
+                              color: Colors.amber.shade700,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _stickyNote!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
           // Primary Muscles with card styling
           _buildInfoCard(
             icon: Icons.fitness_center,
@@ -1083,6 +1164,44 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                   ),
                 ),
                 const SizedBox(height: 16),
+
+                // Display notes if available
+                if (historyEntry.notes != null &&
+                    historyEntry.notes!.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3F8EFC).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF3F8EFC).withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.note,
+                          color: Color(0xFF3F8EFC),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            historyEntry.notes!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
 
                 // Sets information with improved design
                 ...historyEntry.sets.asMap().entries.map((entry) {
