@@ -3915,24 +3915,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         ),
                       ),
                     ),
-                    // Pin button (outside of Dismissible)
-                    GestureDetector(
-                      onTap: () {
-                        // TODO: Pin functionality to be implemented
-                        print('Pin clicked for exercise ${exercise.id}');
-                      },
-                      behavior: HitTestBehavior.opaque,
-                      child: Container(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                        color: Colors.transparent, // Ensure hit testing works
-                        child: Icon(
-                          Icons.push_pin,
-                          color: _textSecondaryColor,
-                          size: 18,
-                        ),
-                      ),
-                    ),
                   ],
                 ),
               ),

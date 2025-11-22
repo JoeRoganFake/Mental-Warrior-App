@@ -45,7 +45,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadExerciseData();
   }
 
@@ -336,6 +336,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   Tab(text: 'ABOUT'),
                   Tab(text: 'HISTORY'),
                   Tab(text: 'CHARTS'),
+                  Tab(text: 'RECORDS'),
                 ],
               )
             : null,
@@ -393,6 +394,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                     _buildAboutTab(),
                     _buildHistoryTab(),
                     _buildChartsTab(),
+                    _buildRecordsTab(),
                   ],
                 ),
     );
@@ -1520,7 +1522,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                     ),
                   ),
                   child: Text(
-                    '${data.last.y.toStringAsFixed(unit == 'reps' ? 0 : 1)} $unit',
+                    '${data.map((spot) => spot.y).reduce((a, b) => a > b ? a : b).toStringAsFixed(unit == 'reps' ? 0 : 1)} $unit',
                     style: TextStyle(
                       color: color,
                       fontSize: 14,
@@ -1734,5 +1736,271 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
       'December'
     ];
     return months[month - 1];
+  }
+
+  Widget _buildRecordsTab() {
+    if (_isLoadingHistory) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              color: Color(0xFF3F8EFC),
+            ),
+            SizedBox(height: 20),
+            Text(
+              'Loading records...',
+              style: TextStyle(
+                fontSize: 16,
+                color: Color(0xFFBDBDBD),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_exerciseHistory.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF3F8EFC).withValues(alpha: 0.1),
+                      const Color(0xFF3F8EFC).withValues(alpha: 0.05),
+                    ],
+                  ),
+                ),
+                child: Icon(
+                  Icons.emoji_events,
+                  size: 64,
+                  color: Colors.grey[500],
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'No Records Yet',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Complete and save workouts with this exercise to track your personal records.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.grey[400],
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Calculate personal records
+    double maxVolumeAdded = 0;
+    int maxReps = 0;
+    double maxWeightAdded = 0;
+    int totalReps = 0;
+    double totalWeightAdded = 0;
+
+    for (var historyEntry in _exerciseHistory) {
+      double sessionVolume = 0;
+      for (var set in historyEntry.sets) {
+        sessionVolume += set.weight * set.reps;
+        totalWeightAdded += set.weight * set.reps;
+        totalReps += set.reps;
+
+        if (set.reps > maxReps) {
+          maxReps = set.reps;
+        }
+        if (set.weight > maxWeightAdded) {
+          maxWeightAdded = set.weight;
+        }
+      }
+      if (sessionVolume > maxVolumeAdded) {
+        maxVolumeAdded = sessionVolume;
+      }
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Personal Records Section
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF26272B),
+                  Color(0xFF1E1F22),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.grey[800]!,
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF9500),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'PERSONAL RECORDS',
+                      style: TextStyle(
+                        color: Color(0xFFBDBDBD),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildRecordItem(
+                  'Max volume added',
+                  '+${maxVolumeAdded.round()} kg',
+                ),
+                const SizedBox(height: 16),
+                _buildRecordItem(
+                  'Max reps',
+                  '$maxReps reps',
+                ),
+                const SizedBox(height: 16),
+                _buildRecordItem(
+                  'Max weight added',
+                  '+${maxWeightAdded.round()} kg',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Lifetime Stats Section
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [
+                  Color(0xFF26272B),
+                  Color(0xFF1E1F22),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.grey[800]!,
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3F8EFC),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'LIFETIME STATS',
+                      style: TextStyle(
+                        color: Color(0xFFBDBDBD),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildRecordItem(
+                  'Total reps',
+                  '$totalReps reps',
+                ),
+                const SizedBox(height: 16),
+                _buildRecordItem(
+                  'Total weight added',
+                  '+${totalWeightAdded.round()} kg',
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecordItem(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
   }
 }
