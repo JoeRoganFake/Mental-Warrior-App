@@ -87,11 +87,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   // Flag to track if workout is being completed/discarded
   bool _isCompleting = false;
   
+  // Flag to track when we're updating data internally (to avoid triggering reload)
+  bool _isUpdatingInternally = false;
+  
   // Cache for previous exercise history to show as greyed out placeholders
   final Map<String, List<ExerciseSet>> _exerciseHistoryCache = {};
   
   // Listener for temp workout data changes
   void _onTempWorkoutDataChanged() {
+    // Skip if we're updating data internally (e.g., typing in a text field)
+    if (_isUpdatingInternally) return;
+    
     // Only reload if this is still the active temporary workout and we're not disposing
     if (widget.isTemporary && !_isDisposing && mounted) {
       final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
@@ -1269,6 +1275,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         _isLoading = true;
       });
 
+      // Temporarily remove the listener to prevent multiple reloads during bulk add
+      if (widget.isTemporary) {
+        WorkoutService.tempWorkoutsNotifier
+            .removeListener(_onTempWorkoutDataChanged);
+      }
+
       try {
         // Add all selected exercises
         for (final exerciseData in result) {
@@ -1407,6 +1419,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           setState(() {
             _isLoading = false;
           });
+        }
+      } finally {
+        // Re-add the listener after bulk add is complete
+        if (widget.isTemporary) {
+          WorkoutService.tempWorkoutsNotifier
+              .addListener(_onTempWorkoutDataChanged);
         }
       }
     } else if (result != null && result is Map<String, dynamic>) {
@@ -1879,33 +1897,37 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     int reps,
     int restTime,
   ) async {
-    // Validate that weight is >= 0 (can be decimal) and reps is >= 0 (must be integer)
-    // No need to block zero values as per new requirements
-    if (weight < 0 || reps < 0) {
-      // If invalid values, don't update the database
-      if (mounted) {
-        // Reset controller values if needed
-        for (var exercise in _workout!.exercises) {
-          for (var set in exercise.sets) {
-            if (set.id == setId) {
-              if (weight < 0) {
-                _weightControllers[set.id]?.text = set.weight >= 0
-                    ? ((set.weight % 1 == 0)
-                        ? set.weight.toInt().toString()
-                        : set.weight.toString())
-                    : '';
+    // Set flag to prevent listener from triggering a reload
+    _isUpdatingInternally = true;
+
+    try {
+      // Validate that weight is >= 0 (can be decimal) and reps is >= 0 (must be integer)
+      // No need to block zero values as per new requirements
+      if (weight < 0 || reps < 0) {
+        // If invalid values, don't update the database
+        if (mounted) {
+          // Reset controller values if needed
+          for (var exercise in _workout!.exercises) {
+            for (var set in exercise.sets) {
+              if (set.id == setId) {
+                if (weight < 0) {
+                  _weightControllers[set.id]?.text = set.weight >= 0
+                      ? ((set.weight % 1 == 0)
+                          ? set.weight.toInt().toString()
+                          : set.weight.toString())
+                      : '';
+                }
+                if (reps < 0) {
+                  _repsControllers[set.id]?.text =
+                      set.reps >= 0 ? set.reps.toString() : '';
+                }
+                break;
               }
-              if (reps < 0) {
-                _repsControllers[set.id]?.text =
-                    set.reps >= 0 ? set.reps.toString() : '';
-              }
-              break;
             }
           }
         }
+        return;
       }
-      return;
-    }
     
     // First, update the local state to avoid UI freeze
     if (mounted) {
@@ -1967,6 +1989,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     
     // Auto-save the workout state after updating set data
     _updateActiveNotifier();
+    } finally {
+      // Reset the flag after update is complete
+      _isUpdatingInternally = false;
+    }
   }
 
   /// Comprehensive cleanup when finishing workout
