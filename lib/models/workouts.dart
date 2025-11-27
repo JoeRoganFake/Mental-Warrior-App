@@ -58,6 +58,7 @@ class Exercise {
       finished; // Flag to indicate if exercise is part of a finished workout
   final List<ExerciseSet> sets;
   final String? notes; // Optional notes for this specific exercise instance
+  final String? supersetGroup; // Group ID for exercises in the same superset
 
   Exercise({
     required this.id,
@@ -67,6 +68,7 @@ class Exercise {
     required this.sets,
     this.finished = false,
     this.notes,
+    this.supersetGroup,
   });
 
   factory Exercise.fromMap(Map<String, dynamic> map, List<ExerciseSet> sets) {
@@ -78,6 +80,7 @@ class Exercise {
       finished: (map['finished'] as int?) == 1,
       sets: sets,
       notes: map['notes'] as String?,
+      supersetGroup: map['superset_group'] as String?,
     );
   }
 
@@ -89,6 +92,7 @@ class Exercise {
       'equipment': equipment,
       'finished': finished ? 1 : 0,
       'notes': notes,
+      'superset_group': supersetGroup,
     };
   }
 }

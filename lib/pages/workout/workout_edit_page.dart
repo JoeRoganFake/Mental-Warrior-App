@@ -3,6 +3,7 @@ import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
 import 'package:mental_warior/pages/workout/create_exercise_page.dart';
+import 'package:mental_warior/pages/workout/superset_selection_page.dart';
 
 
 class WorkoutEditPage extends StatefulWidget {
@@ -47,6 +48,24 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
   final Set<int> _pendingExercisesToDelete = {};
   final Set<int> _pendingSetsToDelete = {};
   int _nextTempId = -1; // Negative IDs for temporary items
+
+  // Superset tracking (exerciseId -> supersetId)
+  final Map<int, String> _exerciseSupersets = {};
+  int _supersetCounter = 0;
+
+  // Superset colors (matching workout_session_page)
+  final List<Color> _supersetColors = [
+    const Color(0xFFE91E63), // Pink
+    const Color(0xFF9C27B0), // Purple
+    const Color(0xFF673AB7), // Deep Purple
+    const Color(0xFF3F51B5), // Indigo
+    const Color(0xFF2196F3), // Blue
+    const Color(0xFF00BCD4), // Cyan
+    const Color(0xFF009688), // Teal
+    const Color(0xFF4CAF50), // Green
+    const Color(0xFFFF9800), // Orange
+    const Color(0xFFFF5722), // Deep Orange
+  ];
 
   // Theme colors (matching workout session page)
   final Color _backgroundColor = const Color(0xFF1A1B1E); // Dark background
@@ -93,6 +112,10 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     _pendingExercisesToDelete.clear();
     _pendingSetsToDelete.clear();
     
+    // Clear superset tracking
+    _exerciseSupersets.clear();
+    _supersetCounter = 0;
+    
     setState(() {
       _isLoading = true;
       _workout = null; // Clear current workout to force complete refresh
@@ -112,10 +135,18 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
         _workoutDateController.text = _workout!.date;
         _initializeControllers();
         
-        // Load notes from exercises
+        // Load notes and supersets from exercises
+        final Set<String> existingSupersetIds = {};
         for (final exercise in _workout!.exercises) {
           if (exercise.notes != null && exercise.notes!.isNotEmpty) {
             _exerciseNotes[exercise.id] = exercise.notes!;
+          }
+          
+          // Load superset data
+          if (exercise.supersetGroup != null &&
+              exercise.supersetGroup!.isNotEmpty) {
+            _exerciseSupersets[exercise.id] = exercise.supersetGroup!;
+            existingSupersetIds.add(exercise.supersetGroup!);
           }
 
           // Load sticky note if exists
@@ -128,6 +159,22 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             }
             _isNoteSticky[exercise.id] = true;
           }
+        }
+        
+        // Set superset counter based on existing supersets
+        for (final supersetId in existingSupersetIds) {
+          final match = RegExp(r'superset_(\d+)').firstMatch(supersetId);
+          if (match != null) {
+            final num = int.tryParse(match.group(1)!) ?? 0;
+            if (num >= _supersetCounter) {
+              _supersetCounter = num + 1;
+            }
+          }
+        }
+
+        // Trigger rebuild after loading all data
+        if (mounted) {
+          setState(() {});
         }
       }
     } catch (e) {
@@ -280,11 +327,15 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
       // 3. Add pending exercises
       final Map<int, int> tempIdToRealId = {};
       for (final tempExercise in _pendingExercisesToAdd) {
+        // Get superset group for this temp exercise
+        final supersetGroup = _exerciseSupersets[tempExercise.id];
+        
         final realExerciseId = await _workoutService.addExercise(
           widget.workoutId,
           tempExercise.name,
           tempExercise.equipment,
           notes: _exerciseNotes[tempExercise.id],
+          supersetGroup: supersetGroup,
         );
         tempIdToRealId[tempExercise.id] = realExerciseId;
 
@@ -304,6 +355,13 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             _isNoteSticky.remove(tempExercise.id);
           }
           
+          // Transfer superset from temp ID to real ID
+          if (_exerciseSupersets.containsKey(tempExercise.id)) {
+            _exerciseSupersets[realExerciseId] =
+                _exerciseSupersets[tempExercise.id]!;
+            _exerciseSupersets.remove(tempExercise.id);
+          }
+          
           _workout!.exercises[exerciseIndex] = Exercise(
             id: realExerciseId,
             workoutId: tempExercise.workoutId,
@@ -312,6 +370,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             finished: tempExercise.finished,
             sets: _workout!.exercises[exerciseIndex].sets,
             notes: _exerciseNotes[realExerciseId],
+            supersetGroup: supersetGroup,
           );
           
           // Update sticky note if marked as sticky
@@ -441,6 +500,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             exercise.name,
             exercise.equipment,
             notes: _exerciseNotes[exercise.id],
+            supersetGroup: _exerciseSupersets[exercise.id],
           );
           
           // Update sticky note if marked as sticky
@@ -904,6 +964,67 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     _markAsChanged();
   }
 
+  // Get color for a superset based on its ID
+  Color _getColorForSuperset(String supersetId) {
+    // Extract the number from superset_X format
+    final match = RegExp(r'superset_(\d+)').firstMatch(supersetId);
+    if (match != null) {
+      final num = int.tryParse(match.group(1)!) ?? 0;
+      return _supersetColors[num % _supersetColors.length];
+    }
+    return _supersetColors[0];
+  }
+
+  // Open superset selection page
+  Future<void> _openSupersetSelection(int currentExerciseId) async {
+    if (_workout == null) return;
+
+    final result = await Navigator.push<List<int>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SupersetSelectionPage(
+          exercises: _workout!.exercises,
+          currentExerciseId: currentExerciseId,
+          existingSupersets: Map<int, String>.from(_exerciseSupersets),
+          getColorForSuperset: _getColorForSuperset,
+        ),
+      ),
+    );
+
+    if (result != null && result.isNotEmpty) {
+      setState(() {
+        // Generate new superset ID
+        final supersetId = 'superset_$_supersetCounter';
+        _supersetCounter++;
+
+        // Add all selected exercises to this superset
+        for (final exerciseId in result) {
+          _exerciseSupersets[exerciseId] = supersetId;
+        }
+      });
+      _markAsChanged();
+    }
+  }
+
+  // Remove exercise from superset
+  void _removeFromSuperset(int exerciseId) {
+    final supersetId = _exerciseSupersets[exerciseId];
+    if (supersetId == null) return;
+
+    setState(() {
+      _exerciseSupersets.remove(exerciseId);
+
+      // If only one exercise remains in the superset, remove it too
+      final remainingInSuperset = _exerciseSupersets.entries
+          .where((e) => e.value == supersetId)
+          .toList();
+      if (remainingInSuperset.length == 1) {
+        _exerciseSupersets.remove(remainingInSuperset.first.key);
+      }
+    });
+    _markAsChanged();
+  }
+
   Future<void> _showEditNameDialog() async {
     final dialogController = TextEditingController(text: _workout!.name);
     
@@ -1161,7 +1282,45 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                                 itemCount: _workout!.exercises.length,
                                 itemBuilder: (context, index) {
                                   final exercise = _workout!.exercises[index];
-                                  return _buildExerciseCard(exercise);
+                                  final supersetId =
+                                      _exerciseSupersets[exercise.id];
+
+                                  // Calculate superset position
+                                  String? supersetPosition;
+                                  if (supersetId != null) {
+                                    final supersetExercises = _workout!
+                                        .exercises
+                                        .where((e) =>
+                                            _exerciseSupersets[e.id] ==
+                                            supersetId)
+                                        .toList();
+                                    final posInSuperset =
+                                        supersetExercises.indexOf(exercise);
+                                    if (supersetExercises.length == 1) {
+                                      supersetPosition = 'only';
+                                    } else if (posInSuperset == 0) {
+                                      supersetPosition = 'first';
+                                    } else if (posInSuperset ==
+                                        supersetExercises.length - 1) {
+                                      supersetPosition = 'last';
+                                    } else {
+                                      supersetPosition = 'middle';
+                                    }
+                                  }
+
+                                  return Padding(
+                                    padding: EdgeInsets.only(
+                                      bottom: supersetId != null &&
+                                              supersetPosition != 'last' &&
+                                              supersetPosition != 'only'
+                                          ? 2
+                                          : 16,
+                                    ),
+                                    child: _buildExerciseCard(
+                                      exercise,
+                                      supersetPosition: supersetPosition,
+                                    ),
+                                  );
                                 },
                               ),
                       ),
@@ -1178,25 +1337,83 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     );
   }
 
-  Widget _buildExerciseCard(Exercise exercise) {
+  Widget _buildExerciseCard(Exercise exercise, {String? supersetPosition}) {
     // Determine if this is a custom exercise
     final bool isCustomExercise = exercise.name.contains('##API_ID:custom_');
     
-    return Container(
+    // Superset info
+    final supersetId = _exerciseSupersets[exercise.id];
+    final isInSuperset = supersetId != null;
+    final supersetColor =
+        isInSuperset ? _getColorForSuperset(supersetId) : null;
+
+    // Determine border radius based on superset position
+    BorderRadius cardBorderRadius;
+    if (isInSuperset) {
+      switch (supersetPosition) {
+        case 'first':
+          cardBorderRadius = const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+            bottomLeft: Radius.circular(4),
+            bottomRight: Radius.circular(4),
+          );
+          break;
+        case 'last':
+          cardBorderRadius = const BorderRadius.only(
+            topLeft: Radius.circular(4),
+            topRight: Radius.circular(4),
+            bottomLeft: Radius.circular(16),
+            bottomRight: Radius.circular(16),
+          );
+          break;
+        case 'middle':
+          cardBorderRadius = BorderRadius.circular(4);
+          break;
+        default:
+          cardBorderRadius = BorderRadius.circular(16);
+      }
+    } else {
+      cardBorderRadius = BorderRadius.circular(16);
+    }
+
+    final cardWidget = Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: cardBorderRadius,
         border: Border.all(
-          color: isCustomExercise
-              ? Colors.orange.withOpacity(0.3)
-              : _textSecondaryColor.withOpacity(0.1),
-          width: 1,
+          color: isInSuperset
+              ? supersetColor!.withOpacity(0.3)
+              : isCustomExercise
+                  ? Colors.orange.withOpacity(0.3)
+                  : _textSecondaryColor.withOpacity(0.1),
+          width: isInSuperset ? 2 : 1,
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Superset label for first exercise
+          if (isInSuperset && supersetPosition == 'first') ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: supersetColor!.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                'SUPERSET',
+                style: TextStyle(
+                  color: supersetColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           // Exercise header (similar to session page)
           Row(
             children: [
@@ -1303,6 +1520,35 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                 color: _cardColor,
                 icon: Icon(Icons.more_vert, color: _textSecondaryColor),
                 itemBuilder: (context) => [
+                  // Superset options
+                  if (isInSuperset)
+                    PopupMenuItem(
+                      value: 'remove_superset',
+                      child: Row(
+                        children: [
+                          Icon(Icons.link_off, color: supersetColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Remove from Superset',
+                            style: TextStyle(color: supersetColor),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    PopupMenuItem(
+                      value: 'create_superset',
+                      child: Row(
+                        children: [
+                          Icon(Icons.link, color: _primaryColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Create Superset',
+                            style: TextStyle(color: _primaryColor),
+                          ),
+                        ],
+                      ),
+                    ),
                   // Add/Edit note option
                   PopupMenuItem(
                     value: 'toggle_note',
@@ -1362,6 +1608,10 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                     _deleteExercise(exercise.id);
                   } else if (value == 'edit_exercise' && isCustomExercise) {
                     _editCustomExercise(exercise);
+                  } else if (value == 'create_superset') {
+                    _openSupersetSelection(exercise.id);
+                  } else if (value == 'remove_superset') {
+                    _removeFromSuperset(exercise.id);
                   }
                 },
               ),
@@ -1555,6 +1805,26 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
         ],
       ),
     );
+    
+    // Wrap with superset indicator if part of a superset
+    if (isInSuperset) {
+      return Container(
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+              color: supersetColor!,
+              width: 4,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: cardWidget,
+        ),
+      );
+    }
+
+    return cardWidget;
   }
 
   Widget _buildSetRow(Exercise exercise, ExerciseSet set, int setNumber) {

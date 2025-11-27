@@ -9,6 +9,7 @@ import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/rest_timer_page.dart';
 import 'package:mental_warior/pages/workout/workout_completion_page.dart';
+import 'package:mental_warior/pages/workout/superset_selection_page.dart';
 import 'package:audioplayers/audioplayers.dart';
 
 class WorkoutSessionPage extends StatefulWidget {
@@ -18,7 +19,7 @@ class WorkoutSessionPage extends StatefulWidget {
   final bool minimized;
   final Map<String, dynamic>? restoredWorkoutData;
 
-  const WorkoutSessionPage({
+  const WorkoutSessionPage({ 
     super.key,
     required this.workoutId,
     this.readOnly = false,
@@ -55,6 +56,25 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   
   // Sticky notes tracking (exerciseId -> whether note is sticky)
   final Map<int, bool> _isNoteSticky = {};
+
+  // Superset tracking (exerciseId -> supersetId)
+  // Exercises with the same supersetId are part of the same superset
+  final Map<int, String> _exerciseSupersets = {};
+  int _supersetCounter = 0; // Counter for generating unique superset IDs
+
+  // Superset colors - each superset gets a unique color
+  static const List<Color> _supersetColors = [
+    Color(0xFFFF9800), // Orange
+    Color(0xFF9C27B0), // Purple
+    Color(0xFF00BCD4), // Cyan
+    Color(0xFFE91E63), // Pink
+    Color(0xFF8BC34A), // Light Green
+    Color(0xFFFFEB3B), // Yellow
+    Color(0xFF3F51B5), // Indigo
+    Color(0xFFFF5722), // Deep Orange
+    Color(0xFF009688), // Teal
+    Color(0xFF673AB7), // Deep Purple
+  ];
 
   // Note editing state
   final Map<int, bool> _noteEditingState = {};
@@ -515,6 +535,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
             // Build exercises list from temp workout data
             List<Exercise> exercises = [];
+            // Track unique superset groups to calculate counter
+            final Set<String> uniqueSupersets = {};
+            
             if (tempData.containsKey('exercises') &&
                 tempData['exercises'] is List) {
               for (var exerciseData in tempData['exercises']) {
@@ -549,12 +572,21 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   equipment: exerciseData['equipment'] ?? '',
                   sets: sets,
                   notes: exerciseData['notes'] as String?,
+                  supersetGroup: exerciseData['supersetGroup'] as String?,
                 ));
                 
                 // Load notes into the tracking map
                 if (exerciseData['notes'] != null &&
                     exerciseData['notes'] is String) {
                   _exerciseNotes[exerciseId] = exerciseData['notes'] as String;
+                }
+                
+                // Load superset group into tracking map
+                if (exerciseData['supersetGroup'] != null &&
+                    exerciseData['supersetGroup'] is String) {
+                  final supersetGroup = exerciseData['supersetGroup'] as String;
+                  _exerciseSupersets[exerciseId] = supersetGroup;
+                  uniqueSupersets.add(supersetGroup);
                 }
 
                 // Check if this exercise has a sticky note
@@ -563,6 +595,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     await _stickyNoteService.hasStickyNote(exerciseName);
                 if (hasStickyNote) {
                   _isNoteSticky[exerciseId] = true;
+                }
+              }
+            }
+            
+            // Update superset counter based on highest number found
+            for (var supersetId in uniqueSupersets) {
+              final match = RegExp(r'superset_(\d+)').firstMatch(supersetId);
+              if (match != null) {
+                final num = int.parse(match.group(1)!);
+                if (num >= _supersetCounter) {
+                  _supersetCounter = num + 1;
                 }
               }
             }
@@ -583,11 +626,21 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         print(
             'LOAD DEBUG: Loaded workout from database - exercises count: ${workout?.exercises.length ?? 0}');
         
-        // Load notes from database exercises into tracking map
+        // Load notes and superset data from database exercises into tracking maps
         if (workout != null) {
+          // Track unique superset groups to calculate counter
+          final Set<String> uniqueSupersets = {};
+          
           for (var exercise in workout.exercises) {
             if (exercise.notes != null && exercise.notes!.isNotEmpty) {
               _exerciseNotes[exercise.id] = exercise.notes!;
+            }
+            
+            // Load superset group from database
+            if (exercise.supersetGroup != null &&
+                exercise.supersetGroup!.isNotEmpty) {
+              _exerciseSupersets[exercise.id] = exercise.supersetGroup!;
+              uniqueSupersets.add(exercise.supersetGroup!);
             }
 
             // Check if this exercise has a sticky note
@@ -595,6 +648,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 await _stickyNoteService.hasStickyNote(exercise.name);
             if (hasStickyNote) {
               _isNoteSticky[exercise.id] = true;
+            }
+          }
+          
+          // Update superset counter based on highest number found
+          for (var supersetId in uniqueSupersets) {
+            final match = RegExp(r'superset_(\d+)').firstMatch(supersetId);
+            if (match != null) {
+              final num = int.parse(match.group(1)!);
+              if (num >= _supersetCounter) {
+                _supersetCounter = num + 1;
+              }
             }
           }
         }
@@ -2584,6 +2648,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         'startTime': _restStartTime?.millisecondsSinceEpoch,
         'timestamp': nowMs,
       },
+      // Store superset data
+      'supersets': Map<String, String>.from(
+        _exerciseSupersets.map((key, value) => MapEntry(key.toString(), value)),
+      ),
+      'supersetCounter': _supersetCounter,
     };
     
 
@@ -2707,6 +2776,21 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     if (_workout == null || workoutData['exercises'] == null) {
       print("RESTORE DEBUG: Early return - workout or exercises is null");
       return;
+    }
+
+    // Restore superset data if present
+    if (workoutData.containsKey('supersets')) {
+      final supersetsData = workoutData['supersets'] as Map<String, dynamic>;
+      _exerciseSupersets.clear();
+      supersetsData.forEach((key, value) {
+        final exerciseId = int.tryParse(key);
+        if (exerciseId != null) {
+          _exerciseSupersets[exerciseId] = value as String;
+        }
+      });
+    }
+    if (workoutData.containsKey('supersetCounter')) {
+      _supersetCounter = workoutData['supersetCounter'] as int;
     }
 
     // Restore rest timer state if it was active
@@ -2959,6 +3043,23 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   // Helper method to restore only rest timer state (for temporary workouts with exercises already loaded)
   void _restoreRestTimerOnly(Map<String, dynamic> workoutData) {
     print('RESTORE DEBUG: Restoring rest timer only');
+
+    // Restore superset data if present
+    if (workoutData.containsKey('supersets')) {
+      final supersetsData = workoutData['supersets'] as Map<String, dynamic>;
+      _exerciseSupersets.clear();
+      supersetsData.forEach((key, value) {
+        final exerciseId = int.tryParse(key);
+        if (exerciseId != null) {
+          _exerciseSupersets[exerciseId] = value as String;
+        }
+      });
+      print(
+          'RESTORE DEBUG: Restored ${_exerciseSupersets.length} superset mappings');
+    }
+    if (workoutData.containsKey('supersetCounter')) {
+      _supersetCounter = workoutData['supersetCounter'] as int;
+    }
 
     // Restore rest timer state if it was active
     if (workoutData.containsKey('restTimerState')) {
@@ -3600,6 +3701,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                               'equipment': exercise.equipment,
                                 'notes': _exerciseNotes[exercise
                                     .id], // Include notes from the tracking map
+                                'supersetGroup': _exerciseSupersets[
+                                    exercise.id], // Include superset group
                                 'sets': exercise.sets.where((set) {
                                   // Include sets that have valid data (weight >= 0 AND reps >= 0) OR are completed
                                   // 0 is a valid value for both weight and reps
@@ -3845,8 +3948,38 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                           itemCount: _workout!.exercises.length + 1,
                           itemBuilder: (context, index) {
                             if (index < _workout!.exercises.length) {
+                                  final exercise = _workout!.exercises[index];
+                                  final supersetId =
+                                      _exerciseSupersets[exercise.id];
+
+                                  // Determine superset position (first, middle, last)
+                                  String? supersetPosition;
+                                  if (supersetId != null) {
+                                    final supersetExercises = _workout!
+                                        .exercises
+                                        .where((e) =>
+                                            _exerciseSupersets[e.id] ==
+                                            supersetId)
+                                        .toList();
+                                    final posInSuperset =
+                                        supersetExercises.indexOf(exercise);
+                                    if (supersetExercises.length == 1) {
+                                      supersetPosition = 'only';
+                                    } else if (posInSuperset == 0) {
+                                      supersetPosition = 'first';
+                                    } else if (posInSuperset ==
+                                        supersetExercises.length - 1) {
+                                      supersetPosition = 'last';
+                                    } else {
+                                      supersetPosition = 'middle';
+                                    }
+                                  }
+                              
                               return _buildExerciseCard(
-                                  _workout!.exercises[index]);
+                                    exercise,
+                                    supersetId: supersetId,
+                                    supersetPosition: supersetPosition,
+                                  );
                                 } else {
                               return Padding(
                                 padding: EdgeInsets.all(16),
@@ -3901,7 +4034,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     );
   }
 
-  Widget _buildExerciseCard(Exercise exercise) {
+  Widget _buildExerciseCard(
+    Exercise exercise, {
+    String? supersetId,
+    String? supersetPosition,
+  }) {
     // Determine if this is a default (API) exercise
     final bool isDefaultExercise =
         RegExp(r'##API_ID:[^#]+##').hasMatch(exercise.name);
@@ -3909,40 +4046,139 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     final bool allSetsCompleted =
         exercise.sets.isNotEmpty && exercise.sets.every((set) => set.completed);
 
+    // Superset indicator color - get unique color based on superset ID
+    final Color supersetColor = supersetId != null
+        ? _getColorForSuperset(supersetId)
+        : _supersetColors[0];
+
     // Wrap with RepaintBoundary to isolate painting operations
     return RepaintBoundary(
-      child: Container(
-        margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: _surfaceColor,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black12,
-              blurRadius: 3,
-              offset: Offset(0, 1),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Exercise note bar (if note exists)
-            if (_exerciseNotes.containsKey(exercise.id))
+            // Superset indicator bar on the left
+            if (supersetId != null)
               Container(
+                width: 4,
+                margin: EdgeInsets.only(
+                  left: 16,
+                  top: supersetPosition == 'first' || supersetPosition == 'only'
+                      ? 8
+                      : 0,
+                  bottom:
+                      supersetPosition == 'last' || supersetPosition == 'only'
+                          ? 8
+                          : 0,
+                ),
                 decoration: BoxDecoration(
-                  color: _primaryColor.withOpacity(0.1),
+                  color: supersetColor,
                   borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(12),
-                    topRight: Radius.circular(12),
-                  ),
-                  border: Border(
-                    bottom: BorderSide(
-                      color: _primaryColor.withOpacity(0.3),
-                      width: 1,
-                    ),
+                    topLeft: Radius.circular(supersetPosition == 'first' ||
+                            supersetPosition == 'only'
+                        ? 4
+                        : 0),
+                    topRight: Radius.circular(supersetPosition == 'first' ||
+                            supersetPosition == 'only'
+                        ? 4
+                        : 0),
+                    bottomLeft: Radius.circular(
+                        supersetPosition == 'last' || supersetPosition == 'only'
+                            ? 4
+                            : 0),
+                    bottomRight: Radius.circular(
+                        supersetPosition == 'last' || supersetPosition == 'only'
+                            ? 4
+                            : 0),
                   ),
                 ),
+              ),
+            // Main exercise card
+            Expanded(
+              child: Container(
+                margin: EdgeInsets.only(
+                  left: supersetId != null ? 8 : 16,
+                  right: 16,
+                  top: supersetPosition == 'first' ||
+                          supersetPosition == 'only' ||
+                          supersetId == null
+                      ? 8
+                      : 2,
+                  bottom: supersetPosition == 'last' ||
+                          supersetPosition == 'only' ||
+                          supersetId == null
+                      ? 8
+                      : 2,
+                ),
+                decoration: BoxDecoration(
+                  color: _surfaceColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: supersetId != null
+                      ? Border.all(
+                          color: supersetColor.withOpacity(0.3), width: 1)
+                      : null,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 3,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Superset label at the top (only for first exercise in superset)
+                    if (supersetId != null && supersetPosition == 'first')
+                      Container(
+                        width: double.infinity,
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: supersetColor.withOpacity(0.15),
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(12),
+                            topRight: Radius.circular(12),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.link, color: supersetColor, size: 16),
+                            SizedBox(width: 6),
+                            Text(
+                              'SUPERSET',
+                              style: TextStyle(
+                                color: supersetColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    // Exercise note bar (if note exists)
+                    if (_exerciseNotes.containsKey(exercise.id))
+                      Container(
+                        decoration: BoxDecoration(
+                          color: _primaryColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(supersetId != null &&
+                                    supersetPosition == 'first'
+                                ? 0
+                                : 12),
+                            topRight: Radius.circular(supersetId != null &&
+                                    supersetPosition == 'first'
+                                ? 0
+                                : 12),
+                          ),
+                          border: Border(
+                            bottom: BorderSide(
+                              color: _primaryColor.withOpacity(0.3),
+                              width: 1,
+                            ),
+                          ),
+                        ),
                 child: Row(
                   children: [
                     // Dismissible note content
@@ -4210,9 +4446,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                             _showSetRestDialog(exercise);
                           } else if (value == 'add_note') {
                             _toggleExerciseNote(exercise.id);
+                                  } else if (value == 'create_superset') {
+                                    _openSupersetSelection(exercise);
+                                  } else if (value == 'remove_superset') {
+                                    _removeFromSuperset(exercise.id);
                           }
                         },
                         itemBuilder: (BuildContext context) {
+                                  final bool isInSuperset = supersetId != null;
                           return <PopupMenuEntry<String>>[
                             if (!isDefaultExercise)
                               PopupMenuItem<String>(
@@ -4246,6 +4487,30 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                     style: TextStyle(color: _textPrimaryColor)),
                               ),
                             ),
+                                    if (isInSuperset)
+                                      PopupMenuItem<String>(
+                                        value: 'remove_superset',
+                                        child: ListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: Icon(Icons.link_off,
+                                              color: const Color(0xFFFF9800)),
+                                          title: Text('Remove from Superset',
+                                              style: TextStyle(
+                                                  color: _textPrimaryColor)),
+                                        ),
+                                      )
+                                    else
+                                      PopupMenuItem<String>(
+                                        value: 'create_superset',
+                                        child: ListTile(
+                                          contentPadding: EdgeInsets.zero,
+                                          leading: Icon(Icons.link,
+                                              color: _primaryColor),
+                                          title: Text('Create Superset',
+                                              style: TextStyle(
+                                                  color: _textPrimaryColor)),
+                                        ),
+                                      ),
                             PopupMenuItem<String>(
                               value: 'delete',
                               child: ListTile(
@@ -4345,6 +4610,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   ),
                 ),
               ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -4914,6 +5183,81 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
   }
 
+  // Open superset selection page
+  void _openSupersetSelection(Exercise exercise) async {
+    if (_workout == null || _workout!.exercises.isEmpty) return;
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SupersetSelectionPage(
+          exercises: _workout!.exercises,
+          currentExerciseId: exercise.id,
+          existingSupersets: Map<int, String>.from(_exerciseSupersets),
+          getColorForSuperset: _getColorForSuperset,
+        ),
+      ),
+    );
+
+    if (result != null && result is List<int>) {
+      // Create a new superset with selected exercises
+      if (result.length >= 2) {
+        setState(() {
+          // Generate a unique superset ID
+          final supersetId = 'superset_${_supersetCounter++}';
+
+          // Assign the superset ID to all selected exercises
+          for (final exerciseId in result) {
+            _exerciseSupersets[exerciseId] = supersetId;
+          }
+        });
+
+        // Auto-save the workout state after creating superset
+        _updateActiveNotifier();
+
+        _showSnackBar('Superset created with ${result.length} exercises');
+      }
+    }
+  }
+
+  // Get a consistent color for a superset based on its ID
+  Color _getColorForSuperset(String supersetId) {
+    // Extract the number from superset ID (e.g., "superset_0" -> 0)
+    final match = RegExp(r'superset_(\d+)').firstMatch(supersetId);
+    if (match != null) {
+      final index = int.tryParse(match.group(1) ?? '0') ?? 0;
+      return _supersetColors[index % _supersetColors.length];
+    }
+    // Fallback: use hash code to get a consistent index
+    final index = supersetId.hashCode.abs() % _supersetColors.length;
+    return _supersetColors[index];
+  }
+
+  // Remove an exercise from its superset
+  void _removeFromSuperset(int exerciseId) {
+    final supersetId = _exerciseSupersets[exerciseId];
+    if (supersetId == null) return;
+
+    setState(() {
+      // Remove the exercise from the superset
+      _exerciseSupersets.remove(exerciseId);
+
+      // Check if only one exercise remains in the superset - if so, remove it too
+      final remainingInSuperset = _exerciseSupersets.entries
+          .where((e) => e.value == supersetId)
+          .toList();
+
+      if (remainingInSuperset.length == 1) {
+        // Only one exercise left, remove it from superset tracking
+        _exerciseSupersets.remove(remainingInSuperset.first.key);
+      }
+    });
+
+    // Auto-save the workout state after removing from superset
+    _updateActiveNotifier();
+
+    _showSnackBar('Exercise removed from superset');
+  }
   // Toggle exercise note visibility
   void _toggleExerciseNote(int exerciseId) {
     setState(() {

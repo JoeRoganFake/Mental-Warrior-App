@@ -33,6 +33,33 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
   final Color _textSecondaryColor = const Color(0xFFBBBBBB);
   final Color _accentColor = const Color(0xFF7C4DFF);
 
+  // Superset colors - same as workout_session_page
+  static const List<Color> _supersetColors = [
+    Color(0xFFFF9800), // Orange
+    Color(0xFF9C27B0), // Purple
+    Color(0xFF00BCD4), // Cyan
+    Color(0xFFE91E63), // Pink
+    Color(0xFF8BC34A), // Light Green
+    Color(0xFFFFEB3B), // Yellow
+    Color(0xFF3F51B5), // Indigo
+    Color(0xFFFF5722), // Deep Orange
+    Color(0xFF009688), // Teal
+    Color(0xFF673AB7), // Deep Purple
+  ];
+
+  // Get a consistent color for a superset based on its group ID
+  Color _getColorForSuperset(String supersetGroup) {
+    // Extract the number from superset group (e.g., "superset_0" -> 0)
+    final match = RegExp(r'superset_(\d+)').firstMatch(supersetGroup);
+    if (match != null) {
+      final index = int.tryParse(match.group(1) ?? '0') ?? 0;
+      return _supersetColors[index % _supersetColors.length];
+    }
+    // Fallback: use hash code to get a consistent index
+    final index = supersetGroup.hashCode.abs() % _supersetColors.length;
+    return _supersetColors[index];
+  }
+
   // Helper method to clean exercise names by removing markers
   String _cleanExerciseName(String name) {
     return name
@@ -526,6 +553,9 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
   }
 
   Widget _buildExercisesList() {
+    // Group exercises by superset
+    final exercises = _workout!.exercises;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -538,21 +568,48 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
           ),
         ),
         const SizedBox(height: 16),
-        ListView.separated(
+        ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          itemCount: _workout!.exercises.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 16),
+          itemCount: exercises.length,
           itemBuilder: (context, index) {
-            final exercise = _workout!.exercises[index];
-            return _buildExerciseCard(exercise);
+            final exercise = exercises[index];
+            final supersetGroup = exercise.supersetGroup;
+
+            // Determine superset position
+            String? supersetPosition;
+            if (supersetGroup != null) {
+              final supersetExercises = exercises
+                  .where((e) => e.supersetGroup == supersetGroup)
+                  .toList();
+              final posInSuperset = supersetExercises.indexOf(exercise);
+              if (supersetExercises.length == 1) {
+                supersetPosition = 'only';
+              } else if (posInSuperset == 0) {
+                supersetPosition = 'first';
+              } else if (posInSuperset == supersetExercises.length - 1) {
+                supersetPosition = 'last';
+              } else {
+                supersetPosition = 'middle';
+              }
+            }
+
+            return _buildExerciseCard(
+              exercise,
+              supersetGroup: supersetGroup,
+              supersetPosition: supersetPosition,
+            );
           },
         ),
       ],
     );
   }
 
-  Widget _buildExerciseCard(Exercise exercise) {
+  Widget _buildExerciseCard(
+    Exercise exercise, {
+    String? supersetGroup,
+    String? supersetPosition,
+  }) {
     final allSets = exercise.sets.toList(); // Show all sets
     final validSets = exercise.sets
         .where((set) => set.weight > 0 && set.reps > 0)
@@ -565,23 +622,79 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
 
     // Use only database PR flags - no calculation needed
     // The database service handles PR calculation correctly
+    
+    final isInSuperset = supersetGroup != null;
+    final supersetColor =
+        isInSuperset ? _getColorForSuperset(supersetGroup) : null;
 
-    return InkWell(
+    // Determine border radius based on superset position
+    BorderRadius cardBorderRadius;
+    if (isInSuperset) {
+      switch (supersetPosition) {
+        case 'first':
+          cardBorderRadius = const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+            bottomLeft: Radius.circular(4),
+            bottomRight: Radius.circular(4),
+          );
+          break;
+        case 'last':
+          cardBorderRadius = const BorderRadius.only(
+            topLeft: Radius.circular(4),
+            topRight: Radius.circular(4),
+            bottomLeft: Radius.circular(16),
+            bottomRight: Radius.circular(16),
+          );
+          break;
+        case 'middle':
+          cardBorderRadius = BorderRadius.circular(4);
+          break;
+        default:
+          cardBorderRadius = BorderRadius.circular(16);
+      }
+    } else {
+      cardBorderRadius = BorderRadius.circular(16);
+    }
+
+    final cardWidget = InkWell(
       onTap: () => _navigateToExerciseDetail(exercise),
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: cardBorderRadius,
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: _cardColor,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: cardBorderRadius,
           border: Border.all(
-            color: _textSecondaryColor.withOpacity(0.1),
-            width: 1,
+            color: isInSuperset
+                ? supersetColor!.withOpacity(0.3)
+                : _textSecondaryColor.withOpacity(0.1),
+            width: isInSuperset ? 2 : 1,
           ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Superset label for first exercise in superset
+            if (isInSuperset && supersetPosition == 'first') ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: supersetColor!.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'SUPERSET',
+                  style: TextStyle(
+                    color: supersetColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             Row(
               children: [
                 Container(
@@ -732,6 +845,35 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
         ],
       ),
       ),
+    );
+    
+    // Wrap in superset visual indicator if part of a superset
+    if (isInSuperset) {
+      return Padding(
+        padding: EdgeInsets.only(
+          bottom:
+              supersetPosition == 'last' || supersetPosition == 'only' ? 16 : 2,
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: supersetColor!,
+                width: 4,
+              ),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: cardWidget,
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: cardWidget,
     );
   }
 

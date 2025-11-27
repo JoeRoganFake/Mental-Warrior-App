@@ -31,7 +31,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 10, // Increment version for exercise sticky notes table
+      version: 11, // Increment version for superset support
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -90,6 +90,11 @@ class DatabaseService {
         if (oldVersion < 10) {
           // Create sticky notes table
           await ExerciseStickyNoteService().createStickyNotesTable(db);
+        }
+        if (oldVersion < 11) {
+          // Add superset_group column to exercises table
+          await db
+              .execute('ALTER TABLE exercises ADD COLUMN superset_group TEXT');
         }
       },
     );
@@ -881,6 +886,7 @@ class WorkoutService {
   final String _exerciseEquipmentColumnName = "equipment";
   final String _exerciseFinishedColumnName = "finished";
   final String _exerciseNotesColumnName = "notes";
+  final String _exerciseSupersetGroupColumnName = "superset_group";
 
   final String _setTableName = "exercise_sets";
   final String _setIdColumnName = "id";
@@ -925,6 +931,7 @@ class WorkoutService {
         $_exerciseEquipmentColumnName TEXT NOT NULL,
         $_exerciseFinishedColumnName INTEGER DEFAULT 0,
         $_exerciseNotesColumnName TEXT,
+        $_exerciseSupersetGroupColumnName TEXT,
         FOREIGN KEY ($_exerciseWorkoutIdColumnName) REFERENCES $_workoutTableName ($_workoutIdColumnName) ON DELETE CASCADE
       )
     ''');
@@ -1142,7 +1149,8 @@ class WorkoutService {
       if (hasValidSets) {
         final exerciseId = await addExercise(
             workoutId, exercise['name'], exercise['equipment'],
-            notes: exercise['notes'] as String?);
+            notes: exercise['notes'] as String?,
+            supersetGroup: exercise['supersetGroup'] as String?);
 
         // Save all valid sets for this exercise
         for (final set in validSets) {
@@ -1279,7 +1287,7 @@ class WorkoutService {
   }
   // Add a new exercise to a workout
   Future<int> addExercise(int workoutId, String name, String equipment,
-      {String? notes}) async {
+      {String? notes, String? supersetGroup}) async {
     // Handle temporary workouts
     if (isTemporaryWorkout(workoutId)) {
       // Generate a unique negative ID for the temporary exercise using counter and microseconds
@@ -1309,6 +1317,7 @@ class WorkoutService {
         'finished': false,
         'sets': [],
         'notes': notes,
+        'supersetGroup': supersetGroup,
       });
 
       // Update the notifier to trigger UI refresh
@@ -1328,6 +1337,7 @@ class WorkoutService {
         _exerciseEquipmentColumnName: equipment,
         _exerciseFinishedColumnName: 0, // Not finished by default
         _exerciseNotesColumnName: notes,
+        _exerciseSupersetGroupColumnName: supersetGroup,
       },
     );
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
@@ -1682,7 +1692,7 @@ class WorkoutService {
   // Add updateExercise method to WorkoutService
   Future<void> updateExercise(
       int exerciseId, String name, String equipment,
-      {String? notes}) async {
+      {String? notes, String? supersetGroup}) async {
     final db = await DatabaseService.instance.database;
     await db.update(
       _exerciseTableName,
@@ -1690,6 +1700,7 @@ class WorkoutService {
         _exerciseNameColumnName: name,
         _exerciseEquipmentColumnName: equipment,
         _exerciseNotesColumnName: notes,
+        _exerciseSupersetGroupColumnName: supersetGroup,
       },
       where: "$_exerciseIdColumnName = ?",
       whereArgs: [exerciseId],
@@ -1870,6 +1881,7 @@ class WorkoutService {
           finished: exerciseData['finished'] ?? false,
           sets: sets,
           notes: exerciseData['notes'] as String?,
+          supersetGroup: exerciseData['supersetGroup'] as String?,
         ));
       }
 
