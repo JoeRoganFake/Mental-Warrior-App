@@ -3691,6 +3691,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         // We have valid exercises, save the temporary workout to the database
                         try {
                         // Create data structure for the temporary workout with all its exercises and sets
+                          // AUTO-COMPLETE: Sets with valid data (weight > 0 AND reps > 0) are marked as completed
                         final tempData = {
                             'name': _workout!.name,
                           'date': _workout!.date,
@@ -3704,20 +3705,23 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                 'supersetGroup': _exerciseSupersets[
                                     exercise.id], // Include superset group
                                 'sets': exercise.sets.where((set) {
-                                  // Include sets that have valid data (weight >= 0 AND reps >= 0) OR are completed
-                                  // 0 is a valid value for both weight and reps
-                                  final bool hasValidWeight = set.weight >= 0;
-                                  final bool hasValidReps = set.reps >= 0;
+                                  // Include sets that have valid data (weight > 0 AND reps > 0) OR are already completed
+                                  final bool hasValidData =
+                                      set.weight > 0 && set.reps > 0;
                                   final bool isCompleted = set.completed;
-                                  return (hasValidWeight && hasValidReps) ||
-                                      isCompleted;
+                                  return hasValidData || isCompleted;
                                 }).map((set) {
+                                  // Auto-complete: mark sets with valid data as completed
+                                  final bool hasValidData =
+                                      set.weight > 0 && set.reps > 0;
+                                  final bool shouldBeCompleted =
+                                      set.completed || hasValidData;
                                 return {
                                   'setNumber': set.setNumber,
                                   'weight': set.weight,
                                   'reps': set.reps,
                                   'restTime': set.restTime,
-                                  'completed': set.completed,
+                                    'completed': shouldBeCompleted,
                                 };
                               }).toList(),
                             };
@@ -3781,42 +3785,51 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     }
                     }
 
-                    // FIRST: Clear active workout from memory to immediately hide the active workout bar
-                    WorkoutService.activeWorkoutNotifier.value = null;
+                    // CAPTURE THE WORKOUT DATA FOR COMPLETION PAGE BEFORE ANY CLEARING
+                    // This prevents race conditions where data is cleared before navigation
+                    Workout? workoutForCompletion;
 
-                    // THEN: Stop the timer to prevent any further updates
-                    _stopTimer();
-
-                    // THEN: Clear the active session from database since workout is being completed
-                    await _clearActiveSessionFromDatabase();
-                    
-                    // THEN: Mark workout as discarded for foreground service to prevent restoration
-                    await WorkoutForegroundService.markWorkoutAsDiscarded();
-                    
-                    // FINALLY: Clear saved foreground service data to prevent restoration
-                    await WorkoutForegroundService.clearSavedWorkoutData();
-                    
-                    // Reload workout from database to get updated PR flags
-                    // PR recalculation happens automatically when sets are marked as completed
-                    if (!widget.isTemporary) {
+                    // For temporary workouts, _workout was already updated with saved data above
+                    // For regular workouts, reload fresh data with PR flags now
+                    if (widget.isTemporary) {
+                      workoutForCompletion =
+                          _workout?.copyWith(duration: _elapsedSeconds);
+                    } else {
                       final freshWorkout =
                           await _workoutService.getWorkout(widget.workoutId);
                       if (freshWorkout != null) {
-                        _workout =
+                        workoutForCompletion =
                             freshWorkout.copyWith(duration: _elapsedSeconds);
                       }
                     }
+
+                    // Get workout count for completion screen BEFORE clearing
+                    final workoutCount =
+                        await _workoutService.getWorkoutCount();
+
+                    // NOW do the clearing operations - after we've captured all needed data
+                    // Clear active workout from memory to immediately hide the active workout bar
+                    WorkoutService.activeWorkoutNotifier.value = null;
+
+                    // Stop the timer to prevent any further updates
+                    _stopTimer();
+
+                    // Clear the active session from database since workout is being completed
+                    await _clearActiveSessionFromDatabase();
                     
-                    // Get workout count for completion screen
-                    final workoutCount = await _workoutService.getWorkoutCount();
+                    // Mark workout as discarded for foreground service to prevent restoration
+                    await WorkoutForegroundService.markWorkoutAsDiscarded();
                     
-                    // Navigate to completion screen instead of just popping
-                    if (mounted && _workout != null) {
+                    // Clear saved foreground service data to prevent restoration
+                    await WorkoutForegroundService.clearSavedWorkoutData();
+                    
+                    // Navigate to completion screen with the captured workout data
+                    if (mounted && workoutForCompletion != null) {
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(
                           builder: (context) => WorkoutCompletionPage(
-                            workout: _workout!.copyWith(duration: _elapsedSeconds),
+                            workout: workoutForCompletion!,
                             workoutNumber: workoutCount,
                           ),
                         ),

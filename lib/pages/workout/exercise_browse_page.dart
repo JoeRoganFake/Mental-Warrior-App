@@ -7,7 +7,9 @@ import 'package:mental_warior/pages/workout/create_exercise_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 
 class ExerciseBrowsePage extends StatefulWidget {
-  const ExerciseBrowsePage({super.key});
+  final bool embedded;
+
+  const ExerciseBrowsePage({super.key, this.embedded = false});
 
   @override
   ExerciseBrowsePageState createState() => ExerciseBrowsePageState();
@@ -229,11 +231,7 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Browse Exercises'),
-      ),
-      body: Column(
+    final bodyContent = Column(
         children: [
           // Search bar
           Padding(
@@ -441,7 +439,32 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
             ),
           ),
         ],
+    );
+
+    // If embedded, return just the body content with a FAB overlay
+    if (widget.embedded) {
+      return Stack(
+        children: [
+          bodyContent,
+          Positioned(
+            right: 16,
+            bottom: 16,
+            child: FloatingActionButton(
+              onPressed: _openCreateExercise,
+              tooltip: 'Create custom exercise',
+              child: const Icon(Icons.add),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Otherwise, return full Scaffold with AppBar
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Browse Exercises'),
       ),
+      body: bodyContent,
       floatingActionButton: FloatingActionButton(
         onPressed: _openCreateExercise,
         tooltip: 'Create custom exercise',

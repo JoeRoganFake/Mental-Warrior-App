@@ -1111,6 +1111,65 @@ class WorkoutService {
     return tempId;
   }
 
+  // Create a temporary workout from a template (existing workout)
+  int createTemporaryWorkoutFromTemplate(
+      String name, String date, List<Exercise> templateExercises) {
+    // Generate a unique negative ID to avoid conflicts with database IDs
+    _tempIdCounter++;
+    final tempId = -(DateTime.now().microsecondsSinceEpoch + _tempIdCounter);
+
+    // Convert template exercises to the temporary format with proper IDs
+    final exercisesData = templateExercises.map((exercise) {
+      // Generate unique negative ID for this exercise
+      _tempIdCounter++;
+      final tempExerciseId =
+          -(DateTime.now().microsecondsSinceEpoch + _tempIdCounter);
+
+      // Create sets with unique IDs based on the template's set count
+      final setsData = exercise.sets.map((set) {
+        _tempIdCounter++;
+        final tempSetId =
+            -(DateTime.now().microsecondsSinceEpoch + _tempIdCounter);
+
+        return {
+          'id': tempSetId,
+          'setNumber': set.setNumber,
+          'weight':
+              set.weight > 0 ? set.weight : 0.0, // Use template weight if set
+          'reps': set.reps > 0 ? set.reps : 0, // Use template reps if set
+          'restTime': set.restTime,
+          'completed': false,
+          'volume': 0.0,
+          'isPR': false,
+        };
+      }).toList();
+
+      return {
+        'id': tempExerciseId,
+        'name': exercise.name,
+        'equipment': exercise.equipment,
+        'finished': false,
+        'notes': exercise.notes,
+        'supersetGroup': exercise.supersetGroup,
+        'sets': setsData,
+      };
+    }).toList();
+
+    // Store workout data in memory
+    final tempWorkouts = tempWorkoutsNotifier.value;
+    tempWorkouts[tempId] = {
+      'name': name,
+      'date': date,
+      'duration': 0,
+      'exercises': exercisesData,
+    };
+
+    // Notify listeners
+    tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+
+    return tempId;
+  }
+
   // Save a temporary workout to the database
   Future<int> saveTemporaryWorkout(int tempId) async {
     final tempWorkouts = tempWorkoutsNotifier.value;
@@ -2539,4 +2598,343 @@ class ExerciseStickyNoteService {
     final db = await DatabaseService.instance.database;
     return await db.query(_stickyNotesTableName);
   }
+}
+
+// TemplateService for managing workout templates
+class TemplateService {
+  static final ValueNotifier<bool> templatesUpdatedNotifier =
+      ValueNotifier(false);
+
+  // Table and column names
+  static const String _templatesTableName = 'workout_templates';
+  static const String _templateExercisesTableName = 'template_exercises';
+  static const String _templateSetsTableName = 'template_sets';
+
+  // Create template tables
+  Future<void> createTemplateTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_templatesTableName (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_templateExercisesTableName (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        equipment TEXT,
+        order_index INTEGER NOT NULL,
+        superset_group TEXT,
+        FOREIGN KEY (template_id) REFERENCES $_templatesTableName (id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_templateSetsTableName (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exercise_id INTEGER NOT NULL,
+        set_number INTEGER NOT NULL,
+        target_reps INTEGER,
+        target_weight REAL,
+        rest_time INTEGER DEFAULT 150,
+        FOREIGN KEY (exercise_id) REFERENCES $_templateExercisesTableName (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // Add new columns if they don't exist (for migration)
+    try {
+      await db.execute(
+          'ALTER TABLE $_templateExercisesTableName ADD COLUMN superset_group TEXT');
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      await db.execute(
+          'ALTER TABLE $_templateSetsTableName ADD COLUMN target_weight REAL');
+    } catch (e) {
+      // Column already exists
+    }
+    try {
+      await db.execute(
+          'ALTER TABLE $_templateSetsTableName ADD COLUMN rest_time INTEGER DEFAULT 150');
+    } catch (e) {
+      // Column already exists
+    }
+  }
+
+  // Ensure tables exist (for dynamic creation without migration)
+  Future<void> ensureTablesExist() async {
+    final db = await DatabaseService.instance.database;
+    await createTemplateTables(db);
+  }
+
+  // Get all templates
+  Future<List<WorkoutTemplate>> getTemplates() async {
+    await ensureTablesExist();
+    final db = await DatabaseService.instance.database;
+
+    final templatesData = await db.query(
+      _templatesTableName,
+      orderBy: 'updated_at DESC',
+    );
+
+    List<WorkoutTemplate> templates = [];
+    for (final templateData in templatesData) {
+      final exercises = await _getTemplateExercises(templateData['id'] as int);
+      templates.add(WorkoutTemplate(
+        id: templateData['id'] as int,
+        name: templateData['name'] as String,
+        exercises: exercises,
+        createdAt: DateTime.parse(templateData['created_at'] as String),
+      ));
+    }
+
+    return templates;
+  }
+
+  // Get a single template
+  Future<WorkoutTemplate?> getTemplate(int id) async {
+    await ensureTablesExist();
+    final db = await DatabaseService.instance.database;
+
+    final templatesData = await db.query(
+      _templatesTableName,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (templatesData.isEmpty) return null;
+
+    final templateData = templatesData.first;
+    final exercises = await _getTemplateExercises(id);
+
+    return WorkoutTemplate(
+      id: templateData['id'] as int,
+      name: templateData['name'] as String,
+      exercises: exercises,
+      createdAt: DateTime.parse(templateData['created_at'] as String),
+    );
+  }
+
+  // Get exercises for a template
+  Future<List<TemplateExercise>> _getTemplateExercises(int templateId) async {
+    final db = await DatabaseService.instance.database;
+
+    final exercisesData = await db.query(
+      _templateExercisesTableName,
+      where: 'template_id = ?',
+      whereArgs: [templateId],
+      orderBy: 'order_index ASC',
+    );
+
+    List<TemplateExercise> exercises = [];
+    for (final exerciseData in exercisesData) {
+      final sets = await _getTemplateSets(exerciseData['id'] as int);
+      exercises.add(TemplateExercise(
+        name: exerciseData['name'] as String,
+        equipment: exerciseData['equipment'] as String? ?? '',
+        sets: sets,
+        supersetGroup: exerciseData['superset_group'] as String?,
+      ));
+    }
+
+    return exercises;
+  }
+
+  // Get sets for a template exercise
+  Future<List<TemplateSet>> _getTemplateSets(int exerciseId) async {
+    final db = await DatabaseService.instance.database;
+
+    final setsData = await db.query(
+      _templateSetsTableName,
+      where: 'exercise_id = ?',
+      whereArgs: [exerciseId],
+      orderBy: 'set_number ASC',
+    );
+
+    return setsData
+        .map((setData) => TemplateSet(
+              setNumber: setData['set_number'] as int,
+              targetReps: setData['target_reps'] as int?,
+              targetWeight: (setData['target_weight'] as num?)?.toDouble(),
+              restTime: (setData['rest_time'] as int?) ?? 150,
+            ))
+        .toList();
+  }
+
+  // Create a new template
+  Future<int> createTemplate(
+      String name, List<TemplateExercise> exercises) async {
+    await ensureTablesExist();
+    final db = await DatabaseService.instance.database;
+    final now = DateTime.now().toIso8601String();
+
+    final templateId = await db.insert(_templatesTableName, {
+      'name': name,
+      'created_at': now,
+      'updated_at': now,
+    });
+
+    await _saveTemplateExercises(templateId, exercises);
+
+    templatesUpdatedNotifier.value = !templatesUpdatedNotifier.value;
+    return templateId;
+  }
+
+  // Update an existing template
+  Future<void> updateTemplate(
+      int id, String name, List<TemplateExercise> exercises) async {
+    await ensureTablesExist();
+    final db = await DatabaseService.instance.database;
+    final now = DateTime.now().toIso8601String();
+
+    await db.update(
+      _templatesTableName,
+      {
+        'name': name,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    // Delete existing exercises and sets (cascade will handle sets)
+    await db.delete(
+      _templateExercisesTableName,
+      where: 'template_id = ?',
+      whereArgs: [id],
+    );
+
+    await _saveTemplateExercises(id, exercises);
+
+    templatesUpdatedNotifier.value = !templatesUpdatedNotifier.value;
+  }
+
+  // Save template exercises
+  Future<void> _saveTemplateExercises(
+      int templateId, List<TemplateExercise> exercises) async {
+    final db = await DatabaseService.instance.database;
+
+    for (int i = 0; i < exercises.length; i++) {
+      final exercise = exercises[i];
+      final exerciseId = await db.insert(_templateExercisesTableName, {
+        'template_id': templateId,
+        'name': exercise.name,
+        'equipment': exercise.equipment,
+        'order_index': i,
+        'superset_group': exercise.supersetGroup,
+      });
+
+      for (final set in exercise.sets) {
+        await db.insert(_templateSetsTableName, {
+          'exercise_id': exerciseId,
+          'set_number': set.setNumber,
+          'target_reps': set.targetReps,
+          'target_weight': set.targetWeight,
+          'rest_time': set.restTime,
+        });
+      }
+    }
+  }
+
+  // Delete a template
+  Future<void> deleteTemplate(int id) async {
+    await ensureTablesExist();
+    final db = await DatabaseService.instance.database;
+
+    await db.delete(
+      _templatesTableName,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    templatesUpdatedNotifier.value = !templatesUpdatedNotifier.value;
+  }
+}
+
+// Template data models
+class TemplateExercise {
+  final String name;
+  final String equipment;
+  final List<TemplateSet> sets;
+  final String? supersetGroup;
+
+  TemplateExercise({
+    required this.name,
+    required this.equipment,
+    required this.sets,
+    this.supersetGroup,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'name': name,
+      'equipment': equipment,
+      'sets': sets.map((s) => s.toMap()).toList(),
+      'supersetGroup': supersetGroup,
+    };
+  }
+
+  factory TemplateExercise.fromMap(Map<String, dynamic> map) {
+    return TemplateExercise(
+      name: map['name'] ?? '',
+      equipment: map['equipment'] ?? '',
+      sets: (map['sets'] as List<dynamic>?)
+              ?.map((s) => TemplateSet.fromMap(s as Map<String, dynamic>))
+              .toList() ??
+          [],
+      supersetGroup: map['supersetGroup'],
+    );
+  }
+}
+
+class TemplateSet {
+  final int setNumber;
+  final int? targetReps;
+  final double? targetWeight;
+  final int restTime;
+
+  TemplateSet({
+    required this.setNumber,
+    this.targetReps,
+    this.targetWeight,
+    this.restTime = 150,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'setNumber': setNumber,
+      'targetReps': targetReps,
+      'targetWeight': targetWeight,
+      'restTime': restTime,
+    };
+  }
+
+  factory TemplateSet.fromMap(Map<String, dynamic> map) {
+    return TemplateSet(
+      setNumber: map['setNumber'] ?? 1,
+      targetReps: map['targetReps'],
+      targetWeight: map['targetWeight']?.toDouble(),
+      restTime: map['restTime'] ?? 150,
+    );
+  }
+}
+
+// Workout Template model
+class WorkoutTemplate {
+  final int id;
+  final String name;
+  final List<TemplateExercise> exercises;
+  final DateTime createdAt;
+
+  WorkoutTemplate({
+    required this.id,
+    required this.name,
+    required this.exercises,
+    required this.createdAt,
+  });
 }
