@@ -2604,20 +2604,37 @@ class ExerciseStickyNoteService {
 class TemplateService {
   static final ValueNotifier<bool> templatesUpdatedNotifier =
       ValueNotifier(false);
+  static final ValueNotifier<bool> foldersUpdatedNotifier =
+      ValueNotifier(false);
 
   // Table and column names
   static const String _templatesTableName = 'workout_templates';
   static const String _templateExercisesTableName = 'template_exercises';
   static const String _templateSetsTableName = 'template_sets';
+  static const String _templateFoldersTableName = 'template_folders';
 
   // Create template tables
   Future<void> createTemplateTables(Database db) async {
+    // Create folders table first (templates reference this)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_templateFoldersTableName (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        color INTEGER,
+        order_index INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
     await db.execute('''
       CREATE TABLE IF NOT EXISTS $_templatesTableName (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
+        folder_id INTEGER,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (folder_id) REFERENCES $_templateFoldersTableName (id) ON DELETE SET NULL
       )
     ''');
 
@@ -2664,6 +2681,13 @@ class TemplateService {
     } catch (e) {
       // Column already exists
     }
+    // Add folder_id column to templates if it doesn't exist
+    try {
+      await db.execute(
+          'ALTER TABLE $_templatesTableName ADD COLUMN folder_id INTEGER');
+    } catch (e) {
+      // Column already exists
+    }
   }
 
   // Ensure tables exist (for dynamic creation without migration)
@@ -2671,6 +2695,136 @@ class TemplateService {
     final db = await DatabaseService.instance.database;
     await createTemplateTables(db);
   }
+
+  // ========== FOLDER OPERATIONS ==========
+
+  // Get all folders
+  Future<List<TemplateFolder>> getFolders() async {
+    await ensureTablesExist();
+    final db = await DatabaseService.instance.database;
+
+    final foldersData = await db.query(
+      _templateFoldersTableName,
+      orderBy: 'order_index ASC, name ASC',
+    );
+
+    return foldersData
+        .map((data) => TemplateFolder(
+              id: data['id'] as int,
+              name: data['name'] as String,
+              color: data['color'] as int?,
+              orderIndex: data['order_index'] as int? ?? 0,
+              createdAt: DateTime.parse(data['created_at'] as String),
+            ))
+        .toList();
+  }
+
+  // Create a new folder
+  Future<int> createFolder(String name, {int? color}) async {
+    await ensureTablesExist();
+    final db = await DatabaseService.instance.database;
+    final now = DateTime.now().toIso8601String();
+
+    // Get the next order index
+    final result = await db.rawQuery(
+        'SELECT MAX(order_index) as max_order FROM $_templateFoldersTableName');
+    final maxOrder = (result.first['max_order'] as int?) ?? -1;
+
+    final folderId = await db.insert(_templateFoldersTableName, {
+      'name': name,
+      'color': color,
+      'order_index': maxOrder + 1,
+      'created_at': now,
+      'updated_at': now,
+    });
+
+    foldersUpdatedNotifier.value = !foldersUpdatedNotifier.value;
+    return folderId;
+  }
+
+  // Update a folder
+  Future<void> updateFolder(int id, {String? name, int? color}) async {
+    await ensureTablesExist();
+    final db = await DatabaseService.instance.database;
+    final now = DateTime.now().toIso8601String();
+
+    final updates = <String, dynamic>{'updated_at': now};
+    if (name != null) updates['name'] = name;
+    if (color != null) updates['color'] = color;
+
+    await db.update(
+      _templateFoldersTableName,
+      updates,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    foldersUpdatedNotifier.value = !foldersUpdatedNotifier.value;
+  }
+
+  // Delete a folder (templates in it become uncategorized)
+  Future<void> deleteFolder(int id) async {
+    await ensureTablesExist();
+    final db = await DatabaseService.instance.database;
+
+    // Templates with this folder_id will have it set to NULL due to ON DELETE SET NULL
+    await db.delete(
+      _templateFoldersTableName,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    foldersUpdatedNotifier.value = !foldersUpdatedNotifier.value;
+    templatesUpdatedNotifier.value = !templatesUpdatedNotifier.value;
+  }
+
+  // Move a template to a folder (or null to remove from folder)
+  Future<void> moveTemplateToFolder(int templateId, int? folderId) async {
+    await ensureTablesExist();
+    final db = await DatabaseService.instance.database;
+    final now = DateTime.now().toIso8601String();
+
+    await db.update(
+      _templatesTableName,
+      {
+        'folder_id': folderId,
+        'updated_at': now,
+      },
+      where: 'id = ?',
+      whereArgs: [templateId],
+    );
+
+    templatesUpdatedNotifier.value = !templatesUpdatedNotifier.value;
+  }
+
+  // Get templates in a specific folder (null for uncategorized)
+  Future<List<WorkoutTemplate>> getTemplatesInFolder(int? folderId) async {
+    await ensureTablesExist();
+    final db = await DatabaseService.instance.database;
+
+    final templatesData = await db.query(
+      _templatesTableName,
+      where: folderId == null ? 'folder_id IS NULL' : 'folder_id = ?',
+      whereArgs: folderId == null ? null : [folderId],
+      orderBy: 'updated_at DESC',
+    );
+
+    List<WorkoutTemplate> templates = [];
+    for (final templateData in templatesData) {
+      final exercises = await _getTemplateExercises(templateData['id'] as int);
+      templates.add(WorkoutTemplate(
+        id: templateData['id'] as int,
+        name: templateData['name'] as String,
+        folderId: templateData['folder_id'] as int?,
+        exercises: exercises,
+        createdAt: DateTime.parse(templateData['created_at'] as String),
+      ));
+    }
+
+    return templates;
+  }
+
+  // ========== TEMPLATE OPERATIONS ==========
 
   // Get all templates
   Future<List<WorkoutTemplate>> getTemplates() async {
@@ -2688,6 +2842,7 @@ class TemplateService {
       templates.add(WorkoutTemplate(
         id: templateData['id'] as int,
         name: templateData['name'] as String,
+        folderId: templateData['folder_id'] as int?,
         exercises: exercises,
         createdAt: DateTime.parse(templateData['created_at'] as String),
       ));
@@ -2715,6 +2870,7 @@ class TemplateService {
     return WorkoutTemplate(
       id: templateData['id'] as int,
       name: templateData['name'] as String,
+      folderId: templateData['folder_id'] as int?,
       exercises: exercises,
       createdAt: DateTime.parse(templateData['created_at'] as String),
     );
@@ -2768,13 +2924,15 @@ class TemplateService {
 
   // Create a new template
   Future<int> createTemplate(
-      String name, List<TemplateExercise> exercises) async {
+      String name, List<TemplateExercise> exercises,
+      {int? folderId}) async {
     await ensureTablesExist();
     final db = await DatabaseService.instance.database;
     final now = DateTime.now().toIso8601String();
 
     final templateId = await db.insert(_templatesTableName, {
       'name': name,
+      'folder_id': folderId,
       'created_at': now,
       'updated_at': now,
     });
@@ -2787,7 +2945,8 @@ class TemplateService {
 
   // Update an existing template
   Future<void> updateTemplate(
-      int id, String name, List<TemplateExercise> exercises) async {
+      int id, String name, List<TemplateExercise> exercises,
+      {int? folderId}) async {
     await ensureTablesExist();
     final db = await DatabaseService.instance.database;
     final now = DateTime.now().toIso8601String();
@@ -2796,6 +2955,7 @@ class TemplateService {
       _templatesTableName,
       {
         'name': name,
+        'folder_id': folderId,
         'updated_at': now,
       },
       where: 'id = ?',
@@ -2924,16 +3084,41 @@ class TemplateSet {
   }
 }
 
+// Template Folder model
+class TemplateFolder {
+  final int id;
+  final String name;
+  final int? color;
+  final int orderIndex;
+  final DateTime createdAt;
+
+  TemplateFolder({
+    required this.id,
+    required this.name,
+    this.color,
+    this.orderIndex = 0,
+    required this.createdAt,
+  });
+
+  // Get color as Color object with default
+  Color getColor() {
+    if (color == null) return const Color(0xFF3F8EFC);
+    return Color(color!);
+  }
+}
+
 // Workout Template model
 class WorkoutTemplate {
   final int id;
   final String name;
+  final int? folderId;
   final List<TemplateExercise> exercises;
   final DateTime createdAt;
 
   WorkoutTemplate({
     required this.id,
     required this.name,
+    this.folderId,
     required this.exercises,
     required this.createdAt,
   });

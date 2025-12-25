@@ -25,6 +25,8 @@ class WorkoutPageState extends State<WorkoutPage>
   final SettingsService _settingsService = SettingsService();
   List<Workout> _workouts = [];
   List<WorkoutTemplate> _templates = [];
+  List<TemplateFolder> _folders = [];
+  Map<int, bool> _expandedFolders = {}; // Track which folders are expanded
   bool _isLoading = true;
   int _weeklyWorkoutGoal = 5; // Default goal
 
@@ -35,6 +37,7 @@ class WorkoutPageState extends State<WorkoutPage>
     _loadWorkouts();
     _loadWeeklyGoal();
     _loadTemplates();
+    _loadFolders();
 
     // Listen for changes to workouts
     WorkoutService.workoutsUpdatedNotifier.addListener(_onWorkoutsUpdated);
@@ -44,6 +47,9 @@ class WorkoutPageState extends State<WorkoutPage>
     
     // Listen for template changes
     TemplateService.templatesUpdatedNotifier.addListener(_onTemplatesUpdated);
+    
+    // Listen for folder changes
+    TemplateService.foldersUpdatedNotifier.addListener(_onFoldersUpdated);
   }
 
   @override
@@ -53,6 +59,7 @@ class WorkoutPageState extends State<WorkoutPage>
     SettingsService.settingsUpdatedNotifier.removeListener(_onSettingsUpdated);
     TemplateService.templatesUpdatedNotifier
         .removeListener(_onTemplatesUpdated);
+    TemplateService.foldersUpdatedNotifier.removeListener(_onFoldersUpdated);
     super.dispose();
   }
 
@@ -66,6 +73,25 @@ class WorkoutPageState extends State<WorkoutPage>
   
   void _onTemplatesUpdated() {
     _loadTemplates();
+  }
+  
+  void _onFoldersUpdated() {
+    _loadFolders();
+  }
+
+  Future<void> _loadFolders() async {
+    try {
+      final folders = await _templateService.getFolders();
+      setState(() {
+        _folders = folders;
+        // Initialize expanded state for new folders
+        for (var folder in folders) {
+          _expandedFolders.putIfAbsent(folder.id, () => true);
+        }
+      });
+    } catch (e) {
+      debugPrint('Error loading folders: $e');
+    }
   }
 
   Future<void> _loadTemplates() async {
@@ -378,10 +404,24 @@ class WorkoutPageState extends State<WorkoutPage>
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    TextButton.icon(
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('New Template'),
-                      onPressed: _showCreateTemplateDialog,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.create_new_folder_outlined,
+                              size: 20),
+                          onPressed: _showCreateFolderDialog,
+                          tooltip: 'New Folder',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                        const SizedBox(width: 8),
+                        TextButton.icon(
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('New Template'),
+                          onPressed: _showCreateTemplateDialog,
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -398,7 +438,7 @@ class WorkoutPageState extends State<WorkoutPage>
 
   Widget _buildTemplatesSection() {
     // Show saved templates
-    if (_templates.isEmpty) {
+    if (_templates.isEmpty && _folders.isEmpty) {
       return Card(
         color: Colors.grey[900],
         child: const Padding(
@@ -419,79 +459,175 @@ class WorkoutPageState extends State<WorkoutPage>
       );
     }
 
+    // Group templates by folder
+    final uncategorizedTemplates =
+        _templates.where((t) => t.folderId == null).toList();
+    
     return Column(
-      children: _templates.take(3).map((template) {
-        final exerciseCount = template.exercises.length;
-        final exerciseNames = template.exercises
-            .take(3)
-            .map((e) => e.name
-                .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
-                .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
-                .trim())
-            .join(', ');
+      children: [
+        // Show folders first
+        ..._folders.map((folder) {
+          final folderTemplates =
+              _templates.where((t) => t.folderId == folder.id).toList();
+          final isExpanded = _expandedFolders[folder.id] ?? true;
 
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          color: Colors.grey[900],
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: InkWell(
-            onTap: () => _startWorkoutFromSavedTemplate(template),
-            onLongPress: () => _showTemplateOptions(template),
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).primaryColor.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.fitness_center,
-                      color: Theme.of(context).primaryColor,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            color: Colors.grey[900],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: [
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _expandedFolders[folder.id] = !isExpanded;
+                    });
+                  },
+                  onLongPress: () => _showFolderOptions(folder),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Row(
                       children: [
-                        Text(
-                          template.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: folder.getColor().withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            isExpanded ? Icons.folder_open : Icons.folder,
+                            color: folder.getColor(),
+                            size: 20,
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '$exerciseCount exercises • $exerciseNames${template.exercises.length > 3 ? '...' : ''}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[400],
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                folder.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${folderTemplates.length} template${folderTemplates.length != 1 ? 's' : ''}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[400],
+                                ),
+                              ),
+                            ],
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Icon(
+                          isExpanded ? Icons.expand_less : Icons.expand_more,
+                          color: Colors.white70,
                         ),
                       ],
                     ),
                   ),
-                  const Icon(
-                    Icons.play_arrow,
-                    color: Colors.white70,
+                ),
+                // Show templates in this folder when expanded
+                if (isExpanded && folderTemplates.isNotEmpty)
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(left: 16, right: 8, bottom: 8),
+                    child: Column(
+                      children: folderTemplates
+                          .map((template) =>
+                              _buildTemplateCard(template, inFolder: true))
+                          .toList(),
+                    ),
                   ),
-                ],
-              ),
+              ],
             ),
+          );
+        }),
+        // Show uncategorized templates
+        ...uncategorizedTemplates
+            .map((template) => _buildTemplateCard(template)),
+      ],
+    );
+  }
+
+  Widget _buildTemplateCard(WorkoutTemplate template, {bool inFolder = false}) {
+    final exerciseCount = template.exercises.length;
+    final exerciseNames = template.exercises
+        .take(3)
+        .map((e) => e.name
+            .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+            .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+            .trim())
+        .join(', ');
+
+    return Card(
+      margin: EdgeInsets.only(bottom: 8, left: inFolder ? 0 : 0),
+      color: inFolder ? Colors.grey[850] : Colors.grey[900],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: InkWell(
+        onTap: () => _startWorkoutFromSavedTemplate(template),
+        onLongPress: () => _showTemplateOptions(template),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.fitness_center,
+                  color: Theme.of(context).primaryColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      template.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$exerciseCount exercises • $exerciseNames${template.exercises.length > 3 ? '...' : ''}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[400],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.play_arrow,
+                color: Colors.white70,
+              ),
+            ],
           ),
-        );
-      }).toList(),
+        ),
+      ),
     );
   }
 
@@ -522,6 +658,25 @@ class WorkoutPageState extends State<WorkoutPage>
                       ),
                     ),
                   ).then((_) => _loadTemplates());
+                },
+              ),
+              ListTile(
+                leading:
+                    const Icon(Icons.folder_outlined, color: Colors.white70),
+                title: const Text('Move to Folder',
+                    style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showMoveToFolderDialog(template);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy, color: Colors.white70),
+                title: const Text('Duplicate Template',
+                    style: TextStyle(color: Colors.white)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  await _duplicateTemplate(template);
                 },
               ),
               ListTile(
@@ -565,6 +720,33 @@ class WorkoutPageState extends State<WorkoutPage>
         );
       },
     );
+  }
+
+  Future<void> _duplicateTemplate(WorkoutTemplate template) async {
+    try {
+      // Create a copy with "(Copy)" appended to the name
+      final newName = '${template.name} (Copy)';
+
+      await _templateService.createTemplate(
+        newName,
+        template.exercises,
+        folderId: template.folderId,
+      );
+
+      _loadTemplates();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Template duplicated as "$newName"')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error duplicating template: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _startWorkoutFromSavedTemplate(WorkoutTemplate template) async {
@@ -654,6 +836,308 @@ class WorkoutPageState extends State<WorkoutPage>
         SnackBar(content: Text('Error creating workout from template: $e')),
       );
     }
+  }
+
+  // Show dialog to create a new folder
+  void _showCreateFolderDialog() {
+    final nameController = TextEditingController();
+    int selectedColorIndex = 0;
+
+    final List<Color> folderColors = [
+      const Color(0xFF3F8EFC), // Blue (default)
+      const Color(0xFFFF9800), // Orange
+      const Color(0xFF9C27B0), // Purple
+      const Color(0xFF4CAF50), // Green
+      const Color(0xFFE91E63), // Pink
+      const Color(0xFF00BCD4), // Cyan
+      const Color(0xFFFFEB3B), // Yellow
+      const Color(0xFFFF5722), // Deep Orange
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: const Color(0xFF26272B),
+              title: const Text('New Folder',
+                  style: TextStyle(color: Colors.white)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Folder name',
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      filled: true,
+                      fillColor: const Color(0xFF303136),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('Color', style: TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: List.generate(folderColors.length, (index) {
+                      return GestureDetector(
+                        onTap: () =>
+                            setDialogState(() => selectedColorIndex = index),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: folderColors[index],
+                            shape: BoxShape.circle,
+                            border: selectedColorIndex == index
+                                ? Border.all(color: Colors.white, width: 2)
+                                : null,
+                          ),
+                          child: selectedColorIndex == index
+                              ? const Icon(Icons.check,
+                                  color: Colors.white, size: 18)
+                              : null,
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    if (name.isNotEmpty) {
+                      await _templateService.createFolder(
+                        name,
+                        color: folderColors[selectedColorIndex].value,
+                      );
+                      Navigator.pop(context);
+                      _loadFolders();
+                    }
+                  },
+                  child: const Text('Create'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Show dialog to move template to a folder
+  void _showMoveToFolderDialog(WorkoutTemplate template) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF26272B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  'Move to Folder',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              // Option to remove from folder (uncategorized)
+              ListTile(
+                leading: Icon(
+                  Icons.folder_off_outlined,
+                  color: template.folderId == null
+                      ? Theme.of(context).primaryColor
+                      : Colors.white70,
+                ),
+                title: const Text('No Folder',
+                    style: TextStyle(color: Colors.white)),
+                trailing: template.folderId == null
+                    ? Icon(Icons.check, color: Theme.of(context).primaryColor)
+                    : null,
+                onTap: () async {
+                  await _templateService.moveTemplateToFolder(
+                      template.id, null);
+                  Navigator.pop(context);
+                  _loadTemplates();
+                },
+              ),
+              const Divider(color: Colors.grey),
+              // List folders
+              ..._folders.map((folder) {
+                final isSelected = template.folderId == folder.id;
+                return ListTile(
+                  leading: Icon(
+                    Icons.folder,
+                    color: isSelected
+                        ? folder.getColor()
+                        : folder.getColor().withOpacity(0.7),
+                  ),
+                  title: Text(
+                    folder.name,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  trailing: isSelected
+                      ? Icon(Icons.check, color: Theme.of(context).primaryColor)
+                      : null,
+                  onTap: () async {
+                    await _templateService.moveTemplateToFolder(
+                        template.id, folder.id);
+                    Navigator.pop(context);
+                    _loadTemplates();
+                  },
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Show options for a folder (edit, delete)
+  void _showFolderOptions(TemplateFolder folder) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF26272B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit, color: Colors.white70),
+                title: const Text('Rename Folder',
+                    style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showRenameFolderDialog(folder);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete Folder',
+                    style: TextStyle(color: Colors.red)),
+                subtitle: const Text(
+                  'Templates will be moved to uncategorized',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: const Color(0xFF26272B),
+                      title: const Text('Delete Folder?',
+                          style: TextStyle(color: Colors.white)),
+                      content: Text(
+                        'Are you sure you want to delete "${folder.name}"? Templates inside will be moved to uncategorized.',
+                        style: const TextStyle(color: Colors.white70),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red),
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await _templateService.deleteFolder(folder.id);
+                    _loadFolders();
+                    _loadTemplates();
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Show dialog to rename a folder
+  void _showRenameFolderDialog(TemplateFolder folder) {
+    final nameController = TextEditingController(text: folder.name);
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF26272B),
+          title: const Text('Rename Folder',
+              style: TextStyle(color: Colors.white)),
+          content: TextField(
+            controller: nameController,
+            autofocus: true,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Folder name',
+              hintStyle: const TextStyle(color: Colors.grey),
+              filled: true,
+              fillColor: const Color(0xFF303136),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                if (name.isNotEmpty) {
+                  await _templateService.updateFolder(folder.id, name: name);
+                  Navigator.pop(context);
+                  _loadFolders();
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showCreateTemplateDialog() {
