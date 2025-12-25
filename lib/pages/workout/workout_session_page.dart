@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/foreground_service.dart';
@@ -37,6 +38,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   final WorkoutService _workoutService = WorkoutService();
   final ExerciseStickyNoteService _stickyNoteService =
       ExerciseStickyNoteService();
+  final SettingsService _settingsService = SettingsService();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   Workout? _workout;
@@ -90,8 +92,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   final Color _textSecondaryColor = Color(0xFFBBBBBB); // Secondary text
   final Color _inputBgColor = Color(0xFF303136); // Input background
 
-  // Default rest time
-  final int _defaultRestTime = 150; // 2:30 min  // Timer tracking variables
+  // Default rest time (loaded from settings)
+  int _defaultRestTime = 90; // Will be updated from settings
+  
+  // Settings loaded from SettingsService
+  bool _autoStartRestTimer = true;
+  bool _vibrateOnRestComplete = true;
+  bool _soundOnRestComplete = true;
+  bool _confirmFinishWorkout = true;
+  
+  // Timer tracking variables
   DateTime? _workoutStartTime; // To track real-world time elapsed
   // Shared rest timer state
   final ValueNotifier<int> _restRemainingNotifier = ValueNotifier(0);
@@ -210,6 +220,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
     }
     
+    // Load settings first
+    _loadSettings();
+
+    // Listen for settings changes
+    SettingsService.settingsUpdatedNotifier.addListener(_onSettingsChanged);
+    
     // Load the workout AFTER setting up restoration flags
     _loadWorkout();
     
@@ -219,6 +235,23 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     } else if (!widget.minimized && !widget.readOnly) {
       _startTimer();
     }
+  }
+  
+  Future<void> _loadSettings() async {
+    final settings = await _settingsService.getAllSettings();
+    if (mounted) {
+      setState(() {
+        _defaultRestTime = settings['defaultRestTimer'];
+        _autoStartRestTimer = settings['autoStartRestTimer'];
+        _vibrateOnRestComplete = settings['vibrateOnRestComplete'];
+        _soundOnRestComplete = settings['soundOnRestComplete'];
+        _confirmFinishWorkout = settings['confirmFinishWorkout'];
+      });
+    }
+  }
+
+  void _onSettingsChanged() {
+    _loadSettings();
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -362,6 +395,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     if (widget.isTemporary) {
       WorkoutService.tempWorkoutsNotifier.removeListener(_onTempWorkoutDataChanged);
     }
+    
+    // Remove settings listener
+    SettingsService.settingsUpdatedNotifier.removeListener(_onSettingsChanged);
 
     // Cancel timers immediately to prevent callbacks during disposal
     _timer?.cancel();
@@ -1058,6 +1094,21 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   }
   /// Play the boxing bell sound effect
   Future<void> _playBoxingBellSound() async {
+    // Check if vibration is enabled and trigger it
+    if (_vibrateOnRestComplete) {
+      HapticFeedback.heavyImpact();
+      // Add a second vibration after a short delay for emphasis
+      Future.delayed(const Duration(milliseconds: 200), () {
+        HapticFeedback.heavyImpact();
+      });
+    }
+    
+    // Only play sound if enabled in settings
+    if (!_soundOnRestComplete) {
+      print("Boxing bell sound skipped - sound disabled in settings");
+      return;
+    }
+    
     // Create a fresh player for each bell to allow replay
     final player = AudioPlayer();
     try {
@@ -3264,13 +3315,13 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             title: Container(
               padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: _currentRestSetId != null ? _primaryColor.withOpacity(0.1) : _surfaceColor,
+                color: (_currentRestSetId != null) ? _primaryColor.withOpacity(0.1) : _surfaceColor,
                 borderRadius: BorderRadius.circular(8),
-                border: _currentRestSetId != null 
+                border: (_currentRestSetId != null) 
                     ? Border.all(color: _primaryColor, width: 1)
                     : null,
               ),
-              child: _currentRestSetId != null 
+              child: (_currentRestSetId != null) 
                   ? GestureDetector(
                       onTap: () async {
                         // Navigate to rest timer page when rest timer is active
@@ -3544,10 +3595,15 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 
                     if (hasNoIssues) {
                       // Perfect workout - all sets are valid and completed
-                      dialogContent.add(Text(
-                        'All sets are properly completed with valid data. Ready to finish this workout?',
-                        style: TextStyle(color: _textSecondaryColor),
-                      ));
+                      // If confirm finish is disabled, skip the dialog
+                      if (!_confirmFinishWorkout) {
+                        // Skip directly to finishing the workout
+                      } else {
+                        dialogContent.add(Text(
+                          'All sets are properly completed with valid data. Ready to finish this workout?',
+                          style: TextStyle(color: _textSecondaryColor),
+                        ));
+                      }
                     } else {
                       // Workout needs cleanup
                       dialogContent.add(Text(
@@ -3594,55 +3650,63 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       }
                     }
                 
-                    // Show workout duration
-                    dialogContent.add(SizedBox(height: 16));
-                    dialogContent.add(Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.timer_outlined,
-                            color: _primaryColor, size: 18),
-                        SizedBox(width: 8),
-                        Text(
-                          'Duration: ${_formatTime(_elapsedSeconds)}',
-                          style: TextStyle(
-                            color: _textPrimaryColor,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ));
-
-                    // Show the confirmation dialog
-                    bool continueWithWorkout = await showDialog(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            backgroundColor: _surfaceColor,
-                            title: Text(dialogTitle,
-                                style: TextStyle(color: _textPrimaryColor)),
-                            content: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: dialogContent,
+                    // Skip confirmation dialog if there are no issues and confirm is disabled
+                    bool continueWithWorkout = true;
+                    
+                    if (hasNoIssues && !_confirmFinishWorkout) {
+                      // Auto-proceed without dialog
+                      continueWithWorkout = true;
+                    } else {
+                      // Show workout duration in dialog
+                      dialogContent.add(SizedBox(height: 16));
+                      dialogContent.add(Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.timer_outlined,
+                              color: _primaryColor, size: 18),
+                          SizedBox(width: 8),
+                          Text(
+                            'Duration: ${_formatTime(_elapsedSeconds)}',
+                            style: TextStyle(
+                              color: _textPrimaryColor,
+                              fontWeight: FontWeight.w500,
                             ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: Text('Cancel',
-                                    style:
-                                        TextStyle(color: _textSecondaryColor)),
-                              ),
-                              ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: _primaryColor,
-                                  foregroundColor: Colors.white,
-                                ),
-                                onPressed: () => Navigator.pop(context, true),
-                                child: Text('Finish Workout'),
-                              ),
-                            ],
                           ),
-                        ) ??
-                        false;
+                        ],
+                      ));
+
+                      // Show the confirmation dialog
+                      continueWithWorkout = await showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              backgroundColor: _surfaceColor,
+                              title: Text(dialogTitle,
+                                  style: TextStyle(color: _textPrimaryColor)),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: dialogContent,
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context, false),
+                                  child: Text('Cancel',
+                                      style:
+                                          TextStyle(color: _textSecondaryColor)),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _primaryColor,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: Text('Finish Workout'),
+                                ),
+                              ],
+                            ),
+                          ) ??
+                          false;
+                    }
 
                     if (!continueWithWorkout) {
                       return; // User chose to cancel
@@ -4943,10 +5007,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                 final willComplete = !set.completed;
                                 _toggleSetCompletion(
                                     exercise.id, set.id, willComplete);
-                                if (willComplete) {
-                                  // Start rest when completing (but don't open rest timer window)
+                                if (willComplete && _autoStartRestTimer) {
+                                  // Start rest when completing (if auto-start is enabled)
                                   _startRestTimerForSet(set.id, set.restTime);
-                                } else {
+                                } else if (!willComplete) {
                                   // Cancel rest when undoing, but don't play sound
                                   _cancelRestTimer(playSound: false);
                                 }

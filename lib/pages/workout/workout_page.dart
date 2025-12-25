@@ -5,6 +5,8 @@ import 'package:mental_warior/pages/workout/workout_session_page.dart';
 import 'package:mental_warior/pages/workout/workout_details_page.dart';
 import 'package:mental_warior/pages/workout/exercise_browse_page.dart';
 import 'package:mental_warior/pages/workout/template_editor_page.dart';
+import 'package:mental_warior/pages/workout/body_measurements_page.dart';
+import 'package:mental_warior/pages/workout/workout_settings_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/widgets/workout_week_chart.dart';
 import 'package:mental_warior/utils/functions.dart';
@@ -33,7 +35,7 @@ class WorkoutPageState extends State<WorkoutPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadWorkouts();
     _loadWeeklyGoal();
     _loadTemplates();
@@ -345,14 +347,31 @@ class WorkoutPageState extends State<WorkoutPage>
   // Compact custom header to replace the default AppBar
   Widget _buildCompactHeader() {
     return Container(
-      padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 4),
-      child: const Text(
-        'Workouts',
-        style: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-        ),
-        overflow: TextOverflow.ellipsis,
+      padding: const EdgeInsets.only(top: 16, left: 16, right: 8, bottom: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'Workouts',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, size: 24),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const WorkoutSettingsPage(),
+                ),
+              );
+            },
+            tooltip: 'Settings',
+          ),
+        ],
       ),
     );
   }
@@ -1421,10 +1440,13 @@ class WorkoutPageState extends State<WorkoutPage>
                   // Tab bar
                   TabBar(
                     controller: _tabController,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
                     tabs: const [
                       Tab(text: 'Workout'),
                       Tab(text: 'History'),
                       Tab(text: 'Exercises'),
+                      Tab(text: 'Measurements'),
                     ],
                     labelColor: Theme.of(context).primaryColor,
                     unselectedLabelColor: Colors.grey,
@@ -1438,6 +1460,7 @@ class WorkoutPageState extends State<WorkoutPage>
                         _buildWorkoutTab(),
                         _buildHistoryTab(),
                         const ExerciseBrowsePage(embedded: true),
+                        const BodyMeasurementsPage(embedded: true),
                       ],
                     ),
                   ),

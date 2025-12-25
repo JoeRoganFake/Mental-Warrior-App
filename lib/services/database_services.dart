@@ -2225,9 +2225,29 @@ class SettingsService {
 
   // Keys for SharedPreferences
   static const String _weeklyWorkoutGoalKey = 'weekly_workout_goal';
+  static const String _defaultRestTimerKey = 'default_rest_timer';
+  static const String _autoStartRestTimerKey = 'auto_start_rest_timer';
+  static const String _vibrateOnRestCompleteKey = 'vibrate_on_rest_complete';
+  static const String _soundOnRestCompleteKey = 'sound_on_rest_complete';
+  static const String _keepScreenOnKey = 'keep_screen_on';
+  static const String _showWeightInLbsKey = 'show_weight_in_lbs';
+  static const String _defaultWeightIncrementKey = 'default_weight_increment';
+  static const String _showRestTimerKey = 'show_rest_timer';
+  static const String _confirmFinishWorkoutKey = 'confirm_finish_workout';
+  static const String _useMeasurementInInchesKey = 'use_measurement_in_inches';
 
   // Default values
   static const int defaultWeeklyWorkoutGoal = 5;
+  static const int defaultRestTimerSeconds = 90;
+  static const bool defaultAutoStartRestTimer = true;
+  static const bool defaultVibrateOnRestComplete = true;
+  static const bool defaultSoundOnRestComplete = true;
+  static const bool defaultKeepScreenOn = true;
+  static const bool defaultShowWeightInLbs = false;
+  static const double defaultWeightIncrement = 2.5;
+  static const bool defaultShowRestTimer = true;
+  static const bool defaultConfirmFinishWorkout = true;
+  static const bool defaultUseMeasurementInInches = false;
 
   // Get the weekly workout goal
   Future<int> getWeeklyWorkoutGoal() async {
@@ -2240,6 +2260,141 @@ class SettingsService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_weeklyWorkoutGoalKey, goal);
     settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  // Rest Timer Settings
+  Future<int> getDefaultRestTimer() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_defaultRestTimerKey) ?? defaultRestTimerSeconds;
+  }
+
+  Future<void> setDefaultRestTimer(int seconds) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_defaultRestTimerKey, seconds);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  Future<bool> getAutoStartRestTimer() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_autoStartRestTimerKey) ?? defaultAutoStartRestTimer;
+  }
+
+  Future<void> setAutoStartRestTimer(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoStartRestTimerKey, value);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  Future<bool> getVibrateOnRestComplete() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_vibrateOnRestCompleteKey) ??
+        defaultVibrateOnRestComplete;
+  }
+
+  Future<void> setVibrateOnRestComplete(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_vibrateOnRestCompleteKey, value);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  Future<bool> getSoundOnRestComplete() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_soundOnRestCompleteKey) ?? defaultSoundOnRestComplete;
+  }
+
+  Future<void> setSoundOnRestComplete(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_soundOnRestCompleteKey, value);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  Future<bool> getShowRestTimer() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_showRestTimerKey) ?? defaultShowRestTimer;
+  }
+
+  Future<void> setShowRestTimer(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showRestTimerKey, value);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  // Workout Settings
+  Future<bool> getKeepScreenOn() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keepScreenOnKey) ?? defaultKeepScreenOn;
+  }
+
+  Future<void> setKeepScreenOn(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keepScreenOnKey, value);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  Future<bool> getConfirmFinishWorkout() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_confirmFinishWorkoutKey) ??
+        defaultConfirmFinishWorkout;
+  }
+
+  Future<void> setConfirmFinishWorkout(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_confirmFinishWorkoutKey, value);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  // Weight Settings
+  Future<bool> getShowWeightInLbs() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_showWeightInLbsKey) ?? defaultShowWeightInLbs;
+  }
+
+  Future<void> setShowWeightInLbs(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showWeightInLbsKey, value);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  Future<double> getDefaultWeightIncrement() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_defaultWeightIncrementKey) ??
+        defaultWeightIncrement;
+  }
+
+  Future<void> setDefaultWeightIncrement(double value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_defaultWeightIncrementKey, value);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  // Measurement Settings
+  Future<bool> getUseMeasurementInInches() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_useMeasurementInInchesKey) ??
+        defaultUseMeasurementInInches;
+  }
+
+  Future<void> setUseMeasurementInInches(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_useMeasurementInInchesKey, value);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  // Get all settings at once (useful for settings page)
+  Future<Map<String, dynamic>> getAllSettings() async {
+    return {
+      'weeklyWorkoutGoal': await getWeeklyWorkoutGoal(),
+      'defaultRestTimer': await getDefaultRestTimer(),
+      'autoStartRestTimer': await getAutoStartRestTimer(),
+      'vibrateOnRestComplete': await getVibrateOnRestComplete(),
+      'soundOnRestComplete': await getSoundOnRestComplete(),
+      'showRestTimer': await getShowRestTimer(),
+      'keepScreenOn': await getKeepScreenOn(),
+      'confirmFinishWorkout': await getConfirmFinishWorkout(),
+      'showWeightInLbs': await getShowWeightInLbs(),
+      'defaultWeightIncrement': await getDefaultWeightIncrement(),
+      'useMeasurementInInches': await getUseMeasurementInInches(),
+    };
   }
 }
 
@@ -3121,5 +3276,351 @@ class WorkoutTemplate {
     this.folderId,
     required this.exercises,
     required this.createdAt,
+  });
+}
+
+// ========== BODY MEASUREMENTS ==========
+
+// Body Measurement Service for tracking muscle measurements over time
+class MeasurementService {
+  // Singleton instance
+  static final MeasurementService _instance = MeasurementService._internal();
+  factory MeasurementService() => _instance;
+  MeasurementService._internal();
+
+  // Notifier to inform listeners when measurements change
+  static final ValueNotifier<bool> measurementsUpdatedNotifier =
+      ValueNotifier(false);
+
+  // Table & column names
+  static const String _measurementsTableName = 'body_measurements';
+  static const String _idColumnName = 'id';
+  static const String _muscleTypeColumnName = 'muscle_type';
+  static const String _valueColumnName = 'value';
+  static const String _unitColumnName = 'unit';
+  static const String _dateColumnName = 'date';
+  static const String _notesColumnName = 'notes';
+  static const String _createdAtColumnName = 'created_at';
+
+  // Predefined muscle types for measurements
+  static const List<MuscleType> muscleTypes = [
+    MuscleType(id: 'neck', name: 'Neck', icon: 0xe3e3),
+    MuscleType(id: 'shoulders', name: 'Shoulders', icon: 0xe574),
+    MuscleType(id: 'chest', name: 'Chest', icon: 0xe574),
+    MuscleType(id: 'left_bicep', name: 'Left Bicep', icon: 0xe566),
+    MuscleType(id: 'right_bicep', name: 'Right Bicep', icon: 0xe566),
+    MuscleType(id: 'left_forearm', name: 'Left Forearm', icon: 0xe566),
+    MuscleType(id: 'right_forearm', name: 'Right Forearm', icon: 0xe566),
+    MuscleType(id: 'waist', name: 'Waist', icon: 0xe574),
+    MuscleType(id: 'hips', name: 'Hips', icon: 0xe574),
+    MuscleType(id: 'left_thigh', name: 'Left Thigh', icon: 0xe566),
+    MuscleType(id: 'right_thigh', name: 'Right Thigh', icon: 0xe566),
+    MuscleType(id: 'left_calf', name: 'Left Calf', icon: 0xe566),
+    MuscleType(id: 'right_calf', name: 'Right Calf', icon: 0xe566),
+    MuscleType(id: 'weight', name: 'Body Weight', icon: 0xe3b0),
+    MuscleType(id: 'body_fat', name: 'Body Fat %', icon: 0xe3b0),
+  ];
+
+  // Create measurements table
+  Future<void> createMeasurementsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_measurementsTableName (
+        $_idColumnName INTEGER PRIMARY KEY AUTOINCREMENT,
+        $_muscleTypeColumnName TEXT NOT NULL,
+        $_valueColumnName REAL NOT NULL,
+        $_unitColumnName TEXT NOT NULL DEFAULT 'cm',
+        $_dateColumnName TEXT NOT NULL,
+        $_notesColumnName TEXT,
+        $_createdAtColumnName TEXT NOT NULL
+      )
+    ''');
+
+    // Create index for faster queries
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_measurements_muscle_date 
+      ON $_measurementsTableName ($_muscleTypeColumnName, $_dateColumnName)
+    ''');
+  }
+
+  // Ensure table exists
+  Future<void> ensureTableExists() async {
+    final db = await DatabaseService.instance.database;
+    await createMeasurementsTable(db);
+  }
+
+  // Add a new measurement
+  Future<int> addMeasurement({
+    required String muscleType,
+    required double value,
+    required String unit,
+    required DateTime date,
+    String? notes,
+  }) async {
+    await ensureTableExists();
+    final db = await DatabaseService.instance.database;
+    final now = DateTime.now().toIso8601String();
+
+    final id = await db.insert(_measurementsTableName, {
+      _muscleTypeColumnName: muscleType,
+      _valueColumnName: value,
+      _unitColumnName: unit,
+      _dateColumnName: date.toIso8601String().split('T')[0],
+      _notesColumnName: notes,
+      _createdAtColumnName: now,
+    });
+
+    measurementsUpdatedNotifier.value = !measurementsUpdatedNotifier.value;
+    return id;
+  }
+
+  // Update a measurement
+  Future<void> updateMeasurement({
+    required int id,
+    double? value,
+    String? unit,
+    DateTime? date,
+    String? notes,
+  }) async {
+    await ensureTableExists();
+    final db = await DatabaseService.instance.database;
+
+    final updates = <String, dynamic>{};
+    if (value != null) updates[_valueColumnName] = value;
+    if (unit != null) updates[_unitColumnName] = unit;
+    if (date != null)
+      updates[_dateColumnName] = date.toIso8601String().split('T')[0];
+    if (notes != null) updates[_notesColumnName] = notes;
+
+    if (updates.isNotEmpty) {
+      await db.update(
+        _measurementsTableName,
+        updates,
+        where: '$_idColumnName = ?',
+        whereArgs: [id],
+      );
+      measurementsUpdatedNotifier.value = !measurementsUpdatedNotifier.value;
+    }
+  }
+
+  // Delete a measurement
+  Future<void> deleteMeasurement(int id) async {
+    await ensureTableExists();
+    final db = await DatabaseService.instance.database;
+
+    await db.delete(
+      _measurementsTableName,
+      where: '$_idColumnName = ?',
+      whereArgs: [id],
+    );
+
+    measurementsUpdatedNotifier.value = !measurementsUpdatedNotifier.value;
+  }
+
+  // Get all measurements for a specific muscle type
+  Future<List<BodyMeasurement>> getMeasurementsForMuscle(
+      String muscleType) async {
+    await ensureTableExists();
+    final db = await DatabaseService.instance.database;
+
+    final data = await db.query(
+      _measurementsTableName,
+      where: '$_muscleTypeColumnName = ?',
+      whereArgs: [muscleType],
+      orderBy: '$_dateColumnName DESC',
+    );
+
+    return data.map((map) => BodyMeasurement.fromMap(map)).toList();
+  }
+
+  // Get the latest measurement for each muscle type
+  Future<Map<String, BodyMeasurement>> getLatestMeasurements() async {
+    await ensureTableExists();
+    final db = await DatabaseService.instance.database;
+
+    final Map<String, BodyMeasurement> latest = {};
+
+    for (final muscleType in muscleTypes) {
+      final data = await db.query(
+        _measurementsTableName,
+        where: '$_muscleTypeColumnName = ?',
+        whereArgs: [muscleType.id],
+        orderBy: '$_dateColumnName DESC',
+        limit: 1,
+      );
+
+      if (data.isNotEmpty) {
+        latest[muscleType.id] = BodyMeasurement.fromMap(data.first);
+      }
+    }
+
+    return latest;
+  }
+
+  // Get all measurements within a date range
+  Future<List<BodyMeasurement>> getMeasurementsInRange(
+    DateTime startDate,
+    DateTime endDate,
+  ) async {
+    await ensureTableExists();
+    final db = await DatabaseService.instance.database;
+
+    final data = await db.query(
+      _measurementsTableName,
+      where: '$_dateColumnName >= ? AND $_dateColumnName <= ?',
+      whereArgs: [
+        startDate.toIso8601String().split('T')[0],
+        endDate.toIso8601String().split('T')[0],
+      ],
+      orderBy: '$_dateColumnName DESC',
+    );
+
+    return data.map((map) => BodyMeasurement.fromMap(map)).toList();
+  }
+
+  // Get progress (difference) between first and latest measurement
+  Future<Map<String, MeasurementProgress>> getProgress() async {
+    await ensureTableExists();
+    final db = await DatabaseService.instance.database;
+
+    final Map<String, MeasurementProgress> progress = {};
+
+    for (final muscleType in muscleTypes) {
+      final data = await db.query(
+        _measurementsTableName,
+        where: '$_muscleTypeColumnName = ?',
+        whereArgs: [muscleType.id],
+        orderBy: '$_dateColumnName ASC',
+      );
+
+      if (data.length >= 2) {
+        final first = BodyMeasurement.fromMap(data.first);
+        final latest = BodyMeasurement.fromMap(data.last);
+        final difference = latest.value - first.value;
+        final percentChange = (difference / first.value) * 100;
+
+        progress[muscleType.id] = MeasurementProgress(
+          muscleType: muscleType.id,
+          firstValue: first.value,
+          latestValue: latest.value,
+          difference: difference,
+          percentChange: percentChange,
+          firstDate: first.date,
+          latestDate: latest.date,
+          unit: latest.unit,
+        );
+      } else if (data.length == 1) {
+        final measurement = BodyMeasurement.fromMap(data.first);
+        progress[muscleType.id] = MeasurementProgress(
+          muscleType: muscleType.id,
+          firstValue: measurement.value,
+          latestValue: measurement.value,
+          difference: 0,
+          percentChange: 0,
+          firstDate: measurement.date,
+          latestDate: measurement.date,
+          unit: measurement.unit,
+        );
+      }
+    }
+
+    return progress;
+  }
+
+  // Get measurement history for charts
+  Future<List<BodyMeasurement>> getMeasurementHistory(String muscleType,
+      {int? limit}) async {
+    await ensureTableExists();
+    final db = await DatabaseService.instance.database;
+
+    final data = await db.query(
+      _measurementsTableName,
+      where: '$_muscleTypeColumnName = ?',
+      whereArgs: [muscleType],
+      orderBy: '$_dateColumnName ASC',
+      limit: limit,
+    );
+
+    return data.map((map) => BodyMeasurement.fromMap(map)).toList();
+  }
+}
+
+// Muscle type definition
+class MuscleType {
+  final String id;
+  final String name;
+  final int icon;
+
+  const MuscleType({
+    required this.id,
+    required this.name,
+    required this.icon,
+  });
+}
+
+// Body measurement model
+class BodyMeasurement {
+  final int id;
+  final String muscleType;
+  final double value;
+  final String unit;
+  final DateTime date;
+  final String? notes;
+  final DateTime createdAt;
+
+  BodyMeasurement({
+    required this.id,
+    required this.muscleType,
+    required this.value,
+    required this.unit,
+    required this.date,
+    this.notes,
+    required this.createdAt,
+  });
+
+  factory BodyMeasurement.fromMap(Map<String, dynamic> map) {
+    return BodyMeasurement(
+      id: map['id'] as int,
+      muscleType: map['muscle_type'] as String,
+      value: (map['value'] as num).toDouble(),
+      unit: map['unit'] as String,
+      date: DateTime.parse(map['date'] as String),
+      notes: map['notes'] as String?,
+      createdAt: DateTime.parse(map['created_at'] as String),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'muscle_type': muscleType,
+      'value': value,
+      'unit': unit,
+      'date': date.toIso8601String().split('T')[0],
+      'notes': notes,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+}
+
+// Measurement progress model
+class MeasurementProgress {
+  final String muscleType;
+  final double firstValue;
+  final double latestValue;
+  final double difference;
+  final double percentChange;
+  final DateTime firstDate;
+  final DateTime latestDate;
+  final String unit;
+
+  MeasurementProgress({
+    required this.muscleType,
+    required this.firstValue,
+    required this.latestValue,
+    required this.difference,
+    required this.percentChange,
+    required this.firstDate,
+    required this.latestDate,
+    required this.unit,
   });
 }
