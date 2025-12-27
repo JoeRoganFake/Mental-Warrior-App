@@ -32,6 +32,9 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
   final Color _textPrimaryColor = Colors.white;
   final Color _textSecondaryColor = const Color(0xFFBBBBBB);
   final Color _accentColor = const Color(0xFF7C4DFF);
+  
+  bool _showWeightInLbs = false;
+  String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';
 
   // Superset colors - same as workout_session_page
   static const List<Color> _supersetColors = [
@@ -155,7 +158,15 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
   @override
   void initState() {
     super.initState();
+    _loadWeightUnit();
     _loadWorkout();
+  }
+
+  Future<void> _loadWeightUnit() async {
+    final useLbs = await SettingsService().getShowWeightInLbs();
+    if (mounted) {
+      setState(() => _showWeightInLbs = useLbs);
+    }
   }
 
   Future<void> _loadWorkout() async {
@@ -486,7 +497,7 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
                 child: _buildStatCard(
                   icon: Icons.monitor_weight,
                   label: 'Volume',
-                  value: '${totalVolume.toStringAsFixed(0)} kg',
+                  value: '${totalVolume.toStringAsFixed(0)} $_weightUnit',
                   color: _successColor,
                 ),
               ),
@@ -749,7 +760,7 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
                     ),
                   ),
                   child: Text(
-                    'Best: ${_formatWeight(bestSet.weight)} kg × ${bestSet.reps}',
+                      'Best: ${_formatWeight(bestSet.weight)} $_weightUnit × ${bestSet.reps}',
                     style: TextStyle(
                       color: _successColor,
                       fontSize: 12,
@@ -914,7 +925,7 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
             child: Row(
               children: [
                 Text(
-                  '${_formatWeight(set.weight)} kg',
+                  '${_formatWeight(set.weight)} $_weightUnit',
                   style: TextStyle(
                     color: _textPrimaryColor,
                     fontWeight: FontWeight.w600,
@@ -943,7 +954,7 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${volume.toStringAsFixed(0)} kg',
+                '${volume.toStringAsFixed(0)} $_weightUnit',
                 style: TextStyle(
                   color: _textSecondaryColor,
                   fontSize: 12,

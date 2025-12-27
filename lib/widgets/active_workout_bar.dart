@@ -4,6 +4,7 @@ import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/workout/workout_session_page.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vibration/vibration.dart';
 
 class ActiveWorkoutBar extends StatefulWidget {
   const ActiveWorkoutBar({super.key});
@@ -545,6 +546,20 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
   }
 
   Future<void> _playBoxingBellSound() async {
+    // Trigger vibration
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final vibrateEnabled = prefs.getBool('vibrate_on_rest_complete') ?? true;
+      if (vibrateEnabled) {
+        await Vibration.vibrate(duration: 500);
+        await Future.delayed(const Duration(milliseconds: 700));
+        await Vibration.vibrate(duration: 500);
+        print("Vibration triggered from active workout bar");
+      }
+    } catch (e) {
+      print("Vibration error in active workout bar: $e");
+    }
+
     try {
       // Import audioplayers at the top of the file if not already imported
       final player = AudioPlayer();

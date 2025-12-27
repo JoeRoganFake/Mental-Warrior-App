@@ -57,13 +57,24 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
   final Color _textPrimaryColor = Colors.white;
   final Color _textSecondaryColor = const Color(0xFFBBBBBB);
   final Color _inputBgColor = const Color(0xFF303136);
+  
+  bool _showWeightInLbs = false;
+  String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';
 
   @override
   void initState() {
     super.initState();
+    _loadWeightUnit();
     _nameController.text = widget.initialName ?? 'New Template';
     if (widget.templateId != null) {
       _loadTemplate();
+    }
+  }
+
+  Future<void> _loadWeightUnit() async {
+    final useLbs = await SettingsService().getShowWeightInLbs();
+    if (mounted) {
+      setState(() => _showWeightInLbs = useLbs);
     }
   }
 
@@ -1084,7 +1095,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                     suffix: Padding(
                       padding: const EdgeInsets.only(right: 8.0),
                       child: Text(
-                        'kg',
+                        _weightUnit,
                         style: TextStyle(color: _textSecondaryColor),
                       ),
                     ),

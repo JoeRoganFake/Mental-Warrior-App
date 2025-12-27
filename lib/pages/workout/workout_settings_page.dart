@@ -23,7 +23,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
   int _defaultRestTimer = 90;
   bool _autoStartRestTimer = true;
   bool _vibrateOnRestComplete = true;
-  bool _soundOnRestComplete = true;
   bool _keepScreenOn = true;
   bool _confirmFinishWorkout = true;
   bool _showWeightInLbs = false;
@@ -35,7 +34,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
   int _originalDefaultRestTimer = 90;
   bool _originalAutoStartRestTimer = true;
   bool _originalVibrateOnRestComplete = true;
-  bool _originalSoundOnRestComplete = true;
   bool _originalKeepScreenOn = true;
   bool _originalConfirmFinishWorkout = true;
   bool _originalShowWeightInLbs = false;
@@ -58,25 +56,23 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         _defaultRestTimer = settings['defaultRestTimer'];
         _autoStartRestTimer = settings['autoStartRestTimer'];
         _vibrateOnRestComplete = settings['vibrateOnRestComplete'];
-        _soundOnRestComplete = settings['soundOnRestComplete'];
         _keepScreenOn = settings['keepScreenOn'];
         _confirmFinishWorkout = settings['confirmFinishWorkout'];
         _showWeightInLbs = settings['showWeightInLbs'];
         _defaultWeightIncrement = settings['defaultWeightIncrement'];
         _useMeasurementInInches = settings['useMeasurementInInches'];
-        
+
         // Store original values
         _originalWeeklyWorkoutGoal = _weeklyWorkoutGoal;
         _originalDefaultRestTimer = _defaultRestTimer;
         _originalAutoStartRestTimer = _autoStartRestTimer;
         _originalVibrateOnRestComplete = _vibrateOnRestComplete;
-        _originalSoundOnRestComplete = _soundOnRestComplete;
         _originalKeepScreenOn = _keepScreenOn;
         _originalConfirmFinishWorkout = _confirmFinishWorkout;
         _originalShowWeightInLbs = _showWeightInLbs;
         _originalDefaultWeightIncrement = _defaultWeightIncrement;
         _originalUseMeasurementInInches = _useMeasurementInInches;
-        
+
         _hasUnsavedChanges = false;
         _isLoading = false;
       });
@@ -88,12 +84,10 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
 
   void _checkForChanges() {
     setState(() {
-      _hasUnsavedChanges = 
-          _weeklyWorkoutGoal != _originalWeeklyWorkoutGoal ||
+      _hasUnsavedChanges = _weeklyWorkoutGoal != _originalWeeklyWorkoutGoal ||
           _defaultRestTimer != _originalDefaultRestTimer ||
           _autoStartRestTimer != _originalAutoStartRestTimer ||
           _vibrateOnRestComplete != _originalVibrateOnRestComplete ||
-          _soundOnRestComplete != _originalSoundOnRestComplete ||
           _keepScreenOn != _originalKeepScreenOn ||
           _confirmFinishWorkout != _originalConfirmFinishWorkout ||
           _showWeightInLbs != _originalShowWeightInLbs ||
@@ -109,30 +103,28 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       await _settingsService.setDefaultRestTimer(_defaultRestTimer);
       await _settingsService.setAutoStartRestTimer(_autoStartRestTimer);
       await _settingsService.setVibrateOnRestComplete(_vibrateOnRestComplete);
-      await _settingsService.setSoundOnRestComplete(_soundOnRestComplete);
       await _settingsService.setKeepScreenOn(_keepScreenOn);
       await _settingsService.setConfirmFinishWorkout(_confirmFinishWorkout);
       await _settingsService.setShowWeightInLbs(_showWeightInLbs);
       await _settingsService.setDefaultWeightIncrement(_defaultWeightIncrement);
       await _settingsService.setUseMeasurementInInches(_useMeasurementInInches);
-      
+
       // Update original values to match saved values
       _originalWeeklyWorkoutGoal = _weeklyWorkoutGoal;
       _originalDefaultRestTimer = _defaultRestTimer;
       _originalAutoStartRestTimer = _autoStartRestTimer;
       _originalVibrateOnRestComplete = _vibrateOnRestComplete;
-      _originalSoundOnRestComplete = _soundOnRestComplete;
       _originalKeepScreenOn = _keepScreenOn;
       _originalConfirmFinishWorkout = _confirmFinishWorkout;
       _originalShowWeightInLbs = _showWeightInLbs;
       _originalDefaultWeightIncrement = _defaultWeightIncrement;
       _originalUseMeasurementInInches = _useMeasurementInInches;
-      
+
       setState(() {
         _hasUnsavedChanges = false;
         _isLoading = false;
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -161,12 +153,13 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
     if (!_hasUnsavedChanges) {
       return true;
     }
-    
+
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: _surfaceColor,
-        title: const Text('Unsaved Changes', style: TextStyle(color: Colors.white)),
+        title: const Text('Unsaved Changes',
+            style: TextStyle(color: Colors.white)),
         content: const Text(
           'You have unsaved changes. What would you like to do?',
           style: TextStyle(color: Colors.white70),
@@ -188,7 +181,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         ],
       ),
     );
-    
+
     if (result == 'save') {
       await _saveAllSettings();
       return true;
@@ -233,7 +226,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
               TextButton.icon(
                 onPressed: _saveAllSettings,
                 icon: const Icon(Icons.save, color: Colors.white),
-                label: const Text('Save', style: TextStyle(color: Colors.white)),
+                label:
+                    const Text('Save', style: TextStyle(color: Colors.white)),
               ),
           ],
         ),
@@ -246,126 +240,101 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                   _buildSectionHeader('Goals', Icons.flag_outlined),
                   _buildSettingsCard([
                     _buildWeeklyGoalTile(),
-                ]),
-                const SizedBox(height: 24),
+                  ]),
+                  const SizedBox(height: 24),
 
-                // Rest Timer Section
-                _buildSectionHeader('Rest Timer', Icons.timer_outlined),
-                _buildSettingsCard([
-                  _buildRestTimerTile(),
-                  _buildDivider(),
-                  _buildSwitchTile(
-                    'Auto-start Timer',
-                    'Start rest timer automatically after completing a set',
-                    _autoStartRestTimer,
-                    (value) {
-                      setState(() => _autoStartRestTimer = value);
-                      _checkForChanges();
-                    },
-                  ),
-                  _buildDivider(),
-                  _buildSwitchTile(
-                    'Vibrate',
-                    'Vibrate when rest timer completes',
-                    _vibrateOnRestComplete,
-                    (value) {
-                      setState(() => _vibrateOnRestComplete = value);
-                      _checkForChanges();
-                    },
-                  ),
-                  _buildDivider(),
-                  _buildSwitchTile(
-                    'Sound',
-                    'Play sound when rest timer completes',
-                    _soundOnRestComplete,
-                    (value) {
-                      setState(() => _soundOnRestComplete = value);
-                      _checkForChanges();
-                    },
-                  ),
-                ]),
-                const SizedBox(height: 24),
+                  // Rest Timer Section
+                  _buildSectionHeader('Rest Timer', Icons.timer_outlined),
+                  _buildSettingsCard([
+                    _buildRestTimerTile(),
+                    _buildDivider(),
+                    _buildSwitchTile(
+                      'Auto-start Timer',
+                      'Start rest timer automatically after completing a set',
+                      _autoStartRestTimer,
+                      (value) {
+                        setState(() => _autoStartRestTimer = value);
+                        _checkForChanges();
+                      },
+                    ),
+                    _buildDivider(),
+                    _buildSwitchTile(
+                      'Vibrate',
+                      'Vibrate when rest timer completes',
+                      _vibrateOnRestComplete,
+                      (value) {
+                        setState(() => _vibrateOnRestComplete = value);
+                        _checkForChanges();
+                      },
+                    ),
+                  ]),
+                  const SizedBox(height: 24),
 
-                // Units Section
-                _buildSectionHeader('Units', Icons.straighten_outlined),
-                _buildSettingsCard([
-                  _buildSwitchTile(
-                    'Use Pounds (lbs)',
-                    'Display weight in pounds instead of kilograms',
-                    _showWeightInLbs,
-                    (value) {
-                      setState(() => _showWeightInLbs = value);
-                      _checkForChanges();
-                    },
-                  ),
-                  _buildDivider(),
-                  _buildSwitchTile(
-                    'Use Inches (in)',
-                    'Display body measurements in inches instead of centimeters',
-                    _useMeasurementInInches,
-                    (value) {
-                      setState(() => _useMeasurementInInches = value);
-                      _checkForChanges();
-                    },
-                  ),
-                  _buildDivider(),
-                  _buildWeightIncrementTile(),
-                ]),
-                const SizedBox(height: 24),
+                  // Units Section
+                  _buildSectionHeader('Units', Icons.straighten_outlined),
+                  _buildSettingsCard([
+                    _buildWeightUnitTile(),
+                    _buildDivider(),
+                    _buildMeasurementUnitTile(),
+                    _buildDivider(),
+                    _buildWeightIncrementTile(),
+                  ]),
+                  const SizedBox(height: 24),
 
-                // Workout Session Section
-                _buildSectionHeader('Workout Session', Icons.play_circle_outline),
-                _buildSettingsCard([
-                  _buildSwitchTile(
-                    'Keep Screen On',
-                    'Prevent screen from sleeping during workout',
-                    _keepScreenOn,
-                    (value) {
-                      setState(() => _keepScreenOn = value);
-                      _checkForChanges();
-                    },
-                  ),
-                  _buildDivider(),
-                  _buildSwitchTile(
-                    'Confirm Finish Workout',
-                    'Show confirmation before finishing workout',
-                    _confirmFinishWorkout,
-                    (value) {
-                      setState(() => _confirmFinishWorkout = value);
-                      _checkForChanges();
-                    },
-                  ),
-                ]),
-                const SizedBox(height: 24),
+                  // Workout Session Section
+                  _buildSectionHeader(
+                      'Workout Session', Icons.play_circle_outline),
+                  _buildSettingsCard([
+                    _buildSwitchTile(
+                      'Keep Screen On',
+                      'Prevent screen from sleeping during workout',
+                      _keepScreenOn,
+                      (value) {
+                        setState(() => _keepScreenOn = value);
+                        _checkForChanges();
+                      },
+                    ),
+                    _buildDivider(),
+                    _buildSwitchTile(
+                      'Confirm Finish Workout',
+                      'Show confirmation before finishing workout',
+                      _confirmFinishWorkout,
+                      (value) {
+                        setState(() => _confirmFinishWorkout = value);
+                        _checkForChanges();
+                      },
+                    ),
+                  ]),
+                  const SizedBox(height: 24),
 
-                // Data Section
-                _buildSectionHeader('Data', Icons.storage_outlined),
-                _buildSettingsCard([
-                  _buildActionTile(
-                    'Export Workout Data',
-                    'Save your workouts to a file',
-                    Icons.upload_outlined,
-                    () => _showComingSoonSnackbar(),
-                  ),
-                  _buildDivider(),
-                  _buildActionTile(
-                    'Import Workout Data',
-                    'Restore workouts from a file',
-                    Icons.download_outlined,
-                    () => _showComingSoonSnackbar(),
-                  ),
-                  _buildDivider(),
-                  _buildActionTile(
-                    'Clear All Workout History',
-                    'Delete all workout records',
-                    Icons.delete_forever_outlined,
-                    () => _showClearHistoryDialog(),
-                    isDestructive: true,
-                  ),
-                ]),
-                const SizedBox(height: 32),
-              ],
-            ),
+                  // Data Section
+                  _buildSectionHeader('Data', Icons.storage_outlined),
+                  _buildSettingsCard([
+                    _buildActionTile(
+                      'Export Workout Data',
+                      'Save your workouts to a file',
+                      Icons.upload_outlined,
+                      () => _showComingSoonSnackbar(),
+                    ),
+                    _buildDivider(),
+                    _buildActionTile(
+                      'Import Workout Data',
+                      'Restore workouts from a file',
+                      Icons.download_outlined,
+                      () => _showComingSoonSnackbar(),
+                    ),
+                    _buildDivider(),
+                    _buildActionTile(
+                      'Clear All Workout History',
+                      'Delete all workout records',
+                      Icons.delete_forever_outlined,
+                      () => _showClearHistoryDialog(),
+                      isDestructive: true,
+                    ),
+                  ]),
+                  const SizedBox(height: 32),
+                ],
+              ),
       ),
     );
   }
@@ -415,7 +384,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
   ) {
     return SwitchListTile(
       title: Text(title, style: const TextStyle(color: Colors.white)),
-      subtitle: Text(subtitle, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+      subtitle: Text(subtitle,
+          style: TextStyle(color: Colors.grey[400], fontSize: 12)),
       value: value,
       onChanged: onChanged,
       activeColor: _primaryColor,
@@ -446,7 +416,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
 
   Widget _buildWeeklyGoalTile() {
     return ListTile(
-      title: const Text('Weekly Workout Goal', style: TextStyle(color: Colors.white)),
+      title: const Text('Weekly Workout Goal',
+          style: TextStyle(color: Colors.white)),
       subtitle: Text(
         '$_weeklyWorkoutGoal workouts per week',
         style: TextStyle(color: Colors.grey[400], fontSize: 12),
@@ -484,7 +455,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         : '$seconds sec';
 
     return ListTile(
-      title: const Text('Default Rest Time', style: TextStyle(color: Colors.white)),
+      title: const Text('Default Rest Time',
+          style: TextStyle(color: Colors.white)),
       subtitle: Text(
         'Time between sets',
         style: TextStyle(color: Colors.grey[400], fontSize: 12),
@@ -514,10 +486,79 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
     );
   }
 
+  Widget _buildWeightUnitTile() {
+    final currentUnit = _showWeightInLbs ? 'Pounds (lbs)' : 'Kilograms (kg)';
+    return ListTile(
+      title: const Text('Weight Unit', style: TextStyle(color: Colors.white)),
+      subtitle: Text(
+        'Unit for displaying weight',
+        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _primaryColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              currentUnit,
+              style: TextStyle(
+                color: _primaryColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(Icons.chevron_right, color: Colors.grey[600]),
+        ],
+      ),
+      onTap: _showWeightUnitDialog,
+    );
+  }
+
+  Widget _buildMeasurementUnitTile() {
+    final currentUnit =
+        _useMeasurementInInches ? 'Inches (in)' : 'Centimeters (cm)';
+    return ListTile(
+      title: const Text('Body Measurement Unit',
+          style: TextStyle(color: Colors.white)),
+      subtitle: Text(
+        'Unit for body measurements',
+        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: _primaryColor.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              currentUnit,
+              style: TextStyle(
+                color: _primaryColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(Icons.chevron_right, color: Colors.grey[600]),
+        ],
+      ),
+      onTap: _showMeasurementUnitDialog,
+    );
+  }
+
   Widget _buildWeightIncrementTile() {
     final unit = _showWeightInLbs ? 'lbs' : 'kg';
     return ListTile(
-      title: const Text('Weight Increment', style: TextStyle(color: Colors.white)),
+      title:
+          const Text('Weight Increment', style: TextStyle(color: Colors.white)),
       subtitle: Text(
         'Default increment when adjusting weight',
         style: TextStyle(color: Colors.grey[400], fontSize: 12),
@@ -547,6 +588,392 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
     );
   }
 
+  void _showWeightUnitDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: _surfaceColor,
+          title:
+              const Text('Weight Unit', style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildUnitOption(
+                'Kilograms (kg)',
+                'Metric system',
+                !_showWeightInLbs,
+                () {
+                  Navigator.pop(context);
+                  if (_showWeightInLbs) {
+                    // Changing from lbs to kg
+                    _showConversionPrompt(
+                      fromUnit: 'lbs',
+                      toUnit: 'kg',
+                      isWeight: true,
+                      onConvert: () {
+                        setState(() => _showWeightInLbs = false);
+                        _checkForChanges();
+                      },
+                      onDisplayOnly: () {
+                        setState(() => _showWeightInLbs = false);
+                        _checkForChanges();
+                      },
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              _buildUnitOption(
+                'Pounds (lbs)',
+                'Imperial system',
+                _showWeightInLbs,
+                () {
+                  Navigator.pop(context);
+                  if (!_showWeightInLbs) {
+                    // Changing from kg to lbs
+                    _showConversionPrompt(
+                      fromUnit: 'kg',
+                      toUnit: 'lbs',
+                      isWeight: true,
+                      onConvert: () {
+                        setState(() => _showWeightInLbs = true);
+                        _checkForChanges();
+                      },
+                      onDisplayOnly: () {
+                        setState(() => _showWeightInLbs = true);
+                        _checkForChanges();
+                      },
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showMeasurementUnitDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: _surfaceColor,
+          title: const Text('Body Measurement Unit',
+              style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildUnitOption(
+                'Centimeters (cm)',
+                'Metric system',
+                !_useMeasurementInInches,
+                () {
+                  Navigator.pop(context);
+                  if (_useMeasurementInInches) {
+                    // Changing from in to cm
+                    _showConversionPrompt(
+                      fromUnit: 'in',
+                      toUnit: 'cm',
+                      isWeight: false,
+                      onConvert: () {
+                        setState(() => _useMeasurementInInches = false);
+                        _checkForChanges();
+                      },
+                      onDisplayOnly: () {
+                        setState(() => _useMeasurementInInches = false);
+                        _checkForChanges();
+                      },
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 8),
+              _buildUnitOption(
+                'Inches (in)',
+                'Imperial system',
+                _useMeasurementInInches,
+                () {
+                  Navigator.pop(context);
+                  if (!_useMeasurementInInches) {
+                    // Changing from cm to in
+                    _showConversionPrompt(
+                      fromUnit: 'cm',
+                      toUnit: 'in',
+                      isWeight: false,
+                      onConvert: () {
+                        setState(() => _useMeasurementInInches = true);
+                        _checkForChanges();
+                      },
+                      onDisplayOnly: () {
+                        setState(() => _useMeasurementInInches = true);
+                        _checkForChanges();
+                      },
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showConversionPrompt({
+    required String fromUnit,
+    required String toUnit,
+    required bool isWeight,
+    required VoidCallback onConvert,
+    required VoidCallback onDisplayOnly,
+  }) {
+    final conversionType = isWeight ? 'weight' : 'body measurement';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: _surfaceColor,
+          title: const Text(
+            'Convert Existing Data?',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You\'re changing from $fromUnit to $toUnit.',
+                style: const TextStyle(color: Colors.white70),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Would you like to:',
+                style: const TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 12),
+              // Option 1: Convert values
+              InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  _convertExistingData(fromUnit, toUnit, isWeight);
+                  onConvert();
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _primaryColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _primaryColor.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.sync, color: _primaryColor),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Convert all data',
+                              style: TextStyle(
+                                color: _primaryColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Recalculate all existing $conversionType values to $toUnit',
+                              style: TextStyle(
+                                color: Colors.grey[400],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Option 2: Just change display
+              InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  onDisplayOnly();
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.text_fields, color: Colors.grey[400]),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Change display only',
+                              style: TextStyle(
+                                color: Colors.grey[300],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Keep existing values, just change the unit label',
+                              style: TextStyle(
+                                color: Colors.grey[500],
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _convertExistingData(
+      String fromUnit, String toUnit, bool isWeight) async {
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: _surfaceColor,
+        content: Row(
+          children: [
+            CircularProgressIndicator(color: _primaryColor),
+            const SizedBox(width: 16),
+            const Text('Converting data...',
+                style: TextStyle(color: Colors.white)),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final measurementService = MeasurementService();
+
+      if (isWeight) {
+        // Convert weight measurements and workout data
+        if (fromUnit == 'kg' && toUnit == 'lbs') {
+          await measurementService.convertMeasurements('kg', 'lbs', 2.20462);
+          // Also convert workout weights
+          await _convertWorkoutWeights(2.20462, 'lbs');
+        } else if (fromUnit == 'lbs' && toUnit == 'kg') {
+          await measurementService.convertMeasurements('lbs', 'kg', 0.453592);
+          // Also convert workout weights
+          await _convertWorkoutWeights(0.453592, 'kg');
+        }
+      } else {
+        // Convert body measurements only
+        if (fromUnit == 'cm' && toUnit == 'in') {
+          await measurementService.convertMeasurements('cm', 'in', 0.393701);
+        } else if (fromUnit == 'in' && toUnit == 'cm') {
+          await measurementService.convertMeasurements('in', 'cm', 2.54);
+        }
+      }
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('All data converted to $toUnit'),
+            backgroundColor: _primaryColor,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error converting data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _convertWorkoutWeights(double factor, String newUnit) async {
+    final workoutService = WorkoutService();
+    await workoutService.convertAllWorkoutWeights(factor, newUnit);
+  }
+
+  Widget _buildUnitOption(
+      String title, String subtitle, bool isSelected, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? _primaryColor.withOpacity(0.2) : Colors.grey[800],
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? _primaryColor : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: isSelected ? _primaryColor : Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: Colors.grey[400],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isSelected)
+              Icon(Icons.check_circle, color: _primaryColor, size: 24),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showWeeklyGoalDialog() {
     int tempGoal = _weeklyWorkoutGoal;
 
@@ -557,7 +984,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
           builder: (context, setDialogState) {
             return AlertDialog(
               backgroundColor: _surfaceColor,
-              title: const Text('Weekly Workout Goal', style: TextStyle(color: Colors.white)),
+              title: const Text('Weekly Workout Goal',
+                  style: TextStyle(color: Colors.white)),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -570,7 +998,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       IconButton(
-                        icon: Icon(Icons.remove_circle, color: _primaryColor, size: 36),
+                        icon: Icon(Icons.remove_circle,
+                            color: _primaryColor, size: 36),
                         onPressed: tempGoal > 1
                             ? () => setDialogState(() => tempGoal--)
                             : null,
@@ -595,7 +1024,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                       ),
                       const SizedBox(width: 16),
                       IconButton(
-                        icon: Icon(Icons.add_circle, color: _primaryColor, size: 36),
+                        icon: Icon(Icons.add_circle,
+                            color: _primaryColor, size: 36),
                         onPressed: tempGoal < 14
                             ? () => setDialogState(() => tempGoal++)
                             : null,
@@ -615,7 +1045,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                     _checkForChanges();
                     Navigator.pop(context);
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: _primaryColor),
                   child: const Text('Apply'),
                 ),
               ],
@@ -638,7 +1069,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
           builder: (context, setDialogState) {
             return AlertDialog(
               backgroundColor: _surfaceColor,
-              title: const Text('Default Rest Time', style: TextStyle(color: Colors.white)),
+              title: const Text('Default Rest Time',
+                  style: TextStyle(color: Colors.white)),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -672,7 +1104,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                   ),
                   const SizedBox(height: 16),
                   // Quick presets
-                  const Text('Quick Select', style: TextStyle(color: Colors.grey)),
+                  const Text('Quick Select',
+                      style: TextStyle(color: Colors.grey)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -680,18 +1113,24 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                     children: presets.map((seconds) {
                       final isSelected = tempSeconds == seconds;
                       return GestureDetector(
-                        onTap: () => setDialogState(() => tempSeconds = seconds),
+                        onTap: () =>
+                            setDialogState(() => tempSeconds = seconds),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
-                            color: isSelected ? _primaryColor : Colors.grey[800],
+                            color:
+                                isSelected ? _primaryColor : Colors.grey[800],
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             _formatRestTime(seconds),
                             style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.grey[400],
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color:
+                                  isSelected ? Colors.white : Colors.grey[400],
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                         ),
@@ -711,7 +1150,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                     _checkForChanges();
                     Navigator.pop(context);
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: _primaryColor),
                   child: const Text('Apply'),
                 ),
               ],
@@ -726,9 +1166,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
     double tempIncrement = _defaultWeightIncrement;
     final unit = _showWeightInLbs ? 'lbs' : 'kg';
 
-    final presets = _showWeightInLbs 
-        ? [1.0, 2.5, 5.0, 10.0] 
-        : [1.0, 1.25, 2.5, 5.0];
+    final presets =
+        _showWeightInLbs ? [1.0, 2.5, 5.0, 10.0] : [1.0, 1.25, 2.5, 5.0];
 
     showDialog(
       context: context,
@@ -737,7 +1176,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
           builder: (context, setDialogState) {
             return AlertDialog(
               backgroundColor: _surfaceColor,
-              title: const Text('Weight Increment', style: TextStyle(color: Colors.white)),
+              title: const Text('Weight Increment',
+                  style: TextStyle(color: Colors.white)),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -759,7 +1199,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                   ),
                   const SizedBox(height: 20),
                   // Presets
-                  const Text('Select Increment', style: TextStyle(color: Colors.grey)),
+                  const Text('Select Increment',
+                      style: TextStyle(color: Colors.grey)),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
@@ -767,18 +1208,24 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                     children: presets.map((value) {
                       final isSelected = tempIncrement == value;
                       return GestureDetector(
-                        onTap: () => setDialogState(() => tempIncrement = value),
+                        onTap: () =>
+                            setDialogState(() => tempIncrement = value),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
                           decoration: BoxDecoration(
-                            color: isSelected ? _primaryColor : Colors.grey[800],
+                            color:
+                                isSelected ? _primaryColor : Colors.grey[800],
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             '${value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2)} $unit',
                             style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.grey[400],
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color:
+                                  isSelected ? Colors.white : Colors.grey[400],
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                         ),
@@ -798,7 +1245,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                     _checkForChanges();
                     Navigator.pop(context);
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: _primaryColor),
                   child: const Text('Apply'),
                 ),
               ],
@@ -833,7 +1281,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: _surfaceColor,
-          title: const Text('Clear All Workout History?', style: TextStyle(color: Colors.white)),
+          title: const Text('Clear All Workout History?',
+              style: TextStyle(color: Colors.white)),
           content: const Text(
             'This will permanently delete all your workout records. This action cannot be undone.',
             style: TextStyle(color: Colors.white70),

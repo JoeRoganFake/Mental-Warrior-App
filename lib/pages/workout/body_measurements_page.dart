@@ -458,159 +458,345 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
             ? '%' 
             : (_useMeasurementInInches ? 'in' : 'cm');
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: _surfaceColor,
-              title: Text(
-                'Add ${muscleType.name}',
-                style: const TextStyle(color: Colors.white),
+            return Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Value input
-                    TextField(
-                      controller: valueController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        labelText: 'Value',
-                        labelStyle: const TextStyle(color: Colors.grey),
-                        suffixText: selectedUnit,
-                        suffixStyle: const TextStyle(color: Colors.grey),
-                        filled: true,
-                        fillColor: const Color(0xFF303136),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
+              decoration: BoxDecoration(
+                color: _surfaceColor,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Handle bar
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[600],
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Unit selector (for applicable measurements)
-                    if (muscleType.id != 'body_fat') ...[
-                      const Text('Unit', style: TextStyle(color: Colors.grey)),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
+                      // Header with icon
                       Row(
                         children: [
-                          if (muscleType.id == 'weight') ...[
-                            _buildUnitChip('kg', selectedUnit, (unit) {
-                              setDialogState(() => selectedUnit = unit);
-                            }),
-                            const SizedBox(width: 8),
-                            _buildUnitChip('lbs', selectedUnit, (unit) {
-                              setDialogState(() => selectedUnit = unit);
-                            }),
-                          ] else ...[
-                            _buildUnitChip('cm', selectedUnit, (unit) {
-                              setDialogState(() => selectedUnit = unit);
-                            }),
-                            const SizedBox(width: 8),
-                            _buildUnitChip('in', selectedUnit, (unit) {
-                              setDialogState(() => selectedUnit = unit);
-                            }),
-                          ],
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: _primaryColor.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              IconData(muscleType.icon,
+                                  fontFamily: 'MaterialIcons'),
+                              color: _primaryColor,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Add Measurement',
+                                  style: TextStyle(
+                                    color: Colors.grey[400],
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  muscleType.name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                    ],
-                    
-                    // Date picker
-                    const Text('Date', style: TextStyle(color: Colors.grey)),
-                    const SizedBox(height: 8),
-                    InkWell(
-                      onTap: () async {
-                        final date = await showDatePicker(
-                          context: context,
-                          initialDate: selectedDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                        );
-                        if (date != null) {
-                          setDialogState(() => selectedDate = date);
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
+                      const SizedBox(height: 28),
+                      // Value input with large display
+                      Container(
+                        padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF303136),
-                          borderRadius: BorderRadius.circular(8),
+                          color: _backgroundColor,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: _primaryColor.withOpacity(0.3),
+                            width: 1,
+                          ),
                         ),
-                        child: Row(
+                        child: Column(
                           children: [
-                            const Icon(Icons.calendar_today, color: Colors.grey, size: 20),
-                            const SizedBox(width: 8),
                             Text(
-                              DateFormat('MMM d, yyyy').format(selectedDate),
-                              style: const TextStyle(color: Colors.white),
+                              'Enter Value',
+                              style: TextStyle(
+                                color: Colors.grey[400],
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: valueController,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
+                                    autofocus: true,
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 42,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: '0.0',
+                                      hintStyle: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 42,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                      border: InputBorder.none,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Text(
+                                    selectedUnit,
+                                    style: TextStyle(
+                                      color: _primaryColor,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    // Notes
-                    TextField(
-                      controller: notesController,
-                      style: const TextStyle(color: Colors.white),
-                      maxLines: 2,
-                      decoration: InputDecoration(
-                        labelText: 'Notes (optional)',
-                        labelStyle: const TextStyle(color: Colors.grey),
-                        filled: true,
-                        fillColor: const Color(0xFF303136),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide.none,
+                      const SizedBox(height: 20),
+                      // Date selector
+                      Text(
+                        'Date',
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: () async {
+                          final date = await showDatePicker(
+                            context: context,
+                            initialDate: selectedDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now(),
+                            builder: (context, child) {
+                              return Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: ColorScheme.dark(
+                                    primary: _primaryColor,
+                                    surface: _surfaceColor,
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            },
+                          );
+                          if (date != null) {
+                            setDialogState(() => selectedDate = date);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: _backgroundColor,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: _primaryColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(Icons.calendar_today,
+                                    color: _primaryColor, size: 20),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      DateFormat('EEEE').format(selectedDate),
+                                      style: TextStyle(
+                                        color: Colors.grey[400],
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    Text(
+                                      DateFormat('MMMM d, yyyy')
+                                          .format(selectedDate),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.chevron_right,
+                                  color: Colors.grey[600]),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Notes input
+                      Text(
+                        'Notes (optional)',
+                        style: TextStyle(
+                          color: Colors.grey[400],
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: notesController,
+                        style: const TextStyle(color: Colors.white),
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          hintText: 'Add any notes here...',
+                          hintStyle: TextStyle(color: Colors.grey[600]),
+                          filled: true,
+                          fillColor: _backgroundColor,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.all(16),
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      // Action buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: TextButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(color: Colors.grey[700]!),
+                                ),
+                              ),
+                              child: Text(
+                                'Cancel',
+                                style: TextStyle(
+                                  color: Colors.grey[400],
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                final valueText = valueController.text.trim();
+                                if (valueText.isEmpty) return;
+
+                                final value = double.tryParse(valueText);
+                                if (value == null) return;
+
+                                await _measurementService.addMeasurement(
+                                  muscleType: muscleType.id,
+                                  value: value,
+                                  unit: selectedUnit,
+                                  date: selectedDate,
+                                  notes: notesController.text.trim().isEmpty
+                                      ? null
+                                      : notesController.text.trim(),
+                                );
+
+                                Navigator.pop(context);
+                                _loadMeasurements();
+
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  SnackBar(
+                                      content: Text(
+                                          '${muscleType.name} measurement added')),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _primaryColor,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.check, size: 20),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    'Save Measurement',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final valueText = valueController.text.trim();
-                    if (valueText.isEmpty) return;
-                    
-                    final value = double.tryParse(valueText);
-                    if (value == null) return;
-
-                    await _measurementService.addMeasurement(
-                      muscleType: muscleType.id,
-                      value: value,
-                      unit: selectedUnit,
-                      date: selectedDate,
-                      notes: notesController.text.trim().isEmpty 
-                          ? null 
-                          : notesController.text.trim(),
-                    );
-
-                    Navigator.pop(context);
-                    _loadMeasurements();
-                    
-                    ScaffoldMessenger.of(this.context).showSnackBar(
-                      SnackBar(content: Text('${muscleType.name} measurement added')),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
-                  child: const Text('Save'),
-                ),
-              ],
             );
           },
         );

@@ -12,6 +12,7 @@ import 'package:mental_warior/pages/workout/rest_timer_page.dart';
 import 'package:mental_warior/pages/workout/workout_completion_page.dart';
 import 'package:mental_warior/pages/workout/superset_selection_page.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:vibration/vibration.dart';
 
 class WorkoutSessionPage extends StatefulWidget {
   final int workoutId;
@@ -100,6 +101,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   bool _vibrateOnRestComplete = true;
   bool _soundOnRestComplete = true;
   bool _confirmFinishWorkout = true;
+  bool _showWeightInLbs = false;
   
   // Timer tracking variables
   DateTime? _workoutStartTime; // To track real-world time elapsed
@@ -246,9 +248,13 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         _vibrateOnRestComplete = settings['vibrateOnRestComplete'];
         _soundOnRestComplete = settings['soundOnRestComplete'];
         _confirmFinishWorkout = settings['confirmFinishWorkout'];
+        _showWeightInLbs = settings['showWeightInLbs'];
       });
     }
   }
+
+  // Get the weight unit based on settings
+  String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';
 
   void _onSettingsChanged() {
     _loadSettings();
@@ -1096,11 +1102,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   Future<void> _playBoxingBellSound() async {
     // Check if vibration is enabled and trigger it
     if (_vibrateOnRestComplete) {
-      HapticFeedback.heavyImpact();
-      // Add a second vibration after a short delay for emphasis
-      Future.delayed(const Duration(milliseconds: 200), () {
-        HapticFeedback.heavyImpact();
-      });
+      try {
+        // Simple vibration for 500ms - more compatible across devices
+        await Vibration.vibrate(duration: 500);
+        // Second vibration after delay
+        await Future.delayed(const Duration(milliseconds: 700));
+        await Vibration.vibrate(duration: 500);
+        print("Vibration triggered - rest timer completed");
+      } catch (e) {
+        print("Vibration error: $e");
+      }
     }
     
     // Only play sound if enabled in settings
@@ -4844,7 +4855,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   child: Center(
                     child: previousSet != null
                         ? Text(
-                            '${previousSet.weight > 0 ? (previousSet.weight % 1 == 0 ? previousSet.weight.toInt().toString() : previousSet.weight.toString()) : '-'}kg x ${previousSet.reps > 0 ? previousSet.reps.toString() : '-'}',
+                            '${previousSet.weight > 0 ? (previousSet.weight % 1 == 0 ? previousSet.weight.toInt().toString() : previousSet.weight.toString()) : '-'}$_weightUnit x ${previousSet.reps > 0 ? previousSet.reps.toString() : '-'}',
                             style: TextStyle(
                               color: _textSecondaryColor.withOpacity(0.7),
                               fontSize: 12,
@@ -4899,7 +4910,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       suffix: Padding(
                         padding: EdgeInsets.symmetric(horizontal: 8.0),
                         child: Text(
-                          'kg',
+                          _weightUnit,
                           style: TextStyle(color: _textSecondaryColor),
                         ),
                       ),

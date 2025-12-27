@@ -41,12 +41,22 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
   List<ExerciseHistoryEntry> _exerciseHistory = [];
   bool _isLoadingHistory = false;
   final CustomExerciseService _customExerciseService = CustomExerciseService();
+  bool _showWeightInLbs = false;
+  String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _loadWeightUnit();
     _loadExerciseData();
+  }
+
+  Future<void> _loadWeightUnit() async {
+    final useLbs = await SettingsService().getShowWeightInLbs();
+    if (mounted) {
+      setState(() => _showWeightInLbs = useLbs);
+    }
   }
 
   @override
@@ -1185,7 +1195,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '${set.weight} kg',
+                                '${set.weight} $_weightUnit',
                                 style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w700,
@@ -1364,21 +1374,21 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
             title: 'Best Set (Est. 1RM)',
             data: chartData['oneRM']!,
             color: const Color(0xFF3F8EFC),
-            unit: 'kg',
+            unit: _weightUnit,
           ),
           const SizedBox(height: 20),
           _buildChartCard(
             title: 'Best Set (Max Weight)',
             data: chartData['maxWeight']!,
             color: const Color(0xFFFF6B6B),
-            unit: 'kg',
+            unit: _weightUnit,
           ),
           const SizedBox(height: 20),
           _buildChartCard(
             title: 'Total Volume',
             data: chartData['totalVolume']!,
             color: const Color(0xFF4ECDC4),
-            unit: 'kg',
+            unit: _weightUnit,
           ),
           const SizedBox(height: 20),
           _buildChartCard(

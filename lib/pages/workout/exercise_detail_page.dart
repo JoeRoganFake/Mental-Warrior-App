@@ -43,6 +43,8 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
   List<ExerciseHistoryEntry> _exerciseHistory = [];
   bool _isLoadingHistory = false;
   String? _stickyNote;
+  bool _showWeightInLbs = false;
+  String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';
 
   @override
   void initState() {
@@ -50,6 +52,9 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
     _tabController = TabController(length: 4, vsync: this);
     // Just load the JSON data in initState, but don't try to access any context
     _exercisesList = json.decode(exercisesJson) as List<dynamic>;
+    
+    // Load weight unit setting
+    _loadWeightUnit();
     
     // Add listener to reload history when switching to History, Charts, or Records tab
     _tabController.addListener(() {
@@ -67,6 +72,13 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
     _pageController.dispose();
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadWeightUnit() async {
+    final useLbs = await SettingsService().getShowWeightInLbs();
+    if (mounted) {
+      setState(() => _showWeightInLbs = useLbs);
+    }
   }
 
   // Helper method to find exercises by name
@@ -1269,7 +1281,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                '${set.weight} kg',
+                                '${set.weight} $_weightUnit',
                                 style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w700,
@@ -1440,21 +1452,21 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
             title: 'Best Set (Est. 1RM)',
             data: chartData['oneRM']!,
             color: const Color(0xFF3F8EFC),
-            unit: 'kg',
+            unit: _weightUnit,
           ),
           const SizedBox(height: 20),
           _buildChartCard(
             title: 'Best Set (Max Weight)',
             data: chartData['maxWeight']!,
             color: const Color(0xFFFF6B6B),
-            unit: 'kg',
+            unit: _weightUnit,
           ),
           const SizedBox(height: 20),
           _buildChartCard(
             title: 'Total Volume',
             data: chartData['totalVolume']!,
             color: const Color(0xFF4ECDC4),
-            unit: 'kg',
+            unit: _weightUnit,
           ),
           const SizedBox(height: 20),
           _buildChartCard(

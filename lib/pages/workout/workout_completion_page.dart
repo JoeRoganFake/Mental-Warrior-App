@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mental_warior/models/workouts.dart';
+import 'package:mental_warior/services/database_services.dart';
 import 'package:intl/intl.dart';
 import 'package:audioplayers/audioplayers.dart';
 
@@ -30,6 +31,9 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
   final Color _primaryColor = const Color(0xFFFF9500);
   final Color _textPrimaryColor = Colors.white;
   final Color _textSecondaryColor = const Color(0xFFB3B3B3);
+  
+  bool _showWeightInLbs = false;
+  String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';
 
   // Helper method to clean exercise names by removing markers
   String _cleanExerciseName(String name) {
@@ -39,9 +43,19 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
         .trim();
   }
 
+  Future<void> _loadWeightUnit() async {
+    final useLbs = await SettingsService().getShowWeightInLbs();
+    if (mounted) {
+      setState(() => _showWeightInLbs = useLbs);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    
+    // Load weight unit setting
+    _loadWeightUnit();
     
     // Play fanfare sound
     _playFanfareSound();
@@ -328,7 +342,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                     Row(
                       children: [
                         Text(
-                          '${bestSet.weight.toStringAsFixed(bestSet.weight % 1 == 0 ? 0 : 1)} kg × ${bestSet.reps}',
+                          '${bestSet.weight.toStringAsFixed(bestSet.weight % 1 == 0 ? 0 : 1)} $_weightUnit × ${bestSet.reps}',
                           style: TextStyle(
                             color: _textPrimaryColor,
                             fontSize: 16,
@@ -408,7 +422,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    '${(stats['totalWeight'] as double).toStringAsFixed(0)} kg',
+                    '${(stats['totalWeight'] as double).toStringAsFixed(0)} $_weightUnit',
                     style: TextStyle(
                       color: _textPrimaryColor,
                       fontSize: 16,

@@ -2210,6 +2210,45 @@ class WorkoutService {
       return null;
     }
   }
+
+  /// Convert all workout set weights from one unit to another
+  /// [factor] - the conversion factor to multiply weights by
+  /// [newUnit] - the new unit being used (for logging purposes)
+  Future<void> convertAllWorkoutWeights(double factor, String newUnit) async {
+    final db = await DatabaseService.instance.database;
+
+    // Get all sets with their weights
+    final sets = await db.query(_setTableName);
+
+    int convertedCount = 0;
+
+    for (final set in sets) {
+      final setId = set[_setIdColumnName] as int;
+      final oldWeight = set[_setWeightColumnName] as double;
+      final oldVolume = set[_setVolumeColumnName] as double;
+
+      // Convert weight and recalculate volume
+      final newWeight = double.parse((oldWeight * factor).toStringAsFixed(2));
+      final newVolume = double.parse((oldVolume * factor).toStringAsFixed(2));
+
+      await db.update(
+        _setTableName,
+        {
+          _setWeightColumnName: newWeight,
+          _setVolumeColumnName: newVolume,
+        },
+        where: '$_setIdColumnName = ?',
+        whereArgs: [setId],
+      );
+
+      convertedCount++;
+    }
+
+    print('✅ Converted $convertedCount workout sets to $newUnit');
+
+    // Notify listeners that workouts have been updated
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+  }
 }
 
 // Add a new SettingsService class at the end of the file
@@ -3541,6 +3580,43 @@ class MeasurementService {
     );
 
     return data.map((map) => BodyMeasurement.fromMap(map)).toList();
+  }
+
+  /// Convert all measurements from one unit to another
+  /// [fromUnit] - the source unit (e.g., 'kg', 'lbs', 'cm', 'in')
+  /// [toUnit] - the target unit
+  /// [factor] - the conversion factor to multiply values by
+  Future<void> convertMeasurements(
+      String fromUnit, String toUnit, double factor) async {
+    await ensureTableExists();
+    final db = await DatabaseService.instance.database;
+
+    // Get all measurements with the source unit
+    final data = await db.query(
+      _measurementsTableName,
+      where: '$_unitColumnName = ?',
+      whereArgs: [fromUnit],
+    );
+
+    // Update each measurement with converted value and new unit
+    for (final row in data) {
+      final id = row[_idColumnName] as int;
+      final oldValue = row[_valueColumnName] as double;
+      final newValue = double.parse((oldValue * factor).toStringAsFixed(2));
+
+      await db.update(
+        _measurementsTableName,
+        {
+          _valueColumnName: newValue,
+          _unitColumnName: toUnit,
+        },
+        where: '$_idColumnName = ?',
+        whereArgs: [id],
+      );
+    }
+
+    // Notify listeners that measurements have been updated
+    measurementsUpdatedNotifier.value = !measurementsUpdatedNotifier.value;
   }
 }
 

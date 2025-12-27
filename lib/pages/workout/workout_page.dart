@@ -31,6 +31,7 @@ class WorkoutPageState extends State<WorkoutPage>
   Map<int, bool> _expandedFolders = {}; // Track which folders are expanded
   bool _isLoading = true;
   int _weeklyWorkoutGoal = 5; // Default goal
+  bool _showWeightInLbs = false;
 
   @override
   void initState() {
@@ -38,6 +39,7 @@ class WorkoutPageState extends State<WorkoutPage>
     _tabController = TabController(length: 4, vsync: this);
     _loadWorkouts();
     _loadWeeklyGoal();
+    _loadWeightUnit();
     _loadTemplates();
     _loadFolders();
 
@@ -71,6 +73,7 @@ class WorkoutPageState extends State<WorkoutPage>
 
   void _onSettingsUpdated() {
     _loadWeeklyGoal();
+    _loadWeightUnit();
   }
   
   void _onTemplatesUpdated() {
@@ -114,6 +117,14 @@ class WorkoutPageState extends State<WorkoutPage>
       _weeklyWorkoutGoal = goal;
     });
   }
+
+  Future<void> _loadWeightUnit() async {
+    final useLbs = await _settingsService.getShowWeightInLbs();
+    setState(() => _showWeightInLbs = useLbs);
+  }
+
+  // Get the weight unit based on settings
+  String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';
 
   Future<void> _loadWorkouts() async {
     setState(() {
@@ -341,7 +352,7 @@ class WorkoutPageState extends State<WorkoutPage>
     }
 
     // Format it like in the image
-    return '${totalVolume.toStringAsFixed(0)} kg ${totalPrs > 0 ? '• $totalPrs PRs' : ''}';
+    return '${totalVolume.toStringAsFixed(0)} $_weightUnit ${totalPrs > 0 ? '• $totalPrs PRs' : ''}';
   }
 
   // Compact custom header to replace the default AppBar
@@ -1295,7 +1306,7 @@ class WorkoutPageState extends State<WorkoutPage>
                                 bestWeight = set.weight;
                                 bestReps = set.reps;
                                 bestSet = bestWeight > 0
-                                    ? '${bestWeight.toStringAsFixed(bestWeight.truncateToDouble() == bestWeight ? 0 : 1)} kg × $bestReps'
+                                    ? '${bestWeight.toStringAsFixed(bestWeight.truncateToDouble() == bestWeight ? 0 : 1)} $_weightUnit × $bestReps'
                                     : '$bestReps reps';
                               }
                             }
@@ -1328,7 +1339,7 @@ class WorkoutPageState extends State<WorkoutPage>
                                         ...exercise.sets.map((set) {
                                           return Text(
                                             set.weight > 0
-                                                ? "${set.weight.toStringAsFixed(set.weight.truncateToDouble() == set.weight ? 0 : 1)} kg × ${set.reps}"
+                                                ? "${set.weight.toStringAsFixed(set.weight.truncateToDouble() == set.weight ? 0 : 1)} $_weightUnit × ${set.reps}"
                                                 : "${set.reps} reps",
                                             style: const TextStyle(
                                               color: Colors.white70,
