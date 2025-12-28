@@ -26,7 +26,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
   bool _keepScreenOn = true;
   bool _confirmFinishWorkout = true;
   bool _showWeightInLbs = false;
-  double _defaultWeightIncrement = 2.5;
   bool _useMeasurementInInches = false;
 
   // Original settings values (to compare for changes)
@@ -37,7 +36,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
   bool _originalKeepScreenOn = true;
   bool _originalConfirmFinishWorkout = true;
   bool _originalShowWeightInLbs = false;
-  double _originalDefaultWeightIncrement = 2.5;
   bool _originalUseMeasurementInInches = false;
 
   @override
@@ -59,7 +57,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         _keepScreenOn = settings['keepScreenOn'];
         _confirmFinishWorkout = settings['confirmFinishWorkout'];
         _showWeightInLbs = settings['showWeightInLbs'];
-        _defaultWeightIncrement = settings['defaultWeightIncrement'];
         _useMeasurementInInches = settings['useMeasurementInInches'];
 
         // Store original values
@@ -70,7 +67,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         _originalKeepScreenOn = _keepScreenOn;
         _originalConfirmFinishWorkout = _confirmFinishWorkout;
         _originalShowWeightInLbs = _showWeightInLbs;
-        _originalDefaultWeightIncrement = _defaultWeightIncrement;
         _originalUseMeasurementInInches = _useMeasurementInInches;
 
         _hasUnsavedChanges = false;
@@ -91,7 +87,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
           _keepScreenOn != _originalKeepScreenOn ||
           _confirmFinishWorkout != _originalConfirmFinishWorkout ||
           _showWeightInLbs != _originalShowWeightInLbs ||
-          _defaultWeightIncrement != _originalDefaultWeightIncrement ||
           _useMeasurementInInches != _originalUseMeasurementInInches;
     });
   }
@@ -106,7 +101,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       await _settingsService.setKeepScreenOn(_keepScreenOn);
       await _settingsService.setConfirmFinishWorkout(_confirmFinishWorkout);
       await _settingsService.setShowWeightInLbs(_showWeightInLbs);
-      await _settingsService.setDefaultWeightIncrement(_defaultWeightIncrement);
       await _settingsService.setUseMeasurementInInches(_useMeasurementInInches);
 
       // Update original values to match saved values
@@ -117,7 +111,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       _originalKeepScreenOn = _keepScreenOn;
       _originalConfirmFinishWorkout = _confirmFinishWorkout;
       _originalShowWeightInLbs = _showWeightInLbs;
-      _originalDefaultWeightIncrement = _defaultWeightIncrement;
       _originalUseMeasurementInInches = _useMeasurementInInches;
 
       setState(() {
@@ -276,8 +269,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                     _buildWeightUnitTile(),
                     _buildDivider(),
                     _buildMeasurementUnitTile(),
-                    _buildDivider(),
-                    _buildWeightIncrementTile(),
                   ]),
                   const SizedBox(height: 24),
 
@@ -551,40 +542,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         ],
       ),
       onTap: _showMeasurementUnitDialog,
-    );
-  }
-
-  Widget _buildWeightIncrementTile() {
-    final unit = _showWeightInLbs ? 'lbs' : 'kg';
-    return ListTile(
-      title:
-          const Text('Weight Increment', style: TextStyle(color: Colors.white)),
-      subtitle: Text(
-        'Default increment when adjusting weight',
-        style: TextStyle(color: Colors.grey[400], fontSize: 12),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: _primaryColor.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '${_defaultWeightIncrement.toStringAsFixed(1)} $unit',
-              style: TextStyle(
-                color: _primaryColor,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: Colors.grey[600]),
-        ],
-      ),
-      onTap: _showWeightIncrementDialog,
     );
   }
 
@@ -1147,101 +1104,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                 ElevatedButton(
                   onPressed: () {
                     setState(() => _defaultRestTimer = tempSeconds);
-                    _checkForChanges();
-                    Navigator.pop(context);
-                  },
-                  style:
-                      ElevatedButton.styleFrom(backgroundColor: _primaryColor),
-                  child: const Text('Apply'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showWeightIncrementDialog() {
-    double tempIncrement = _defaultWeightIncrement;
-    final unit = _showWeightInLbs ? 'lbs' : 'kg';
-
-    final presets =
-        _showWeightInLbs ? [1.0, 2.5, 5.0, 10.0] : [1.0, 1.25, 2.5, 5.0];
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: _surfaceColor,
-              title: const Text('Weight Increment',
-                  style: TextStyle(color: Colors.white)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Current value display
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: _primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${tempIncrement.toStringAsFixed(tempIncrement == tempIncrement.roundToDouble() ? 0 : 2)} $unit',
-                      style: TextStyle(
-                        color: _primaryColor,
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  // Presets
-                  const Text('Select Increment',
-                      style: TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: presets.map((value) {
-                      final isSelected = tempIncrement == value;
-                      return GestureDetector(
-                        onTap: () =>
-                            setDialogState(() => tempIncrement = value),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          decoration: BoxDecoration(
-                            color:
-                                isSelected ? _primaryColor : Colors.grey[800],
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${value.toStringAsFixed(value == value.roundToDouble() ? 0 : 2)} $unit',
-                            style: TextStyle(
-                              color:
-                                  isSelected ? Colors.white : Colors.grey[400],
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() => _defaultWeightIncrement = tempIncrement);
                     _checkForChanges();
                     Navigator.pop(context);
                   },

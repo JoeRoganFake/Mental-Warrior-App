@@ -13,6 +13,7 @@ import 'package:mental_warior/pages/workout/workout_completion_page.dart';
 import 'package:mental_warior/pages/workout/superset_selection_page.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:vibration/vibration.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 class WorkoutSessionPage extends StatefulWidget {
   final int workoutId;
@@ -102,6 +103,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   bool _soundOnRestComplete = true;
   bool _confirmFinishWorkout = true;
   bool _showWeightInLbs = false;
+  bool _keepScreenOn = true;
   
   // Timer tracking variables
   DateTime? _workoutStartTime; // To track real-world time elapsed
@@ -249,7 +251,28 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         _soundOnRestComplete = settings['soundOnRestComplete'];
         _confirmFinishWorkout = settings['confirmFinishWorkout'];
         _showWeightInLbs = settings['showWeightInLbs'];
+        _keepScreenOn = settings['keepScreenOn'];
       });
+      
+      // Apply wakelock setting (only for non-readonly sessions)
+      if (!widget.readOnly) {
+        _applyWakelockSetting();
+      }
+    }
+  }
+
+  /// Apply the wakelock setting to keep screen on during workout
+  Future<void> _applyWakelockSetting() async {
+    try {
+      if (_keepScreenOn) {
+        await WakelockPlus.enable();
+        debugPrint('Wakelock enabled - screen will stay on');
+      } else {
+        await WakelockPlus.disable();
+        debugPrint('Wakelock disabled - screen can sleep');
+      }
+    } catch (e) {
+      debugPrint('Error applying wakelock: $e');
     }
   }
 
@@ -426,6 +449,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       
       // Clear the active session from database if we're truly closing the workout
       _clearActiveSessionFromDatabase();
+      
+      // Disable wakelock when workout is closed
+      WakelockPlus.disable();
+      debugPrint('Wakelock disabled on workout close');
     } else {
       // If we're minimizing or preserving, make sure we have the latest data for the workout timer
       if (_workoutStartTime != null && _isTimerRunning) {
