@@ -5,6 +5,7 @@ import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/workout/workout_edit_page.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
+import 'package:mental_warior/widgets/barbell_plate_calculator.dart';
 
 class WorkoutDetailsPage extends StatefulWidget {
   final int workoutId;
@@ -69,6 +70,29 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
         .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
         .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
         .trim();
+  }
+
+  // Helper method to check if an exercise uses plates (barbell, ez-curl bar, trap bar, smith machine)
+  bool _exerciseUsesPlates(String equipment) {
+    final lowerEquipment = equipment.toLowerCase();
+    return lowerEquipment.contains('barbell') ||
+        lowerEquipment.contains('e-z curl') ||
+        lowerEquipment.contains('ez curl') ||
+        lowerEquipment.contains('trap bar') ||
+        lowerEquipment.contains('smith') ||
+        lowerEquipment.contains('dumbbell');
+  }
+
+  // Show plate viewer for an exercise set at a specific weight
+  Future<void> _showPlateViewer(Exercise exercise, double weight) async {
+    if (!_exerciseUsesPlates(exercise.equipment)) return;
+    
+    await showBarbellPlateViewer(
+      context: context,
+      exerciseName: exercise.name,
+      useLbs: _showWeightInLbs,
+      weight: weight,
+    );
   }
 
   // Navigate to exercise detail page
@@ -825,7 +849,19 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
                 final set = allSets[index];
                   // Use the database isPR flag directly
                   final isActualPR = set.isPR;
-                return _buildSetRow(set, index + 1, isActualPR);
+                final usesPlates = _exerciseUsesPlates(exercise.equipment);
+                
+                // Check if plate config exists for this specific weight
+                if (usesPlates) {
+                  return FutureBuilder<bool>(
+                    future: hasPlateConfig(exercise.name, weight: set.weight),
+                    builder: (context, snapshot) {
+                      final hasConfig = snapshot.data ?? false;
+                      return _buildSetRow(set, index + 1, isActualPR, exercise, hasConfig);
+                    },
+                  );
+                }
+                return _buildSetRow(set, index + 1, isActualPR, exercise, false);
               },
             ),
           ] else
@@ -888,17 +924,21 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
     );
   }
 
-  Widget _buildSetRow(ExerciseSet set, int setNumber, bool isActualPR) {
+  Widget _buildSetRow(ExerciseSet set, int setNumber, bool isActualPR, Exercise exercise, bool hasPlateConfigSaved) {
     final volume = set.weight * set.reps;
+    final canShowPlates = _exerciseUsesPlates(exercise.equipment);
+    final showPlateIndicator = canShowPlates && hasPlateConfigSaved;
     
-    return Container(
+    final rowContent = Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: _surfaceColor,
         borderRadius: BorderRadius.circular(8),
         border: isActualPR
             ? Border.all(color: Colors.amber.withOpacity(0.5), width: 1)
-            : null,
+            : showPlateIndicator
+                ? Border.all(color: _primaryColor.withOpacity(0.3), width: 1)
+                : null,
       ),
       child: Row(
         children: [
@@ -947,6 +987,36 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
                     fontSize: 16,
                   ),
                 ),
+                // Plate indicator for barbell exercises (only if config saved)
+                if (showPlateIndicator) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _primaryColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.fitness_center,
+                          size: 12,
+                          color: _primaryColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'View',
+                          style: TextStyle(
+                            color: _primaryColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -986,5 +1056,16 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
         ],
       ),
     );
+
+    // Wrap with InkWell if plate config exists for this weight
+    if (showPlateIndicator) {
+      return InkWell(
+        onTap: () => _showPlateViewer(exercise, set.weight),
+        borderRadius: BorderRadius.circular(8),
+        child: rowContent,
+      );
+    }
+
+    return rowContent;
   }
 }

@@ -4,6 +4,7 @@ import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
 import 'package:mental_warior/pages/workout/create_exercise_page.dart';
 import 'package:mental_warior/pages/workout/superset_selection_page.dart';
+import 'package:mental_warior/widgets/barbell_plate_calculator.dart';
 
 
 class WorkoutEditPage extends StatefulWidget {
@@ -77,6 +78,8 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
   final Color _textPrimaryColor = Colors.white; // Main text
   final Color _textSecondaryColor = const Color(0xFFBBBBBB); // Secondary text
   final Color _inputBgColor = const Color(0xFF303136); // Input background
+
+  bool _showWeightInLbs = false; // For plate calculator
 
   @override
   void initState() {
@@ -483,13 +486,11 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             final weight = double.tryParse(weightController.text) ?? set.weight;
             final reps = int.tryParse(repsController.text) ?? set.reps;
 
-            // Update set data in database only if values changed
-            if (weight != set.weight || reps != set.reps) {
-              await _updateSetData(set.id, weight, reps);
-              // Update local model to reflect changes
-              set.weight = weight;
-              set.reps = reps;
-            }
+            // Always update set data in database with current controller values
+            await _updateSetData(set.id, weight, reps);
+            // Update local model to reflect changes
+            set.weight = weight;
+            set.reps = reps;
           }
         }
 
@@ -1023,6 +1024,52 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
       }
     });
     _markAsChanged();
+  }
+
+  // Helper method to check if an exercise uses plates (barbell, ez-curl bar, trap bar, smith machine)
+  bool _exerciseUsesPlates(String equipment) {
+    final lowerEquipment = equipment.toLowerCase();
+    return lowerEquipment.contains('barbell') ||
+        lowerEquipment.contains('e-z curl') ||
+        lowerEquipment.contains('ez curl') ||
+        lowerEquipment.contains('trap bar') ||
+        lowerEquipment.contains('smith') ||
+        lowerEquipment.contains('dumbbell');
+  }
+
+  // Show plate calculator for an exercise
+  Future<void> _showPlateCalculator(Exercise exercise, ExerciseSet set) async {
+    if (!_exerciseUsesPlates(exercise.equipment)) return;
+
+    final weightController = _weightControllers[set.id];
+    if (weightController == null) return;
+
+    final currentWeight = double.tryParse(weightController.text) ?? 0.0;
+
+    final newWeight = await showBarbellPlateCalculator(
+      context: context,
+      initialWeight: currentWeight,
+      useLbs: _showWeightInLbs,
+      exerciseName: exercise.name,
+      equipment: exercise.equipment,
+    );
+
+    if (newWeight != null) {
+      setState(() {
+        // Format weight: show as integer if whole number, otherwise up to 2 decimal places
+        String formattedWeight;
+        if (newWeight == newWeight.truncateToDouble()) {
+          formattedWeight = newWeight.toInt().toString();
+        } else {
+          formattedWeight = newWeight.toStringAsFixed(2)
+              .replaceAll(RegExp(r'0+$'), '')
+              .replaceAll(RegExp(r'\.$'), '');
+        }
+        weightController.text = formattedWeight;
+        set.weight = newWeight;
+      });
+      _markAsChanged();
+    }
   }
 
   Future<void> _showEditNameDialog() async {
@@ -1979,6 +2026,19 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                 ),
               ),
               const SizedBox(width: 8),
+              
+              // Plate calculator button (only for barbell exercises)
+              if (_exerciseUsesPlates(exercise.equipment))
+                IconButton(
+                  onPressed: () => _showPlateCalculator(exercise, set),
+                  icon: Icon(
+                    Icons.fitness_center,
+                    color: _primaryColor,
+                    size: 18,
+                  ),
+                  tooltip: 'Plate Calculator',
+                  visualDensity: VisualDensity.compact,
+                ),
               
               // Delete button
               IconButton(

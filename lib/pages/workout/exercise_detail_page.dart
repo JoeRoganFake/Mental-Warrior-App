@@ -4,6 +4,7 @@ import 'package:mental_warior/data/exercises_data.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:mental_warior/widgets/barbell_plate_calculator.dart';
 
 // Helper class to represent exercise history entries
 class ExerciseHistoryEntry {
@@ -79,6 +80,32 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
     if (mounted) {
       setState(() => _showWeightInLbs = useLbs);
     }
+  }
+
+  // Helper method to check if an exercise uses plates (barbell, ez-curl bar, trap bar, smith machine)
+  bool _exerciseUsesPlates(String? equipment) {
+    if (equipment == null) return false;
+    final lowerEquipment = equipment.toLowerCase();
+    return lowerEquipment.contains('barbell') ||
+        lowerEquipment.contains('e-z curl') ||
+        lowerEquipment.contains('ez curl') ||
+        lowerEquipment.contains('trap bar') ||
+        lowerEquipment.contains('smith') ||
+        lowerEquipment.contains('dumbbell');
+  }
+
+  // Show plate viewer for a specific weight
+  Future<void> _showPlateViewer(double weight) async {
+    if (_exercise == null) return;
+    final exerciseName = _exercise!['name']?.toString() ?? '';
+    if (exerciseName.isEmpty) return;
+
+    await showBarbellPlateViewer(
+      context: context,
+      exerciseName: exerciseName,
+      useLbs: _showWeightInLbs,
+      weight: weight,
+    );
   }
 
   // Helper method to find exercises by name
@@ -1220,38 +1247,50 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                   final setIndex = entry.key;
                   final set = entry.value;
                   final oneRM = _calculateOneRM(set.weight, set.reps);
+                  final equipment = _exercise?['equipment']?.toString();
+                  final usesPlates = _exerciseUsesPlates(equipment);
+                  final exerciseName = _exercise?['name']?.toString() ?? '';
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[850]!.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.grey[800]!,
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        // Set number with gradient
-                        Container(
-                          width: 36,
-                          height: 36,
+                  return FutureBuilder<bool>(
+                    future: usesPlates ? hasPlateConfig(exerciseName, weight: set.weight) : Future.value(false),
+                    builder: (context, snapshot) {
+                      final hasConfig = snapshot.data ?? false;
+                      
+                      return GestureDetector(
+                        onTap: hasConfig ? () => _showPlateViewer(set.weight) : null,
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                const Color(0xFF3F8EFC).withValues(alpha: 0.2),
-                                const Color(0xFF3F8EFC).withValues(alpha: 0.1),
-                              ],
-                            ),
-                            shape: BoxShape.circle,
+                            color: Colors.grey[850]!.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: const Color(0xFF3F8EFC)
-                                  .withValues(alpha: 0.3),
-                              width: 1.5,
+                              color: hasConfig 
+                                  ? const Color(0xFF3F8EFC).withValues(alpha: 0.4)
+                                  : Colors.grey[800]!,
+                              width: hasConfig ? 1.5 : 1,
                             ),
                           ),
+                          child: Row(
+                            children: [
+                              // Set number with gradient
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      const Color(0xFF3F8EFC).withValues(alpha: 0.2),
+                                      const Color(0xFF3F8EFC).withValues(alpha: 0.1),
+                                    ],
+                                  ),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: const Color(0xFF3F8EFC)
+                                        .withValues(alpha: 0.3),
+                                    width: 1.5,
+                                  ),
+                                ),
                           child: Center(
                             child: Text(
                               '${setIndex + 1}',
@@ -1345,7 +1384,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                                 ),
                               ),
                               Text(
-                                '$oneRM kg',
+                                '$oneRM $_weightUnit',
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: Colors.green[300],
@@ -1355,9 +1394,32 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                             ],
                           ),
                         ),
+                        // Plate view indicator (only if config exists)
+                        if (hasConfig) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF3F8EFC).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFF3F8EFC).withValues(alpha: 0.4),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.fitness_center,
+                              size: 16,
+                              color: Color(0xFF3F8EFC),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
-                  );
+                  ),
+                );
+              },
+            );
                 }).toList(),
               ],
             ),

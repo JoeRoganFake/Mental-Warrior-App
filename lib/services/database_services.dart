@@ -31,7 +31,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 11, // Increment version for superset support
+      version: 13, // Increment version for plate config with weight support
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -51,6 +51,8 @@ class DatabaseService {
             .createCustomExerciseTable(db); // Added custom exercises table
         ExerciseStickyNoteService()
             .createStickyNotesTable(db); // Added sticky notes table
+        ExercisePlateConfigService()
+            .createPlateConfigsTable(db); // Added plate configs table
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 4) {
@@ -95,6 +97,15 @@ class DatabaseService {
           // Add superset_group column to exercises table
           await db
               .execute('ALTER TABLE exercises ADD COLUMN superset_group TEXT');
+        }
+        if (oldVersion < 12) {
+          // Create plate configs table (old schema)
+          await ExercisePlateConfigService().createPlateConfigsTable(db);
+        }
+        if (oldVersion < 13) {
+          // Recreate plate configs table with weight column
+          await db.execute('DROP TABLE IF EXISTS exercise_plate_configs');
+          await ExercisePlateConfigService().createPlateConfigsTable(db);
         }
       },
     );
@@ -2791,6 +2802,162 @@ class ExerciseStickyNoteService {
   Future<List<Map<String, dynamic>>> getAllStickyNotes() async {
     final db = await DatabaseService.instance.database;
     return await db.query(_stickyNotesTableName);
+  }
+}
+
+// Service for managing exercise plate configurations (bar type and plates)
+class ExercisePlateConfigService {
+  // Singleton instance
+  static final ExercisePlateConfigService _instance =
+      ExercisePlateConfigService._internal();
+  factory ExercisePlateConfigService() => _instance;
+  ExercisePlateConfigService._internal();
+
+  // Notifier to inform listeners when plate config changes
+  static final ValueNotifier<bool> plateConfigUpdatedNotifier =
+      ValueNotifier(false);
+
+  // Table & column names
+  final String _plateConfigTableName = "exercise_plate_configs";
+  final String _idColumnName = "id";
+  final String _exerciseNameColumnName = "exercise_name";
+  final String _weightColumnName = "weight"; // The total weight this config represents
+  final String _barTypeColumnName = "bar_type";
+  final String _plateCountsColumnName = "plate_counts"; // JSON string
+  final String _createdAtColumnName = "created_at";
+  final String _updatedAtColumnName = "updated_at";
+
+  // Create plate configs table
+  Future<void> createPlateConfigsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_plateConfigTableName (
+        $_idColumnName INTEGER PRIMARY KEY AUTOINCREMENT,
+        $_exerciseNameColumnName TEXT NOT NULL,
+        $_weightColumnName REAL NOT NULL,
+        $_barTypeColumnName TEXT NOT NULL,
+        $_plateCountsColumnName TEXT NOT NULL,
+        $_createdAtColumnName TEXT NOT NULL,
+        $_updatedAtColumnName TEXT NOT NULL,
+        UNIQUE($_exerciseNameColumnName, $_weightColumnName)
+      )
+    ''');
+    print('✅ Created exercise_plate_configs table');
+  }
+
+  // Helper to clean exercise name (remove API_ID and CUSTOM markers)
+  String _cleanExerciseName(String name) {
+    return name
+        .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+        .replaceAll('##CUSTOM##', '')
+        .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+        .trim();
+  }
+
+  // Get plate config for an exercise at a specific weight
+  Future<Map<String, dynamic>?> getPlateConfig(String exerciseName, {double? weight}) async {
+    final db = await DatabaseService.instance.database;
+    final cleanName = _cleanExerciseName(exerciseName);
+
+    List<Map<String, Object?>> result;
+    
+    if (weight != null) {
+      // Get config for specific weight
+      result = await db.query(
+        _plateConfigTableName,
+        where: '$_exerciseNameColumnName = ? AND $_weightColumnName = ?',
+        whereArgs: [cleanName, weight],
+      );
+    } else {
+      // Get most recent config for this exercise (fallback)
+      result = await db.query(
+        _plateConfigTableName,
+        where: '$_exerciseNameColumnName = ?',
+        whereArgs: [cleanName],
+        orderBy: '$_updatedAtColumnName DESC',
+        limit: 1,
+      );
+    }
+
+    if (result.isNotEmpty) {
+      return {
+        'barType': result.first[_barTypeColumnName] as String,
+        'plateCounts': result.first[_plateCountsColumnName] as String,
+        'weight': result.first[_weightColumnName] as double,
+      };
+    }
+    return null;
+  }
+
+  // Set or update plate config for an exercise at a specific weight
+  Future<void> setPlateConfig(
+      String exerciseName, double weight, String barType, String plateCountsJson) async {
+    final db = await DatabaseService.instance.database;
+    final cleanName = _cleanExerciseName(exerciseName);
+    final now = DateTime.now().toIso8601String();
+
+    // Check if config already exists for this exercise + weight combo
+    final existing = await db.query(
+      _plateConfigTableName,
+      where: '$_exerciseNameColumnName = ? AND $_weightColumnName = ?',
+      whereArgs: [cleanName, weight],
+    );
+
+    if (existing.isNotEmpty) {
+      // Update existing config
+      await db.update(
+        _plateConfigTableName,
+        {
+          _barTypeColumnName: barType,
+          _plateCountsColumnName: plateCountsJson,
+          _updatedAtColumnName: now,
+        },
+        where: '$_exerciseNameColumnName = ? AND $_weightColumnName = ?',
+        whereArgs: [cleanName, weight],
+      );
+    } else {
+      // Insert new config
+      await db.insert(
+        _plateConfigTableName,
+        {
+          _exerciseNameColumnName: cleanName,
+          _weightColumnName: weight,
+          _barTypeColumnName: barType,
+          _plateCountsColumnName: plateCountsJson,
+          _createdAtColumnName: now,
+          _updatedAtColumnName: now,
+        },
+      );
+    }
+
+    plateConfigUpdatedNotifier.value = !plateConfigUpdatedNotifier.value;
+  }
+
+  // Delete plate config for an exercise (optionally at specific weight)
+  Future<void> deletePlateConfig(String exerciseName, {double? weight}) async {
+    final db = await DatabaseService.instance.database;
+    final cleanName = _cleanExerciseName(exerciseName);
+
+    if (weight != null) {
+      await db.delete(
+        _plateConfigTableName,
+        where: '$_exerciseNameColumnName = ? AND $_weightColumnName = ?',
+        whereArgs: [cleanName, weight],
+      );
+    } else {
+      await db.delete(
+        _plateConfigTableName,
+        where: '$_exerciseNameColumnName = ?',
+        whereArgs: [cleanName],
+      );
+    }
+
+    plateConfigUpdatedNotifier.value = !plateConfigUpdatedNotifier.value;
+  }
+
+  // Check if an exercise has a plate config (optionally for specific weight)
+  Future<bool> hasPlateConfig(String exerciseName, {double? weight}) async {
+    final config = await getPlateConfig(exerciseName, weight: weight);
+    return config != null;
   }
 }
 
