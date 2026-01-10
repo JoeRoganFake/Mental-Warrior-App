@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
+import 'package:mental_warior/services/plate_bar_customization_service.dart';
 
 /// A visual barbell and plate selector widget for calculating weights
 class BarbellPlateCalculator extends StatefulWidget {
@@ -39,6 +40,8 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
   // Track loading state
   bool _isLoading = true;
 
+  late final VoidCallback _customizationListener;
+
   // Theme colors
   final Color _backgroundColor = const Color(0xFF1A1B1E);
   final Color _surfaceColor = const Color(0xFF26272B);
@@ -46,18 +49,137 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
   final Color _textPrimaryColor = Colors.white;
   final Color _textSecondaryColor = const Color(0xFFBBBBBB);
 
+  String _normalizeBarShape(String? raw) {
+    final v = (raw ?? '').trim().toLowerCase();
+    if (v.isEmpty) return 'olympic';
+    if (v == 'olympic') return 'olympic';
+    if (v == 'ez') return 'ez';
+    if (v == 'dumbbell') return 'dumbbell';
+    if (v == 'standard' || v == 'barbell' || v == 'straight') return 'olympic';
+    if (v.contains('ez')) return 'ez';
+    if (v.contains('dumb')) return 'dumbbell';
+    return 'olympic';
+  }
+
+  String _shapeForSelectedBar() {
+    // Prefer the explicit shape stored on the selected bar.
+    final explicit = _selectedBar.shape;
+    if (explicit != null && explicit.trim().isNotEmpty) {
+      return explicit;
+    }
+
+    // Fall back to name heuristics for older/default data.
+    final name = _selectedBar.name.trim().toLowerCase();
+    if (name == 'no bar') return 'olympic';
+    if (name.contains('dumbbell') || name.contains('dumb bell'))
+      return 'dumbbell';
+    if (name.contains('ez') || name.contains('e-z')) return 'ez';
+    return 'olympic';
+  }
+
+  IconData _iconForCustomBar({required String name, required String shape}) {
+    final normalizedName = name.trim().toLowerCase();
+    if (normalizedName == 'no bar') return Icons.not_interested;
+
+    switch (_normalizeBarShape(shape)) {
+      case 'dumbbell':
+        return Icons.fitness_center;
+      case 'ez':
+        return Icons.fitness_center;
+      case 'olympic':
+      default:
+        return Icons.fitness_center;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _customizationListener = () {
+      if (!mounted) return;
+      _reloadCustomizationsAndRecalc();
+    };
+    PlateBarCustomizationService.customizationUpdatedNotifier
+        .addListener(_customizationListener);
+
     _initializePlatesAndBars();
     _loadSavedConfigOrCalculate();
+  }
+
+  @override
+  void didUpdateWidget(covariant BarbellPlateCalculator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // If the user switched kg/lbs while the calculator is open, keep the
+    // current total weight and simply recalculate the plate breakdown using
+    // the new unit's catalogs.
+    if (oldWidget.useLbs != widget.useLbs) {
+      _handleUnitSwitch(oldUseLbs: oldWidget.useLbs, newUseLbs: widget.useLbs);
+    }
+  }
+
+  Future<void> _handleUnitSwitch(
+      {required bool oldUseLbs, required bool newUseLbs}) async {
+    final currentTotalWeight = _calculateTotalWeight();
+    final currentShape = _normalizeBarShape(_shapeForSelectedBar());
+
+    await _loadCustomPlatesAndBars();
+    if (!mounted) return;
+
+    // Pick a sensible equivalent bar after reload.
+    final preferredName = currentShape == 'dumbbell'
+        ? 'Dumbbell'
+        : currentShape == 'ez'
+            ? 'EZ Curl Bar'
+            : 'Olympic Bar';
+    final nextSelected = _barTypes.firstWhere(
+      (b) => b.name == preferredName,
+      orElse: () => _getDefaultBarForEquipment(),
+    );
+
+    setState(() {
+      _selectedBar = nextSelected;
+      _plateCounts = {for (var plate in _availablePlates) plate.weight: 0};
+    });
+
+    // Recalculate plates for the same overall weight.
+    _calculatePlatesFromWeight(currentTotalWeight);
+    _updateWeight();
+  }
+
+  @override
+  void dispose() {
+    PlateBarCustomizationService.customizationUpdatedNotifier
+        .removeListener(_customizationListener);
+    super.dispose();
+  }
+
+  Future<void> _reloadCustomizationsAndRecalc() async {
+    await _loadCustomPlatesAndBars();
+
+    if (!mounted) return;
+    // Keep the user's current target if possible.
+    final currentTotalWeight = _calculateTotalWeight();
+    setState(() {
+      _plateCounts = {for (var plate in _availablePlates) plate.weight: 0};
+      // Keep currently selected bar if it still exists; otherwise pick default.
+      final stillExists = _barTypes.any((b) => b.name == _selectedBar.name);
+      _selectedBar = stillExists
+          ? _barTypes.firstWhere((b) => b.name == _selectedBar.name)
+          : _getDefaultBarForEquipment();
+    });
+
+    _calculatePlatesFromWeight(currentTotalWeight);
+    _updateWeight();
   }
 
   Future<void> _loadSavedConfigOrCalculate() async {
     if (widget.exerciseName != null && widget.exerciseName!.isNotEmpty) {
       // Try to load saved plate config for this exercise at this specific weight
-      final savedConfig = await ExercisePlateConfigService()
-          .getPlateConfig(widget.exerciseName!, weight: widget.initialWeight);
+      final savedConfig = await ExercisePlateConfigService().getPlateConfig(
+          widget.exerciseName!,
+          weight: widget.initialWeight,
+          useLbs: widget.useLbs);
 
       if (savedConfig != null) {
         try {
@@ -70,7 +192,8 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
 
           // Restore plate counts
           final plateCountsJson = savedConfig['plateCounts'] as String;
-          final Map<String, dynamic> decodedCounts = jsonDecode(plateCountsJson);
+          final Map<String, dynamic> decodedCounts =
+              jsonDecode(plateCountsJson);
           final Map<double, int> restoredCounts = {};
 
           decodedCounts.forEach((key, value) {
@@ -101,7 +224,7 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
     setState(() {
       _isLoading = false;
     });
-    
+
     // Notify parent of the calculated weight (may differ from initial due to plate rounding)
     final calculatedWeight = _calculateTotalWeight();
     widget.onWeightChanged(calculatedWeight);
@@ -122,23 +245,159 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
         totalWeight,
         _selectedBar.name,
         jsonEncode(plateCountsForJson),
+        widget.useLbs,
       );
     }
   }
 
   void _initializePlatesAndBars() {
-    if (widget.useLbs) {
-      // Imperial plates (lbs)
-      _barTypes = [
-        BarType(name: 'Olympic Bar', weight: 45, icon: Icons.fitness_center),
-        BarType(name: 'EZ Curl Bar', weight: 25, icon: Icons.fitness_center),
-        BarType(name: 'Trap Bar', weight: 55, icon: Icons.fitness_center),
-        BarType(name: 'Smith Machine', weight: 20, icon: Icons.fitness_center),
-        BarType(name: 'Dumbbell', weight: 0, icon: Icons.fitness_center),
-        BarType(name: 'No Bar', weight: 0, icon: Icons.not_interested),
-      ];
+    _barTypes = _getDefaultBarTypes();
+    _availablePlates = _getDefaultPlates();
+    _selectedBar = _getDefaultBarForEquipment();
+    _plateCounts = {for (var plate in _availablePlates) plate.weight: 0};
 
-      _availablePlates = [
+    // Best-effort async load of user customizations; UI will refresh.
+    _loadCustomPlatesAndBars();
+  }
+
+  Future<void> _loadCustomPlatesAndBars() async {
+    final unit = widget.useLbs ? 'lbs' : 'kg';
+    try {
+      final service = PlateBarCustomizationService();
+      await service.ensureTablesExist();
+
+      final customPlates = await service.getCustomPlates(unit);
+      final customBars = await service.getCustomBars(unit);
+
+      final plates = customPlates.isNotEmpty
+          ? customPlates
+              .map((p) => PlateInfo(
+                    weight: p.weight,
+                    color: Color(p.color),
+                    label: p.label,
+                  ))
+              .toList()
+          : _getDefaultPlates();
+
+      // Ensure plates are heaviest->lightest for greedy selection + visuals.
+      plates.sort((a, b) => b.weight.compareTo(a.weight));
+
+      final bars = customBars.isNotEmpty
+          ? customBars
+              .map((b) => BarType(
+                    name: b.name,
+                    weight: b.weight,
+                    icon: _iconForCustomBar(
+                      name: b.name,
+                      shape: b.shape,
+                    ),
+                    shape: _normalizeBarShape(b.shape),
+                  ))
+              .toList()
+          : _getDefaultBarTypes();
+
+      // Keep a stable UX ordering; defaults first if present.
+      bars.sort((a, b) => a.name.compareTo(b.name));
+
+      if (!mounted) return;
+      setState(() {
+        _barTypes = bars;
+        _availablePlates = plates;
+
+        // If the currently selected bar disappeared, re-pick a sensible default.
+        final stillExists = _barTypes.any((b) => b.name == _selectedBar.name);
+        if (!stillExists) {
+          _selectedBar = _getDefaultBarForEquipment();
+        } else {
+          _selectedBar =
+              _barTypes.firstWhere((b) => b.name == _selectedBar.name);
+        }
+
+        // Rebuild plate count map to match current plate list.
+        final currentCounts = Map<double, int>.from(_plateCounts);
+        _plateCounts = {for (var plate in _availablePlates) plate.weight: 0};
+        for (final plate in _availablePlates) {
+          _plateCounts[plate.weight] = currentCounts[plate.weight] ?? 0;
+        }
+      });
+    } catch (e) {
+      // Fall back silently to defaults if anything goes wrong.
+    }
+  }
+
+  List<BarType> _getDefaultBarTypes() {
+    if (widget.useLbs) {
+      return [
+        BarType(
+            name: 'Olympic Bar',
+            weight: 45,
+            icon: Icons.fitness_center,
+            shape: 'olympic'),
+        BarType(
+            name: 'EZ Curl Bar',
+            weight: 25,
+            icon: Icons.fitness_center,
+            shape: 'ez'),
+        BarType(
+            name: 'Trap Bar',
+            weight: 55,
+            icon: Icons.fitness_center,
+            shape: 'olympic'),
+        BarType(
+            name: 'Smith Machine',
+            weight: 20,
+            icon: Icons.fitness_center,
+            shape: 'olympic'),
+        BarType(
+            name: 'Dumbbell',
+            weight: 5,
+            icon: Icons.fitness_center,
+            shape: 'dumbbell'),
+        BarType(
+            name: 'No Bar',
+            weight: 0,
+            icon: Icons.not_interested,
+            shape: 'olympic'),
+      ];
+    }
+
+    return [
+      BarType(
+          name: 'Olympic Bar',
+          weight: 20,
+          icon: Icons.fitness_center,
+          shape: 'olympic'),
+      BarType(
+          name: 'EZ Curl Bar',
+          weight: 10,
+          icon: Icons.fitness_center,
+          shape: 'ez'),
+      BarType(
+          name: 'Trap Bar',
+          weight: 25,
+          icon: Icons.fitness_center,
+          shape: 'olympic'),
+      BarType(
+          name: 'Smith Machine',
+          weight: 10,
+          icon: Icons.fitness_center,
+          shape: 'olympic'),
+      BarType(
+          name: 'Dumbbell',
+          weight: 2.5,
+          icon: Icons.fitness_center,
+          shape: 'dumbbell'),
+      BarType(
+          name: 'No Bar',
+          weight: 0,
+          icon: Icons.not_interested,
+          shape: 'olympic'),
+    ];
+  }
+
+  List<PlateInfo> _getDefaultPlates() {
+    if (widget.useLbs) {
+      return [
         PlateInfo(weight: 45, color: const Color(0xFFE53935), label: '45'),
         PlateInfo(weight: 35, color: const Color(0xFFFFEB3B), label: '35'),
         PlateInfo(weight: 25, color: const Color(0xFF4CAF50), label: '25'),
@@ -146,42 +405,31 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
         PlateInfo(weight: 5, color: const Color(0xFFFF9800), label: '5'),
         PlateInfo(weight: 2.5, color: const Color(0xFF9C27B0), label: '2.5'),
       ];
-    } else {
-      // Metric plates (kg)
-      _barTypes = [
-        BarType(name: 'Olympic Bar', weight: 20, icon: Icons.fitness_center),
-        BarType(name: 'EZ Curl Bar', weight: 10, icon: Icons.fitness_center),
-        BarType(name: 'Trap Bar', weight: 25, icon: Icons.fitness_center),
-        BarType(name: 'Smith Machine', weight: 10, icon: Icons.fitness_center),
-        BarType(name: 'Dumbbell', weight: 0, icon: Icons.fitness_center),
-        BarType(name: 'No Bar', weight: 0, icon: Icons.not_interested),
-      ];
-
-      _availablePlates = [
-        PlateInfo(weight: 25, color: const Color(0xFFE53935), label: '25'),
-        PlateInfo(weight: 20, color: const Color(0xFF2196F3), label: '20'),
-        PlateInfo(weight: 15, color: const Color(0xFFFFEB3B), label: '15'),
-        PlateInfo(weight: 10, color: const Color(0xFF4CAF50), label: '10'),
-        PlateInfo(weight: 5, color: const Color(0xFFFF9800), label: '5'),
-        PlateInfo(weight: 2.5, color: const Color(0xFF9C27B0), label: '2.5'),
-        PlateInfo(weight: 1.25, color: const Color(0xFF607D8B), label: '1.25'),
-      ];
     }
 
-    _selectedBar = _getDefaultBarForEquipment();
-    _plateCounts = {for (var plate in _availablePlates) plate.weight: 0};
+    return [
+      PlateInfo(weight: 25, color: const Color(0xFFE53935), label: '25'),
+      PlateInfo(weight: 20, color: const Color(0xFF2196F3), label: '20'),
+      PlateInfo(weight: 15, color: const Color(0xFFFFEB3B), label: '15'),
+      PlateInfo(weight: 10, color: const Color(0xFF4CAF50), label: '10'),
+      PlateInfo(weight: 5, color: const Color(0xFFFF9800), label: '5'),
+      PlateInfo(weight: 2.5, color: const Color(0xFF9C27B0), label: '2.5'),
+      PlateInfo(weight: 1.25, color: const Color(0xFF607D8B), label: '1.25'),
+    ];
   }
 
   // Determine the default bar based on exercise equipment
   BarType _getDefaultBarForEquipment() {
     final equipment = widget.equipment?.toLowerCase() ?? '';
-    
+
     if (equipment.contains('dumbbell') || equipment.contains('dumb bell')) {
       return _barTypes.firstWhere(
         (bar) => bar.name == 'Dumbbell',
         orElse: () => _barTypes.first,
       );
-    } else if (equipment.contains('e-z curl') || equipment.contains('ez curl') || equipment.contains('ez-curl')) {
+    } else if (equipment.contains('e-z curl') ||
+        equipment.contains('ez curl') ||
+        equipment.contains('ez-curl')) {
       return _barTypes.firstWhere(
         (bar) => bar.name == 'EZ Curl Bar',
         orElse: () => _barTypes.first,
@@ -197,7 +445,7 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
         orElse: () => _barTypes.first,
       );
     }
-    
+
     // Default to Olympic Bar
     return _barTypes.first;
   }
@@ -211,7 +459,7 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
 
     // Calculate remaining weight per side
     double remainingPerSide = (targetWeight - _selectedBar.weight) / 2;
-    
+
     // Handle case where bar weight exceeds target (shouldn't happen normally)
     if (remainingPerSide < 0) {
       remainingPerSide = 0;
@@ -311,6 +559,43 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
 
           // Plate Selector - Compact
           _buildPlateSelector(unit),
+
+          const SizedBox(height: 12),
+
+          // Info message about customization
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _backgroundColor.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _textSecondaryColor.withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: _textSecondaryColor,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Customize plate weights and bar types in Settings',
+                      style: TextStyle(
+                        color: _textSecondaryColor,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
 
           const SizedBox(height: 12),
         ],
@@ -560,10 +845,10 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
   }
 
   Widget _buildBarCenter() {
-    // Check if EZ Curl Bar is selected
-    final isEZBar = _selectedBar.name == 'EZ Curl Bar';
-    final isDumbbell = _selectedBar.name == 'Dumbbell';
-    
+    final shape = _normalizeBarShape(_shapeForSelectedBar());
+    final isEZBar = shape == 'ez';
+    final isDumbbell = shape == 'dumbbell';
+
     if (isEZBar) {
       return SizedBox(
         width: 100,
@@ -574,7 +859,7 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
         ),
       );
     }
-    
+
     if (isDumbbell) {
       return SizedBox(
         width: 60,
@@ -585,7 +870,7 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
         ),
       );
     }
-    
+
     return Container(
       width: 80,
       height: 14,
@@ -723,7 +1008,7 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${_formatWeight(bar.weight)}',
+                          '${_formatWeight(bar.weight)} $unit',
                           style: TextStyle(
                             color: isSelected
                                 ? Colors.white.withOpacity(0.8)
@@ -941,39 +1226,38 @@ class KnurlPatternPainter extends CustomPainter {
 class EZBarPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final barPaint = Paint()
-      ..style = PaintingStyle.fill;
+    final barPaint = Paint()..style = PaintingStyle.fill;
 
     final centerY = size.height / 2;
     final barThickness = 7.0;
 
     // Create the EZ bar path with angled grip sections
     final path = Path();
-    
+
     // Start from left side
     path.moveTo(0, centerY - barThickness / 2);
-    
+
     // Straight section (left)
     path.lineTo(size.width * 0.1, centerY - barThickness / 2);
-    
+
     // First angled section going down (left grip)
     path.lineTo(size.width * 0.2, centerY + barThickness * 0.8);
-    
+
     // Angled section going back up
     path.lineTo(size.width * 0.35, centerY - barThickness * 0.8);
-    
+
     // Center section (straight)
     path.lineTo(size.width * 0.65, centerY - barThickness * 0.8);
-    
+
     // Angled section going down (right grip)
     path.lineTo(size.width * 0.8, centerY + barThickness * 0.8);
-    
+
     // Angled section going back up
     path.lineTo(size.width * 0.9, centerY - barThickness / 2);
-    
+
     // Straight section (right)
     path.lineTo(size.width, centerY - barThickness / 2);
-    
+
     // Bottom path (reverse direction)
     path.lineTo(size.width, centerY + barThickness / 2);
     path.lineTo(size.width * 0.9, centerY + barThickness / 2);
@@ -983,7 +1267,7 @@ class EZBarPainter extends CustomPainter {
     path.lineTo(size.width * 0.2, centerY + barThickness * 1.6);
     path.lineTo(size.width * 0.1, centerY + barThickness / 2);
     path.lineTo(0, centerY + barThickness / 2);
-    
+
     path.close();
 
     // Draw gradient fill
@@ -1005,7 +1289,7 @@ class EZBarPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..color = Colors.grey[700]!
       ..strokeWidth = 0.5;
-    
+
     canvas.drawPath(path, outlinePaint);
 
     // Add knurl pattern on the angled grip sections
@@ -1041,11 +1325,10 @@ class DumbbellHandlePainter extends CustomPainter {
     final centerY = size.height / 2;
     final handleHeight = 10.0;
     final knurlHeight = 14.0;
-    
+
     // Draw the thin bar sections on left and right
-    final barPaint = Paint()
-      ..style = PaintingStyle.fill;
-    
+    final barPaint = Paint()..style = PaintingStyle.fill;
+
     final barGradient = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -1055,31 +1338,31 @@ class DumbbellHandlePainter extends CustomPainter {
         Colors.grey[400]!,
       ],
     );
-    
+
     // Left thin section
-    barPaint.shader = barGradient.createShader(
-      Rect.fromLTWH(0, centerY - handleHeight / 2, size.width * 0.2, handleHeight)
-    );
+    barPaint.shader = barGradient.createShader(Rect.fromLTWH(
+        0, centerY - handleHeight / 2, size.width * 0.2, handleHeight));
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, centerY - handleHeight / 2, size.width * 0.2, handleHeight),
+        Rect.fromLTWH(
+            0, centerY - handleHeight / 2, size.width * 0.2, handleHeight),
         const Radius.circular(2),
       ),
       barPaint,
     );
-    
+
     // Right thin section
-    barPaint.shader = barGradient.createShader(
-      Rect.fromLTWH(size.width * 0.8, centerY - handleHeight / 2, size.width * 0.2, handleHeight)
-    );
+    barPaint.shader = barGradient.createShader(Rect.fromLTWH(size.width * 0.8,
+        centerY - handleHeight / 2, size.width * 0.2, handleHeight));
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.8, centerY - handleHeight / 2, size.width * 0.2, handleHeight),
+        Rect.fromLTWH(size.width * 0.8, centerY - handleHeight / 2,
+            size.width * 0.2, handleHeight),
         const Radius.circular(2),
       ),
       barPaint,
     );
-    
+
     // Draw the knurled grip section (center, thicker)
     final knurlGradient = LinearGradient(
       begin: Alignment.topCenter,
@@ -1090,23 +1373,26 @@ class DumbbellHandlePainter extends CustomPainter {
         Colors.grey[500]!,
       ],
     );
-    
-    barPaint.shader = knurlGradient.createShader(
-      Rect.fromLTWH(size.width * 0.15, centerY - knurlHeight / 2, size.width * 0.7, knurlHeight)
-    );
+
+    barPaint.shader = knurlGradient.createShader(Rect.fromLTWH(
+        size.width * 0.15,
+        centerY - knurlHeight / 2,
+        size.width * 0.7,
+        knurlHeight));
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.15, centerY - knurlHeight / 2, size.width * 0.7, knurlHeight),
+        Rect.fromLTWH(size.width * 0.15, centerY - knurlHeight / 2,
+            size.width * 0.7, knurlHeight),
         const Radius.circular(3),
       ),
       barPaint,
     );
-    
+
     // Add knurl pattern
     final knurlPaint = Paint()
       ..color = Colors.grey[700]!.withOpacity(0.4)
       ..strokeWidth = 0.5;
-    
+
     for (double i = size.width * 0.2; i < size.width * 0.8; i += 4) {
       canvas.drawLine(
         Offset(i, centerY - knurlHeight / 2 + 2),
@@ -1114,16 +1400,17 @@ class DumbbellHandlePainter extends CustomPainter {
         knurlPaint,
       );
     }
-    
+
     // Draw outline
     final outlinePaint = Paint()
       ..style = PaintingStyle.stroke
       ..color = Colors.grey[700]!
       ..strokeWidth = 0.5;
-    
+
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(size.width * 0.15, centerY - knurlHeight / 2, size.width * 0.7, knurlHeight),
+        Rect.fromLTWH(size.width * 0.15, centerY - knurlHeight / 2,
+            size.width * 0.7, knurlHeight),
         const Radius.circular(3),
       ),
       outlinePaint,
@@ -1139,11 +1426,13 @@ class BarType {
   final String name;
   final double weight;
   final IconData icon;
+  final String? shape;
 
   BarType({
     required this.name,
     required this.weight,
     required this.icon,
+    this.shape,
   });
 }
 
@@ -1257,8 +1546,9 @@ Future<void> showBarbellPlateViewer({
   required double weight, // The specific weight to look up
 }) async {
   // Check if there's a saved config for this exercise at this weight
-  final savedConfig = await ExercisePlateConfigService().getPlateConfig(exerciseName, weight: weight);
-  
+  final savedConfig = await ExercisePlateConfigService()
+      .getPlateConfig(exerciseName, weight: weight, useLbs: useLbs);
+
   if (savedConfig == null) {
     // No saved config, show a message
     if (context.mounted) {
@@ -1347,8 +1637,10 @@ Future<void> showBarbellPlateViewer({
 }
 
 /// Check if an exercise has a saved plate configuration at a specific weight
-Future<bool> hasPlateConfig(String exerciseName, {double? weight}) async {
-  return await ExercisePlateConfigService().hasPlateConfig(exerciseName, weight: weight);
+Future<bool> hasPlateConfig(String exerciseName,
+    {double? weight, bool? useLbs}) async {
+  return await ExercisePlateConfigService()
+      .hasPlateConfig(exerciseName, weight: weight, useLbs: useLbs);
 }
 
 /// A read-only view of the barbell and plates
@@ -1371,6 +1663,31 @@ class BarbellPlateViewer extends StatelessWidget {
   static const Color _textPrimaryColor = Colors.white;
   static const Color _textSecondaryColor = Color(0xFFBBBBBB);
 
+  String _normalizeBarShape(String? raw) {
+    final v = (raw ?? '').trim().toLowerCase();
+    if (v.isEmpty) return 'olympic';
+    if (v == 'olympic') return 'olympic';
+    if (v == 'ez') return 'ez';
+    if (v == 'dumbbell') return 'dumbbell';
+    if (v == 'standard' || v == 'barbell' || v == 'straight') return 'olympic';
+    if (v.contains('ez')) return 'ez';
+    if (v.contains('dumb')) return 'dumbbell';
+    return 'olympic';
+  }
+
+  String _shapeForBar(BarType bar) {
+    final explicit = bar.shape;
+    if (explicit != null && explicit.trim().isNotEmpty) {
+      return explicit;
+    }
+
+    final name = bar.name.trim().toLowerCase();
+    if (name.contains('dumbbell') || name.contains('dumb bell'))
+      return 'dumbbell';
+    if (name.contains('ez') || name.contains('e-z')) return 'ez';
+    return 'olympic';
+  }
+
   String _cleanExerciseName(String name) {
     return name
         .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
@@ -1382,21 +1699,69 @@ class BarbellPlateViewer extends StatelessWidget {
   List<BarType> _getBarTypes() {
     if (useLbs) {
       return [
-        BarType(name: 'Olympic Bar', weight: 45, icon: Icons.fitness_center),
-        BarType(name: 'EZ Curl Bar', weight: 25, icon: Icons.fitness_center),
-        BarType(name: 'Trap Bar', weight: 55, icon: Icons.fitness_center),
-        BarType(name: 'Smith Machine', weight: 20, icon: Icons.fitness_center),
-        BarType(name: 'Dumbbell', weight: 0, icon: Icons.fitness_center),
-        BarType(name: 'No Bar', weight: 0, icon: Icons.not_interested),
+        BarType(
+            name: 'Olympic Bar',
+            weight: 45,
+            icon: Icons.fitness_center,
+            shape: 'olympic'),
+        BarType(
+            name: 'EZ Curl Bar',
+            weight: 25,
+            icon: Icons.fitness_center,
+            shape: 'ez'),
+        BarType(
+            name: 'Trap Bar',
+            weight: 55,
+            icon: Icons.fitness_center,
+            shape: 'olympic'),
+        BarType(
+            name: 'Smith Machine',
+            weight: 20,
+            icon: Icons.fitness_center,
+            shape: 'olympic'),
+        BarType(
+            name: 'Dumbbell',
+            weight: 5,
+            icon: Icons.fitness_center,
+            shape: 'dumbbell'),
+        BarType(
+            name: 'No Bar',
+            weight: 0,
+            icon: Icons.not_interested,
+            shape: 'olympic'),
       ];
     } else {
       return [
-        BarType(name: 'Olympic Bar', weight: 20, icon: Icons.fitness_center),
-        BarType(name: 'EZ Curl Bar', weight: 10, icon: Icons.fitness_center),
-        BarType(name: 'Trap Bar', weight: 25, icon: Icons.fitness_center),
-        BarType(name: 'Smith Machine', weight: 10, icon: Icons.fitness_center),
-        BarType(name: 'Dumbbell', weight: 0, icon: Icons.fitness_center),
-        BarType(name: 'No Bar', weight: 0, icon: Icons.not_interested),
+        BarType(
+            name: 'Olympic Bar',
+            weight: 20,
+            icon: Icons.fitness_center,
+            shape: 'olympic'),
+        BarType(
+            name: 'EZ Curl Bar',
+            weight: 10,
+            icon: Icons.fitness_center,
+            shape: 'ez'),
+        BarType(
+            name: 'Trap Bar',
+            weight: 25,
+            icon: Icons.fitness_center,
+            shape: 'olympic'),
+        BarType(
+            name: 'Smith Machine',
+            weight: 10,
+            icon: Icons.fitness_center,
+            shape: 'olympic'),
+        BarType(
+            name: 'Dumbbell',
+            weight: 2.5,
+            icon: Icons.fitness_center,
+            shape: 'dumbbell'),
+        BarType(
+            name: 'No Bar',
+            weight: 0,
+            icon: Icons.not_interested,
+            shape: 'olympic'),
       ];
     }
   }
@@ -1483,7 +1848,8 @@ class BarbellPlateViewer extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.visibility, color: _textSecondaryColor, size: 16),
+                        Icon(Icons.visibility,
+                            color: _textSecondaryColor, size: 16),
                         const SizedBox(width: 6),
                         const Text(
                           'Plate Configuration',
@@ -1505,7 +1871,8 @@ class BarbellPlateViewer extends StatelessWidget {
                   ],
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
                     color: _primaryColor.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(20),
@@ -1530,7 +1897,8 @@ class BarbellPlateViewer extends StatelessWidget {
             child: SizedBox(
               height: 120,
               child: Center(
-                child: _buildBarbell(platesOnSide, availablePlates, selectedBar),
+                child:
+                    _buildBarbell(platesOnSide, availablePlates, selectedBar),
               ),
             ),
           ),
@@ -1590,7 +1958,8 @@ class BarbellPlateViewer extends StatelessWidget {
                     runSpacing: 8,
                     children: availablePlates
                         .where((plate) => (plateCounts[plate.weight] ?? 0) > 0)
-                        .map((plate) => _buildPlateChip(plate, plateCounts[plate.weight] ?? 0, unit))
+                        .map((plate) => _buildPlateChip(
+                            plate, plateCounts[plate.weight] ?? 0, unit))
                         .toList(),
                   ),
                 ],
@@ -1608,7 +1977,8 @@ class BarbellPlateViewer extends StatelessWidget {
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.info_outline, color: _textSecondaryColor, size: 18),
+                    Icon(Icons.info_outline,
+                        color: _textSecondaryColor, size: 18),
                     SizedBox(width: 8),
                     Text(
                       'Bar only, no plates',
@@ -1628,10 +1998,12 @@ class BarbellPlateViewer extends StatelessWidget {
     );
   }
 
-  Widget _buildBarbell(List<PlateInfo> platesOnSide, List<PlateInfo> availablePlates, BarType selectedBar) {
-    final isEZBar = selectedBar.name == 'EZ Curl Bar';
-    final isDumbbell = selectedBar.name == 'Dumbbell';
-    
+  Widget _buildBarbell(List<PlateInfo> platesOnSide,
+      List<PlateInfo> availablePlates, BarType selectedBar) {
+    final shape = _normalizeBarShape(_shapeForBar(selectedBar));
+    final isEZBar = shape == 'ez';
+    final isDumbbell = shape == 'dumbbell';
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxWidth = constraints.maxWidth;
@@ -1659,7 +2031,8 @@ class BarbellPlateViewer extends StatelessWidget {
                     ),
                   ),
                   Container(width: 20, height: 20, color: Colors.grey[500]),
-                  ...platesOnSide.reversed.map((plate) => _buildPlateWidget(plate, availablePlates)),
+                  ...platesOnSide.reversed.map(
+                      (plate) => _buildPlateWidget(plate, availablePlates)),
                   Container(
                     width: 6,
                     height: 32,
@@ -1697,7 +2070,11 @@ class BarbellPlateViewer extends StatelessWidget {
                 height: 16,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [Colors.grey[600]!, Colors.grey[400]!, Colors.grey[600]!],
+                    colors: [
+                      Colors.grey[600]!,
+                      Colors.grey[400]!,
+                      Colors.grey[600]!
+                    ],
                   ),
                   borderRadius: BorderRadius.circular(2),
                 ),
@@ -1724,7 +2101,8 @@ class BarbellPlateViewer extends StatelessWidget {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  ...platesOnSide.map((plate) => _buildPlateWidget(plate, availablePlates)),
+                  ...platesOnSide.map(
+                      (plate) => _buildPlateWidget(plate, availablePlates)),
                   Container(width: 20, height: 20, color: Colors.grey[500]),
                   Container(
                     width: 8,

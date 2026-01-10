@@ -854,7 +854,8 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
                 // Check if plate config exists for this specific weight
                 if (usesPlates) {
                   return FutureBuilder<bool>(
-                    future: hasPlateConfig(exercise.name, weight: set.weight),
+                      future: hasPlateConfig(exercise.name,
+                          weight: set.weight, useLbs: _showWeightInLbs),
                     builder: (context, snapshot) {
                       final hasConfig = snapshot.data ?? false;
                       return _buildSetRow(set, index + 1, isActualPR, exercise, hasConfig);

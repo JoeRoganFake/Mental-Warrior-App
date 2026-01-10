@@ -6,6 +6,7 @@ import 'package:mental_warior/models/books.dart';
 import 'package:mental_warior/models/categories.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/foreground_service.dart';
+import 'package:mental_warior/services/plate_bar_customization_service.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -31,7 +32,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 13, // Increment version for plate config with weight support
+      version: 15, // Increment version for unit tracking in plate configs
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -53,6 +54,8 @@ class DatabaseService {
             .createStickyNotesTable(db); // Added sticky notes table
         ExercisePlateConfigService()
             .createPlateConfigsTable(db); // Added plate configs table
+        PlateBarCustomizationService().createCustomizationTables(
+            db); // Added plate/bar customization tables
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 4) {
@@ -106,6 +109,15 @@ class DatabaseService {
           // Recreate plate configs table with weight column
           await db.execute('DROP TABLE IF EXISTS exercise_plate_configs');
           await ExercisePlateConfigService().createPlateConfigsTable(db);
+        }
+        if (oldVersion < 14) {
+          // Create plate/bar customization tables
+          await PlateBarCustomizationService().createCustomizationTables(db);
+        }
+        if (oldVersion < 15) {
+          // Add unit column to plate configs table to track kg/lbs
+          await db.execute(
+              'ALTER TABLE exercise_plate_configs ADD COLUMN unit TEXT DEFAULT "kg"');
         }
       },
     );
@@ -2824,6 +2836,7 @@ class ExercisePlateConfigService {
   final String _weightColumnName = "weight"; // The total weight this config represents
   final String _barTypeColumnName = "bar_type";
   final String _plateCountsColumnName = "plate_counts"; // JSON string
+  final String _unitColumnName = "unit"; // "kg" or "lbs"
   final String _createdAtColumnName = "created_at";
   final String _updatedAtColumnName = "updated_at";
 
@@ -2836,9 +2849,10 @@ class ExercisePlateConfigService {
         $_weightColumnName REAL NOT NULL,
         $_barTypeColumnName TEXT NOT NULL,
         $_plateCountsColumnName TEXT NOT NULL,
+        $_unitColumnName TEXT NOT NULL,
         $_createdAtColumnName TEXT NOT NULL,
         $_updatedAtColumnName TEXT NOT NULL,
-        UNIQUE($_exerciseNameColumnName, $_weightColumnName)
+        UNIQUE($_exerciseNameColumnName, $_weightColumnName, $_unitColumnName)
       )
     ''');
     print('✅ Created exercise_plate_configs table');
@@ -2853,26 +2867,29 @@ class ExercisePlateConfigService {
         .trim();
   }
 
-  // Get plate config for an exercise at a specific weight
-  Future<Map<String, dynamic>?> getPlateConfig(String exerciseName, {double? weight}) async {
+  // Get plate config for an exercise at a specific weight and unit
+  Future<Map<String, dynamic>?> getPlateConfig(String exerciseName,
+      {double? weight, bool? useLbs}) async {
     final db = await DatabaseService.instance.database;
     final cleanName = _cleanExerciseName(exerciseName);
+    final unit = (useLbs ?? false) ? 'lbs' : 'kg';
 
     List<Map<String, Object?>> result;
     
     if (weight != null) {
-      // Get config for specific weight
+      // Get config for specific weight and unit
       result = await db.query(
         _plateConfigTableName,
-        where: '$_exerciseNameColumnName = ? AND $_weightColumnName = ?',
-        whereArgs: [cleanName, weight],
+        where:
+            '$_exerciseNameColumnName = ? AND $_weightColumnName = ? AND $_unitColumnName = ?',
+        whereArgs: [cleanName, weight, unit],
       );
     } else {
-      // Get most recent config for this exercise (fallback)
+      // Get most recent config for this exercise in current unit (fallback)
       result = await db.query(
         _plateConfigTableName,
-        where: '$_exerciseNameColumnName = ?',
-        whereArgs: [cleanName],
+        where: '$_exerciseNameColumnName = ? AND $_unitColumnName = ?',
+        whereArgs: [cleanName, unit],
         orderBy: '$_updatedAtColumnName DESC',
         limit: 1,
       );
@@ -2883,6 +2900,7 @@ class ExercisePlateConfigService {
         'barType': result.first[_barTypeColumnName] as String,
         'plateCounts': result.first[_plateCountsColumnName] as String,
         'weight': result.first[_weightColumnName] as double,
+        'unit': result.first[_unitColumnName] as String,
       };
     }
     return null;
@@ -2890,16 +2908,19 @@ class ExercisePlateConfigService {
 
   // Set or update plate config for an exercise at a specific weight
   Future<void> setPlateConfig(
-      String exerciseName, double weight, String barType, String plateCountsJson) async {
+      String exerciseName, double weight,
+      String barType, String plateCountsJson, bool useLbs) async {
     final db = await DatabaseService.instance.database;
     final cleanName = _cleanExerciseName(exerciseName);
+    final unit = useLbs ? 'lbs' : 'kg';
     final now = DateTime.now().toIso8601String();
 
-    // Check if config already exists for this exercise + weight combo
+    // Check if config already exists for this exercise + weight + unit combo
     final existing = await db.query(
       _plateConfigTableName,
-      where: '$_exerciseNameColumnName = ? AND $_weightColumnName = ?',
-      whereArgs: [cleanName, weight],
+      where:
+          '$_exerciseNameColumnName = ? AND $_weightColumnName = ? AND $_unitColumnName = ?',
+      whereArgs: [cleanName, weight, unit],
     );
 
     if (existing.isNotEmpty) {
@@ -2911,8 +2932,9 @@ class ExercisePlateConfigService {
           _plateCountsColumnName: plateCountsJson,
           _updatedAtColumnName: now,
         },
-        where: '$_exerciseNameColumnName = ? AND $_weightColumnName = ?',
-        whereArgs: [cleanName, weight],
+        where:
+            '$_exerciseNameColumnName = ? AND $_weightColumnName = ? AND $_unitColumnName = ?',
+        whereArgs: [cleanName, weight, unit],
       );
     } else {
       // Insert new config
@@ -2923,6 +2945,7 @@ class ExercisePlateConfigService {
           _weightColumnName: weight,
           _barTypeColumnName: barType,
           _plateCountsColumnName: plateCountsJson,
+          _unitColumnName: unit,
           _createdAtColumnName: now,
           _updatedAtColumnName: now,
         },
@@ -2932,16 +2955,19 @@ class ExercisePlateConfigService {
     plateConfigUpdatedNotifier.value = !plateConfigUpdatedNotifier.value;
   }
 
-  // Delete plate config for an exercise (optionally at specific weight)
-  Future<void> deletePlateConfig(String exerciseName, {double? weight}) async {
+  // Delete plate config for an exercise (optionally at specific weight and unit)
+  Future<void> deletePlateConfig(String exerciseName,
+      {double? weight, bool? useLbs}) async {
     final db = await DatabaseService.instance.database;
     final cleanName = _cleanExerciseName(exerciseName);
 
-    if (weight != null) {
+    if (weight != null && useLbs != null) {
+      final unit = useLbs ? 'lbs' : 'kg';
       await db.delete(
         _plateConfigTableName,
-        where: '$_exerciseNameColumnName = ? AND $_weightColumnName = ?',
-        whereArgs: [cleanName, weight],
+        where:
+            '$_exerciseNameColumnName = ? AND $_weightColumnName = ? AND $_unitColumnName = ?',
+        whereArgs: [cleanName, weight, unit],
       );
     } else {
       await db.delete(
@@ -2954,9 +2980,11 @@ class ExercisePlateConfigService {
     plateConfigUpdatedNotifier.value = !plateConfigUpdatedNotifier.value;
   }
 
-  // Check if an exercise has a plate config (optionally for specific weight)
-  Future<bool> hasPlateConfig(String exerciseName, {double? weight}) async {
-    final config = await getPlateConfig(exerciseName, weight: weight);
+  // Check if an exercise has a plate config (optionally for specific weight and unit)
+  Future<bool> hasPlateConfig(String exerciseName,
+      {double? weight, bool? useLbs}) async {
+    final config =
+        await getPlateConfig(exerciseName, weight: weight, useLbs: useLbs);
     return config != null;
   }
 }

@@ -246,6 +246,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                       SnackBar(
                         content: Text(exercise['description']),
                         duration: const Duration(seconds: 3),
+                        behavior: SnackBarBehavior.fixed,
                       ),
                     );
                   }
@@ -313,6 +314,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
         SnackBar(
           content: Text('Exercise "${_cleanExerciseName(exercise['name'])}" deleted successfully'),
           backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.fixed,
         ),
       );
 
@@ -328,6 +330,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
         SnackBar(
           content: Text('Failed to delete exercise: $e'),
           backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.fixed,
         ),
       );
     }
@@ -627,6 +630,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                           SnackBar(
                             content: Text(exercise['description']),
                             duration: const Duration(seconds: 3),
+                            behavior: SnackBarBehavior.fixed,
                           ),
                         );
                       }

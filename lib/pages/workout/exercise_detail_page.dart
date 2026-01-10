@@ -1252,7 +1252,10 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                   final exerciseName = _exercise?['name']?.toString() ?? '';
 
                   return FutureBuilder<bool>(
-                    future: usesPlates ? hasPlateConfig(exerciseName, weight: set.weight) : Future.value(false),
+                    future: usesPlates
+                        ? hasPlateConfig(exerciseName,
+                            weight: set.weight, useLbs: _showWeightInLbs)
+                        : Future.value(false),
                     builder: (context, snapshot) {
                       final hasConfig = snapshot.data ?? false;
                       
