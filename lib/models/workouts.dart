@@ -1,3 +1,11 @@
+// Enum for different set types
+enum SetType {
+  normal, // Regular set (shows set number)
+  warmup, // Warm-up set (shows 'W')
+  dropset, // Drop set (shows 'D')
+  failure, // Failure set (shows 'F')
+}
+
 class Workout {
   final int id;
   final String name;
@@ -106,6 +114,7 @@ class ExerciseSet {
   int restTime; // Rest time in seconds
   bool completed;
   bool isPR; // Whether this set is a Personal Record
+  SetType setType; // Type of set (normal, warmup, dropset, failure)
 
   ExerciseSet({
     required this.id,
@@ -116,6 +125,7 @@ class ExerciseSet {
     required this.restTime,
     required this.completed,
     this.isPR = false,
+    this.setType = SetType.normal,
   });
 
   // Calculate volume (weight × reps)
@@ -131,7 +141,24 @@ class ExerciseSet {
       restTime: map['restTime'] as int,
       completed: map['completed'] == 1,
       isPR: map['isPR'] == 1 || false, // Default to false if not present
+      setType: _parseSetType(map['setType'] as String? ?? map['set_type'] as String?),
     );
+  }
+
+  // Helper method to parse set type from string
+  static SetType _parseSetType(String? value) {
+    if (value == null) return SetType.normal;
+    switch (value.toLowerCase()) {
+      case 'warmup':
+        return SetType.warmup;
+      case 'dropset':
+        return SetType.dropset;
+      case 'failure':
+        return SetType.failure;
+      case 'normal':
+      default:
+        return SetType.normal;
+    }
   }
 
   Map<String, dynamic> toMap() {
@@ -145,6 +172,7 @@ class ExerciseSet {
       'completed': completed ? 1 : 0,
       'volume': volume,
       'isPR': isPR ? 1 : 0,
+      'setType': setType.name,
     };
   }
 
@@ -157,6 +185,7 @@ class ExerciseSet {
     int? restTime,
     bool? completed,
     bool? isPR,
+    SetType? setType,
   }) {
     return ExerciseSet(
       id: id ?? this.id,
@@ -167,6 +196,7 @@ class ExerciseSet {
       restTime: restTime ?? this.restTime,
       completed: completed ?? this.completed,
       isPR: isPR ?? this.isPR,
+      setType: setType ?? this.setType,
     );
   }
 }

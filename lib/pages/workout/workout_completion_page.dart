@@ -43,6 +43,34 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
         .trim();
   }
 
+  // Helper method to get set type display text
+  String _getSetTypeDisplay(SetType setType) {
+    switch (setType) {
+      case SetType.warmup:
+        return 'W';
+      case SetType.dropset:
+        return 'D';
+      case SetType.failure:
+        return 'F';
+      case SetType.normal:
+        return '';
+    }
+  }
+
+  // Helper method to get set type label
+  String _getSetTypeLabel(SetType setType) {
+    switch (setType) {
+      case SetType.warmup:
+        return 'Warm-up';
+      case SetType.dropset:
+        return 'Drop Set';
+      case SetType.failure:
+        return 'Failure';
+      case SetType.normal:
+        return '';
+    }
+  }
+
   Future<void> _loadWeightUnit() async {
     final useLbs = await SettingsService().getShowWeightInLbs();
     if (mounted) {

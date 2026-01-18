@@ -510,6 +510,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         .trim();
   }
 
+  // Helper method to get set type display text
+  String _getSetTypeDisplay(ExerciseSet set) {
+    switch (set.setType) {
+      case SetType.warmup:
+        return 'W';
+      case SetType.dropset:
+        return 'D';
+      case SetType.failure:
+        return 'F';
+      case SetType.normal:
+        return '${set.setNumber}';
+    }
+  }
+
   // Helper method to check if an exercise uses plates (barbell, ez-curl bar, trap bar)
   bool _exerciseUsesPlates(String equipment) {
     final lowerEquipment = equipment.toLowerCase();
@@ -523,8 +537,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
   // Show the barbell plate calculator
   Future<void> _showPlateCalculator(ExerciseSet set, Exercise exercise) async {
-    final currentWeight =
-        double.tryParse(_weightControllers[set.id]?.text ?? '') ?? set.weight;
+    final currentWeightText = _weightControllers[set.id]?.text ?? '';
+    double currentWeight =
+        double.tryParse(currentWeightText.trim()) ?? set.weight;
+
+    if (currentWeight <= 0) {
+      final previousSet = _getPreviousSetValues(exercise.name, set.setNumber);
+      if (previousSet != null && previousSet.weight > 0) {
+        currentWeight = previousSet.weight;
+      }
+    }
 
     final newWeight = await showBarbellPlateCalculator(
       context: context,
@@ -657,6 +679,30 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   for (var setData in exerciseData['sets']) {
                     final setId = setData['id'] ??
                         -(DateTime.now().millisecondsSinceEpoch);
+                    
+                    // Parse set type
+                    SetType setType = SetType.normal;
+                    if (setData.containsKey('setType')) {
+                      final String? setTypeStr = setData['setType'] as String?;
+                      if (setTypeStr != null) {
+                        switch (setTypeStr.toLowerCase()) {
+                          case 'warmup':
+                            setType = SetType.warmup;
+                            break;
+                          case 'dropset':
+                            setType = SetType.dropset;
+                            break;
+                          case 'failure':
+                            setType = SetType.failure;
+                            break;
+                          case 'normal':
+                          default:
+                            setType = SetType.normal;
+                            break;
+                        }
+                      }
+                    }
+                    
                     sets.add(ExerciseSet(
                       id: setId,
                       exerciseId: exerciseId,
@@ -666,6 +712,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       restTime: setData['restTime'] ?? _defaultRestTime,
                       completed: setData['completed'] ?? false,
                       isPR: setData['isPR'] ?? false,
+                      setType: setType,
                     ));
                   }
                 }
@@ -2197,6 +2244,224 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
   }
 
+  /// Update the set type for a specific set
+  Future<void> _updateSetType(int setId, SetType newType) async {
+    // Set flag to prevent listener from triggering a reload
+    _isUpdatingInternally = true;
+
+    try {
+      // First, update the local state
+      if (mounted) {
+        setState(() {
+          for (var exercise in _workout!.exercises) {
+            for (var set in exercise.sets) {
+              if (set.id == setId) {
+                set.setType = newType;
+                break;
+              }
+            }
+          }
+        });
+      }
+
+      // Handle temporary vs regular workouts differently for database updates
+      if (widget.isTemporary || setId < 0) {
+        // Update in-memory temporary workout
+        final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+        if (tempWorkouts.containsKey(widget.workoutId)) {
+          final exercises = tempWorkouts[widget.workoutId]['exercises'];
+          bool found = false;
+          for (int i = 0; i < exercises.length && !found; i++) {
+            final sets = exercises[i]['sets'] as List;
+            for (int j = 0; j < sets.length; j++) {
+              if (sets[j]['id'] == setId) {
+                sets[j]['setType'] = newType.name;
+                found = true;
+                break;
+              }
+            }
+          }
+          if (found) {
+            WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+          }
+        }
+      } else {
+        // Update the database for regular workouts
+        final db = await DatabaseService.instance.database;
+        await db.update(
+          'exercise_sets',
+          {'set_type': newType.name},
+          where: 'id = ?',
+          whereArgs: [setId],
+        );
+      }
+
+      // Notify listeners
+      WorkoutService.workoutsUpdatedNotifier.value =
+          !WorkoutService.workoutsUpdatedNotifier.value;
+
+      // Auto-save the workout state
+      _updateActiveNotifier();
+    } finally {
+      // Reset the flag after update is complete
+      _isUpdatingInternally = false;
+    }
+  }
+
+  /// Show dialog to select set type
+  Future<void> _showSetTypeDialog(
+      ExerciseSet set, BuildContext buttonContext) async {
+    if (widget.readOnly) return;
+
+    // Get the position of the tapped button
+    final RenderBox button = buttonContext.findRenderObject() as RenderBox;
+    final RenderBox overlay =
+        Navigator.of(context).overlay!.context.findRenderObject() as RenderBox;
+
+    final RelativeRect position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset(0, button.size.height), ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero),
+            ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    final selectedType = await showMenu<SetType>(
+      context: context,
+      position: position,
+      color: _surfaceColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      items: [
+        PopupMenuItem<SetType>(
+          value: SetType.normal,
+          child: _buildSetTypeMenuItem(
+            'Normal',
+            'Regular set',
+            set.setType == SetType.normal,
+            showHelp: false,
+          ),
+        ),
+        PopupMenuItem<SetType>(
+          value: SetType.warmup,
+          child: _buildSetTypeMenuItem(
+            'Warm-up',
+            'Preparation set',
+            set.setType == SetType.warmup,
+            showHelp: true,
+          ),
+        ),
+        PopupMenuItem<SetType>(
+          value: SetType.dropset,
+          child: _buildSetTypeMenuItem(
+            'Drop Set',
+            'Reduced weight set',
+            set.setType == SetType.dropset,
+            showHelp: true,
+          ),
+        ),
+        PopupMenuItem<SetType>(
+          value: SetType.failure,
+          child: _buildSetTypeMenuItem(
+            'Failure',
+            'To muscular failure',
+            set.setType == SetType.failure,
+            showHelp: true,
+          ),
+        ),
+      ],
+    );
+
+    if (selectedType != null && selectedType != set.setType) {
+      await _updateSetType(set.id, selectedType);
+    }
+  }
+
+  /// Build a set type menu item
+  Widget _buildSetTypeMenuItem(String title, String subtitle, bool isSelected,
+      {bool showHelp = true}) {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      child: Row(
+        children: [
+          Icon(
+            isSelected
+                ? Icons.radio_button_checked
+                : Icons.radio_button_unchecked,
+            color: isSelected
+                ? _primaryColor
+                : _textSecondaryColor.withOpacity(0.5),
+            size: 20,
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: _textPrimaryColor,
+                fontSize: 15,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ),
+          if (showHelp)
+            GestureDetector(
+              onTap: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    backgroundColor: _surfaceColor,
+                    title: Text(
+                      title,
+                      style: TextStyle(
+                        color: _textPrimaryColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    content: Text(
+                      _getSetTypeDescription(title),
+                      style: TextStyle(
+                        color: _textSecondaryColor,
+                        fontSize: 15,
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text(
+                          'Got it',
+                          style: TextStyle(color: _primaryColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+              child: Icon(
+                Icons.help_outline,
+                color: _textSecondaryColor,
+                size: 18,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Get detailed description for set types
+  String _getSetTypeDescription(String type) {
+    switch (type) {
+      case 'Warm-up':
+        return 'A warm-up set is performed with lighter weight to prepare your muscles, joints, and nervous system for heavier working sets. It helps prevent injury and improves performance in subsequent sets.';
+      case 'Drop Set':
+        return 'A drop set is performed immediately after a regular set by reducing the weight and continuing without rest. This technique increases muscle fatigue and promotes muscle growth by pushing beyond normal failure.';
+      case 'Failure':
+        return 'A set taken to muscular failure means performing repetitions until you physically cannot complete another rep with proper form. This maximizes muscle fiber recruitment and stimulation for strength and hypertrophy gains.';
+      default:
+        return 'Regular working set performed at your target weight and rep range.';
+    }
+  }
+
   /// Comprehensive cleanup when finishing workout
   /// 1. Keep sets already marked as completed (they are safe)
   /// 2. Auto-complete valid sets that have weight >= 0 AND reps >= 0 but aren't completed yet
@@ -2761,10 +3026,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         // Skip if set not found
         if (setData.isEmpty) continue;
 
-        // Update weight and reps
+        // Update weight, reps, completed status, and set type
         setData['weight'] = set.weight;
         setData['reps'] = set.reps;
         setData['completed'] = set.completed;
+        setData['setType'] = set.setType.name;
       }
     }
     // Update the notifier with the modified data to ensure changes persist
@@ -2829,6 +3095,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             'reps': set.reps,
             'restTime': set.restTime,
             'completed': set.completed,
+            'setType': set.setType.name,
           };
 
           exerciseData['sets'].add(setData);
@@ -3114,6 +3381,28 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         set.weight = setData['weight'] ?? 0;
         set.reps = setData['reps'] ?? 0;
         set.completed = setData['completed'] ?? false;
+        
+        // Restore set type if present
+        if (setData.containsKey('setType')) {
+          final String? setTypeStr = setData['setType'] as String?;
+          if (setTypeStr != null) {
+            switch (setTypeStr.toLowerCase()) {
+              case 'warmup':
+                set.setType = SetType.warmup;
+                break;
+              case 'dropset':
+                set.setType = SetType.dropset;
+                break;
+              case 'failure':
+                set.setType = SetType.failure;
+                break;
+              case 'normal':
+              default:
+                set.setType = SetType.normal;
+                break;
+            }
+          }
+        }
 
         // Make sure controllers exist for this set
         if (!_weightControllers.containsKey(setId)) {
@@ -3879,6 +4168,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                     'reps': set.reps,
                                     'restTime': set.restTime,
                                     'completed': shouldBeCompleted,
+                                    'setType': set.setType.name,
                                   };
                                 }).toList(),
                               };
@@ -4941,24 +5231,34 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           ),
           child: Column(children: [
             Row(children: [
-              // Set number
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: set.completed
-                      ? _successColor.withOpacity(0.15)
-                      : _primaryColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  '${set.setNumber}',
-                  style: TextStyle(
-                    color: set.completed ? _successColor : _primaryColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+              // Set number - tappable to change set type
+              Builder(
+                builder: (BuildContext context) {
+                  return GestureDetector(
+                    onTap: widget.readOnly
+                        ? null
+                        : () => _showSetTypeDialog(set, context),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: set.completed
+                            ? _successColor.withOpacity(0.15)
+                            : _primaryColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        _getSetTypeDisplay(set),
+                        style: TextStyle(
+                          color: set.completed ? _successColor : _primaryColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: set.setType != SetType.normal ? 16 : 14,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
 
               // Previous values column

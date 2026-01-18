@@ -103,7 +103,7 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
         .addListener(_customizationListener);
 
     _initializePlatesAndBars();
-    _loadSavedConfigOrCalculate();
+    // Load custom plates first, then calculate - this happens in _loadCustomPlatesAndBars now
   }
 
   @override
@@ -256,7 +256,7 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
     _selectedBar = _getDefaultBarForEquipment();
     _plateCounts = {for (var plate in _availablePlates) plate.weight: 0};
 
-    // Best-effort async load of user customizations; UI will refresh.
+    // Load custom plates first, then calculate plates from weight
     _loadCustomPlatesAndBars();
   }
 
@@ -300,6 +300,8 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
       bars.sort((a, b) => a.name.compareTo(b.name));
 
       if (!mounted) return;
+
+      
       setState(() {
         _barTypes = bars;
         _availablePlates = plates;
@@ -313,15 +315,16 @@ class _BarbellPlateCalculatorState extends State<BarbellPlateCalculator> {
               _barTypes.firstWhere((b) => b.name == _selectedBar.name);
         }
 
-        // Rebuild plate count map to match current plate list.
-        final currentCounts = Map<double, int>.from(_plateCounts);
+        // Reset plate counts to 0 for new plate list
         _plateCounts = {for (var plate in _availablePlates) plate.weight: 0};
-        for (final plate in _availablePlates) {
-          _plateCounts[plate.weight] = currentCounts[plate.weight] ?? 0;
-        }
       });
+      
+      // After loading custom plates, now load saved config or calculate from initial weight
+      _loadSavedConfigOrCalculate();
     } catch (e) {
       // Fall back silently to defaults if anything goes wrong.
+      // Still try to load/calculate even if custom plates failed
+      _loadSavedConfigOrCalculate();
     }
   }
 
@@ -1545,6 +1548,8 @@ Future<void> showBarbellPlateViewer({
   required bool useLbs,
   required double weight, // The specific weight to look up
 }) async {
+  final unit = useLbs ? 'lbs' : 'kg';
+
   // Check if there's a saved config for this exercise at this weight
   final savedConfig = await ExercisePlateConfigService()
       .getPlateConfig(exerciseName, weight: weight, useLbs: useLbs);
@@ -1563,6 +1568,39 @@ Future<void> showBarbellPlateViewer({
   }
 
   if (!context.mounted) return;
+
+  List<PlateInfo>? customPlates;
+  List<BarType>? customBars;
+  try {
+    final service = PlateBarCustomizationService();
+    await service.ensureTablesExist();
+    final plates = await service.getCustomPlates(unit);
+    final bars = await service.getCustomBars(unit);
+
+    if (plates.isNotEmpty) {
+      customPlates = plates
+          .map((p) => PlateInfo(
+                weight: p.weight,
+                color: Color(p.color),
+                label: p.label,
+              ))
+          .toList();
+    }
+
+    if (bars.isNotEmpty) {
+      customBars = bars
+          .map((b) => BarType(
+                name: b.name,
+                weight: b.weight,
+                icon: IconData(b.iconCodePoint, fontFamily: 'MaterialIcons'),
+                shape: b.shape,
+              ))
+          .toList();
+    }
+  } catch (_) {
+    customPlates = null;
+    customBars = null;
+  }
 
   await showModalBottomSheet(
     context: context,
@@ -1596,6 +1634,8 @@ Future<void> showBarbellPlateViewer({
                   exerciseName: exerciseName,
                   useLbs: useLbs,
                   savedConfig: savedConfig,
+                  availablePlatesOverride: customPlates,
+                  barTypesOverride: customBars,
                 ),
               ),
             ),
@@ -1648,12 +1688,16 @@ class BarbellPlateViewer extends StatelessWidget {
   final String exerciseName;
   final bool useLbs;
   final Map<String, dynamic> savedConfig;
+  final List<PlateInfo>? availablePlatesOverride;
+  final List<BarType>? barTypesOverride;
 
   const BarbellPlateViewer({
     super.key,
     required this.exerciseName,
     required this.useLbs,
     required this.savedConfig,
+    this.availablePlatesOverride,
+    this.barTypesOverride,
   });
 
   // Theme colors
@@ -1791,8 +1835,13 @@ class BarbellPlateViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final barTypes = _getBarTypes();
-    final availablePlates = _getAvailablePlates();
+    final barTypes = (barTypesOverride != null && barTypesOverride!.isNotEmpty)
+        ? List<BarType>.from(barTypesOverride!)
+        : _getBarTypes();
+    final availablePlates =
+        (availablePlatesOverride != null && availablePlatesOverride!.isNotEmpty)
+            ? List<PlateInfo>.from(availablePlatesOverride!)
+            : _getAvailablePlates();
     final unit = useLbs ? 'lbs' : 'kg';
 
     // Parse saved config
@@ -1808,6 +1857,23 @@ class BarbellPlateViewer extends StatelessWidget {
     decodedCounts.forEach((key, value) {
       plateCounts[double.parse(key)] = value as int;
     });
+
+    // Ensure plates list contains any weights from saved config.
+    for (final weight in plateCounts.keys) {
+      final exists = availablePlates.any((p) => p.weight == weight);
+      if (!exists) {
+        availablePlates.add(
+          PlateInfo(
+            weight: weight,
+            color: Colors.grey[600]!,
+            label: _formatWeight(weight),
+          ),
+        );
+      }
+    }
+
+    // Keep plates sorted from heaviest to lightest.
+    availablePlates.sort((a, b) => b.weight.compareTo(a.weight));
 
     // Calculate total weight
     double plateWeight = 0;

@@ -32,7 +32,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 15, // Increment version for unit tracking in plate configs
+      version: 16, // Increment version for set_type column in exercise_sets
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -118,6 +118,11 @@ class DatabaseService {
           // Add unit column to plate configs table to track kg/lbs
           await db.execute(
               'ALTER TABLE exercise_plate_configs ADD COLUMN unit TEXT DEFAULT "kg"');
+        }
+        if (oldVersion < 16) {
+          // Add set_type column to exercise_sets table
+          await db.execute(
+              'ALTER TABLE exercise_sets ADD COLUMN set_type TEXT DEFAULT "normal"');
         }
       },
     );
@@ -971,6 +976,7 @@ class WorkoutService {
         $_setCompletedColumnName INTEGER NOT NULL,
         $_setVolumeColumnName REAL NOT NULL,
         $_setIsPRColumnName INTEGER DEFAULT 0,
+        set_type TEXT DEFAULT 'normal',
         FOREIGN KEY ($_setExerciseIdColumnName) REFERENCES $_exerciseTableName ($_exerciseIdColumnName) ON DELETE CASCADE
       )
     ''');
@@ -1239,9 +1245,11 @@ class WorkoutService {
           final double weight = (set['weight'] ?? 0.0).toDouble();
           final int reps = (set['reps'] ?? 0);
           final bool completed = set['completed'] ?? false;
+          final String setType = set['setType'] ?? 'normal';
           
           final setId = await addSet(
-              exerciseId, set['setNumber'], weight, reps, set['restTime']);
+              exerciseId, set['setNumber'], weight, reps, set['restTime'],
+              setType: setType);
           
           // If the set was completed in the temporary workout, mark it as completed
           // This will trigger the proper PR calculation
@@ -1427,7 +1435,8 @@ class WorkoutService {
   }
   // Add a new set to an exercise
   Future<int> addSet(int exerciseId, int setNumber, double weight, int reps,
-      int restTime) async {
+      int restTime,
+      {String setType = 'normal'}) async {
     // Handle temporary workouts
     if (exerciseId < 0) {
       // Negative IDs are temporary
@@ -1456,6 +1465,7 @@ class WorkoutService {
               'completed': false,
               'volume': weight * reps,
               'isPR': false, // Will be calculated when completed
+              'setType': setType,
             });
 
             // Update the notifier to trigger UI refresh
@@ -1484,6 +1494,7 @@ class WorkoutService {
         _setCompletedColumnName: 0, // Not completed by default
         _setVolumeColumnName: weight * reps,
         _setIsPRColumnName: 0, // Will be calculated when completed
+        'set_type': setType,
       },
     );
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;

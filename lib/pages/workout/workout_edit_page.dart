@@ -81,6 +81,96 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
 
   bool _showWeightInLbs = false; // For plate calculator
 
+  // Helper method to get set type display text
+  String _getSetTypeDisplay(SetType setType) {
+    switch (setType) {
+      case SetType.warmup:
+        return 'W';
+      case SetType.dropset:
+        return 'D';
+      case SetType.failure:
+        return 'F';
+      case SetType.normal:
+        return '';
+    }
+  }
+
+  // Helper method to get set type description
+  String _getSetTypeDescription(SetType setType) {
+    switch (setType) {
+      case SetType.warmup:
+        return 'Warm-up Set';
+      case SetType.dropset:
+        return 'Drop Set';
+      case SetType.failure:
+        return 'Failure Set';
+      case SetType.normal:
+        return 'Normal Set';
+    }
+  }
+
+  // Show set type selection dialog
+  Future<void> _showSetTypeDialog(BuildContext context, ExerciseSet set) async {
+    final RenderBox button = context.findRenderObject() as RenderBox;
+    final RenderBox overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final RelativeRect position = RelativeRect.fromRect(
+      Rect.fromPoints(
+        button.localToGlobal(Offset.zero, ancestor: overlay),
+        button.localToGlobal(button.size.bottomRight(Offset.zero), ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+
+    final selectedType = await showMenu<SetType>(
+      context: context,
+      position: position,
+      color: _cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+      ),
+      items: [
+        _buildSetTypeMenuItem(SetType.normal, set.setType),
+        _buildSetTypeMenuItem(SetType.warmup, set.setType),
+        _buildSetTypeMenuItem(SetType.dropset, set.setType),
+        _buildSetTypeMenuItem(SetType.failure, set.setType),
+      ],
+    );
+
+    if (selectedType != null && selectedType != set.setType) {
+      setState(() {
+        set.setType = selectedType;
+      });
+      _markAsChanged();
+    }
+  }
+
+  // Build menu item for set type selection
+  PopupMenuItem<SetType> _buildSetTypeMenuItem(SetType type, SetType currentType) {
+    final isSelected = type == currentType;
+    return PopupMenuItem<SetType>(
+      value: type,
+      child: Row(
+        children: [
+          Icon(
+            isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+            size: 20,
+            color: isSelected ? _primaryColor : _textSecondaryColor,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _getSetTypeDescription(type),
+              style: TextStyle(
+                color: isSelected ? _textPrimaryColor : _textSecondaryColor,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -418,6 +508,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
           weight,
           reps,
           tempSet.restTime,
+          setType: tempSet.setType.name,
         );
         tempSetIdToRealId[tempSet.id] = realSetId;
 
@@ -441,6 +532,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
               restTime: tempSet.restTime,
               completed: tempSet.completed,
               isPR: tempSet.isPR,
+              setType: tempSet.setType,
             );
             break;
           }
@@ -487,7 +579,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             final reps = int.tryParse(repsController.text) ?? set.reps;
 
             // Always update set data in database with current controller values
-            await _updateSetData(set.id, weight, reps);
+            await _updateSetData(set.id, weight, reps, set.setType);
             // Update local model to reflect changes
             set.weight = weight;
             set.reps = reps;
@@ -571,7 +663,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     }
   }
 
-  Future<void> _updateSetData(int setId, double weight, int reps) async {
+  Future<void> _updateSetData(int setId, double weight, int reps, SetType setType) async {
     // Calculate volume for potential PR checking
     final volume = weight * reps;
 
@@ -583,6 +675,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
         'weight': weight,
         'reps': reps,
         'volume': volume,
+        'set_type': setType.name,
       },
       where: 'id = ?',
       whereArgs: [setId],
@@ -1896,21 +1989,28 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
           // Main set content row
           Row(
             children: [
-              // Set number badge
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: _primaryColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Center(
-                  child: Text(
-                    setNumber.toString(),
-                    style: TextStyle(
-                      color: _primaryColor,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
+              // Set number badge (clickable to change set type)
+              Builder(
+                builder: (context) => GestureDetector(
+                  onTap: () => _showSetTypeDialog(context, set),
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: _primaryColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Center(
+                      child: Text(
+                        set.setType != SetType.normal
+                            ? _getSetTypeDisplay(set.setType)
+                            : setNumber.toString(),
+                        style: TextStyle(
+                          color: _primaryColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
                   ),
                 ),

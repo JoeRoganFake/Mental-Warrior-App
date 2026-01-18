@@ -59,6 +59,34 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
     }
   }
 
+  // Helper method to get set type display text
+  String _getSetTypeDisplay(SetType setType) {
+    switch (setType) {
+      case SetType.warmup:
+        return 'W';
+      case SetType.dropset:
+        return 'D';
+      case SetType.failure:
+        return 'F';
+      case SetType.normal:
+        return '';
+    }
+  }
+
+  // Helper method to get set type label
+  String _getSetTypeLabel(SetType setType) {
+    switch (setType) {
+      case SetType.warmup:
+        return 'Warm-up';
+      case SetType.dropset:
+        return 'Drop Set';
+      case SetType.failure:
+        return 'Failure';
+      case SetType.normal:
+        return '';
+    }
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -1168,7 +1196,9 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                           ),
                           child: Center(
                             child: Text(
-                              '${setIndex + 1}',
+                              set.setType != SetType.normal
+                                  ? _getSetTypeDisplay(set.setType)
+                                  : '${setIndex + 1}',
                               style: const TextStyle(
                                 fontWeight: FontWeight.w800,
                                 color: Color(0xFF3F8EFC),
