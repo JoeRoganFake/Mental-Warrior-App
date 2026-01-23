@@ -20,6 +20,8 @@ class TemplateEditorPage extends StatefulWidget {
 
 class TemplateEditorPageState extends State<TemplateEditorPage> {
   final TemplateService _templateService = TemplateService();
+  final ExerciseRestTimerHistoryService _restTimerHistoryService =
+      ExerciseRestTimerHistoryService();
   final TextEditingController _nameController = TextEditingController();
   
   List<TemplateExercise> _exercises = [];
@@ -59,22 +61,28 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
   final Color _inputBgColor = const Color(0xFF303136);
   
   bool _showWeightInLbs = false;
+  int _defaultRestTimer = 90; // Default from settings
   String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';
 
   @override
   void initState() {
     super.initState();
-    _loadWeightUnit();
+    _loadSettings();
     _nameController.text = widget.initialName ?? 'New Template';
     if (widget.templateId != null) {
       _loadTemplate();
     }
   }
 
-  Future<void> _loadWeightUnit() async {
-    final useLbs = await SettingsService().getShowWeightInLbs();
+  Future<void> _loadSettings() async {
+    final settingsService = SettingsService();
+    final useLbs = await settingsService.getShowWeightInLbs();
+    final defaultRest = await settingsService.getDefaultRestTimer();
     if (mounted) {
-      setState(() => _showWeightInLbs = useLbs);
+      setState(() {
+        _showWeightInLbs = useLbs;
+        _defaultRestTimer = defaultRest;
+      });
     }
   }
 
@@ -196,28 +204,42 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
     );
 
     if (result != null) {
-      setState(() {
-        _hasChanges = true;
-        
-        // Handle both List and Map return types
-        if (result is List) {
-          for (final exercise in result) {
-            if (exercise is Map<String, dynamic>) {
+      // Handle both List and Map return types
+      if (result is List) {
+        for (final exercise in result) {
+          if (exercise is Map<String, dynamic>) {
+            final exerciseName = exercise['name'] ?? 'Unknown Exercise';
+            // Get saved rest timer for this exercise, or use default
+            final savedRestTime =
+                await _restTimerHistoryService.getRestTime(exerciseName);
+            final restTime = savedRestTime ?? _defaultRestTimer;
+
+            setState(() {
+              _hasChanges = true;
               _exercises.add(TemplateExercise(
-                name: exercise['name'] ?? 'Unknown Exercise',
+                name: exerciseName,
                 equipment: exercise['equipment'] ?? '',
-                sets: [TemplateSet(setNumber: 1)],
+                sets: [TemplateSet(setNumber: 1, restTime: restTime)],
               ));
-            }
+            });
           }
-        } else if (result is Map<String, dynamic>) {
-          _exercises.add(TemplateExercise(
-            name: result['name'] ?? 'Unknown Exercise',
-            equipment: result['equipment'] ?? '',
-            sets: [TemplateSet(setNumber: 1)],
-          ));
         }
-      });
+      } else if (result is Map<String, dynamic>) {
+        final exerciseName = result['name'] ?? 'Unknown Exercise';
+        // Get saved rest timer for this exercise, or use default
+        final savedRestTime =
+            await _restTimerHistoryService.getRestTime(exerciseName);
+        final restTime = savedRestTime ?? _defaultRestTimer;
+
+        setState(() {
+          _hasChanges = true;
+          _exercises.add(TemplateExercise(
+            name: exerciseName,
+            equipment: result['equipment'] ?? '',
+            sets: [TemplateSet(setNumber: 1, restTime: restTime)],
+          ));
+        });
+      }
     }
   }
 
@@ -228,13 +250,19 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
     });
   }
 
-  void _addSet(int exerciseIndex) {
+  void _addSet(int exerciseIndex) async {
+    // Get the saved rest timer value for this exercise, or use existing/default
+    final exercise = _exercises[exerciseIndex];
+    final savedRestTime =
+        await _restTimerHistoryService.getRestTime(exercise.name);
+    
     setState(() {
       _hasChanges = true;
-      final exercise = _exercises[exerciseIndex];
       final newSetNumber = exercise.sets.length + 1;
-      // Use rest time from existing sets, or default
-      final restTime = exercise.sets.isNotEmpty ? exercise.sets.first.restTime : 150;
+      // Priority: 1) existing sets' rest time, 2) saved rest time, 3) default from settings
+      final restTime = exercise.sets.isNotEmpty
+          ? exercise.sets.first.restTime
+          : (savedRestTime ?? _defaultRestTimer);
       final newSets = List<TemplateSet>.from(exercise.sets)
         ..add(TemplateSet(setNumber: newSetNumber, restTime: restTime));
       _exercises[exerciseIndex] = TemplateExercise(
@@ -272,7 +300,14 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
   void _reorderExercises(int oldIndex, int newIndex) {
     setState(() {
       _hasChanges = true;
-      if (newIndex > oldIndex) newIndex--;
+      // Adjust newIndex if dragging downward
+      if (newIndex >= _exercises.length) {
+        newIndex = _exercises.length - 1;
+      } else if (newIndex > oldIndex) {
+        newIndex -= 1;
+      }
+
+      // Move the exercise in the list
       final exercise = _exercises.removeAt(oldIndex);
       _exercises.insert(newIndex, exercise);
     });
@@ -373,6 +408,60 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Exercise removed from superset')),
     );
+  }
+
+  // Replace exercise with another one (keeping all sets)
+  Future<void> _replaceExercise(int exerciseIndex) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ExerciseSelectionPage(
+          singleSelectionMode: true,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      // Handle both single exercise and multiple exercise selection
+      List<Map<String, dynamic>> selectedExercises = [];
+
+      if (result is List) {
+        selectedExercises = result.cast<Map<String, dynamic>>();
+      } else if (result is Map) {
+        selectedExercises = [Map<String, dynamic>.from(result)];
+      }
+
+      // Only use the first selected exercise
+      if (selectedExercises.isEmpty) return;
+
+      final newExercise = selectedExercises.first;
+      final String newExerciseName = newExercise['name'] as String;
+      final String newEquipment = newExercise['equipment'] as String? ?? '';
+
+      // When replacing an exercise, use plain name without any markers
+      // This makes the replaced exercise editable like a regular exercise
+      String fullExerciseName = newExerciseName;
+
+      setState(() {
+        _hasChanges = true;
+        final exercise = _exercises[exerciseIndex];
+        // Keep all sets, superset group, but update name and equipment
+        _exercises[exerciseIndex] = TemplateExercise(
+          name: fullExerciseName,
+          equipment: newEquipment,
+          sets: exercise.sets, // Keep all existing sets
+          supersetGroup: exercise.supersetGroup,
+        );
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Exercise replaced successfully'),
+          backgroundColor: _successColor,
+          behavior: SnackBarBehavior.fixed,
+        ),
+      );
+    }
   }
 
   void _showSetRestDialog(int exerciseIndex) {
@@ -699,9 +788,11 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
     final restMinutes = restTime ~/ 60;
     final restSeconds = restTime % 60;
     
-    return RepaintBoundary(
+    return Material(
       key: ValueKey(exerciseIndex),
-      child: IntrinsicHeight(
+        color: Colors.transparent,
+        child: RepaintBoundary(
+          child: IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -813,10 +904,23 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                                 _removeFromSuperset(exerciseIndex);
                               } else if (value == 'rest_time') {
                                 _showSetRestDialog(exerciseIndex);
+                                  } else if (value == 'replace') {
+                                    _replaceExercise(exerciseIndex);
                               }
                             },
                             itemBuilder: (BuildContext context) {
                               return <PopupMenuEntry<String>>[
+                                    PopupMenuItem<String>(
+                                      value: 'replace',
+                                      child: ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: Icon(Icons.swap_horiz,
+                                            color: _primaryColor),
+                                        title: Text('Replace Exercise',
+                                            style: TextStyle(
+                                                color: _textPrimaryColor)),
+                                      ),
+                                    ),
                                 if (!isInSuperset)
                                   PopupMenuItem<String>(
                                     value: 'superset',
@@ -962,7 +1066,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
           ],
         ),
       ),
-    );
+        ));
   }
 
   void _confirmDeleteExercise(int exerciseIndex) {

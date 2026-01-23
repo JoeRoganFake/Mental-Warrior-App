@@ -32,7 +32,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 16, // Increment version for set_type column in exercise_sets
+      version: 19, // Increment version for exercise_rest_history table
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -52,6 +52,10 @@ class DatabaseService {
             .createCustomExerciseTable(db); // Added custom exercises table
         ExerciseStickyNoteService()
             .createStickyNotesTable(db); // Added sticky notes table
+        StarredExercisesService()
+            .createStarredExercisesTable(db); // Added starred exercises table
+        ExerciseRestTimerHistoryService()
+            .createRestHistoryTable(db); // Added rest timer history table
         ExercisePlateConfigService()
             .createPlateConfigsTable(db); // Added plate configs table
         PlateBarCustomizationService().createCustomizationTables(
@@ -123,6 +127,19 @@ class DatabaseService {
           // Add set_type column to exercise_sets table
           await db.execute(
               'ALTER TABLE exercise_sets ADD COLUMN set_type TEXT DEFAULT "normal"');
+        }
+        if (oldVersion < 17) {
+          // Add exercise_order column to exercises table for custom ordering
+          await db.execute(
+              'ALTER TABLE exercises ADD COLUMN exercise_order INTEGER DEFAULT 0');
+        }
+        if (oldVersion < 18) {
+          // Create starred exercises table
+          await StarredExercisesService().createStarredExercisesTable(db);
+        }
+        if (oldVersion < 19) {
+          // Create exercise rest timer history table
+          await ExerciseRestTimerHistoryService().createRestHistoryTable(db);
         }
       },
     );
@@ -960,6 +977,7 @@ class WorkoutService {
         $_exerciseFinishedColumnName INTEGER DEFAULT 0,
         $_exerciseNotesColumnName TEXT,
         $_exerciseSupersetGroupColumnName TEXT,
+        exercise_order INTEGER DEFAULT 0,
         FOREIGN KEY ($_exerciseWorkoutIdColumnName) REFERENCES $_workoutTableName ($_workoutIdColumnName) ON DELETE CASCADE
       )
     ''');
@@ -1801,6 +1819,17 @@ class WorkoutService {
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
   }
 
+  // Update exercise order for drag-and-drop reordering
+  Future<void> updateExerciseOrder(int exerciseId, int order) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _exerciseTableName,
+      {'exercise_order': order},
+      where: "$_exerciseIdColumnName = ?",
+      whereArgs: [exerciseId],
+    );
+  }
+
   // Get all workouts with their exercises and sets
   Future<List<Workout>> getWorkouts() async {
     final db = await DatabaseService.instance.database;
@@ -1817,6 +1846,7 @@ class WorkoutService {
         _exerciseTableName,
         where: "$_exerciseWorkoutIdColumnName = ?",
         whereArgs: [workoutId],
+        orderBy: "exercise_order ASC, $_exerciseIdColumnName ASC",
       );
 
       List<Exercise> exercises = [];
@@ -1865,6 +1895,7 @@ class WorkoutService {
       _exerciseTableName,
       where: "$_exerciseWorkoutIdColumnName = ?",
       whereArgs: [workoutId],
+      orderBy: "exercise_order ASC, $_exerciseIdColumnName ASC",
     );
 
     List<Exercise> exercises = [];
@@ -1987,6 +2018,7 @@ class WorkoutService {
       _exerciseTableName,
       where: "$_exerciseWorkoutIdColumnName = ?",
       whereArgs: [workoutId],
+      orderBy: "exercise_order ASC, $_exerciseIdColumnName ASC",
     );
 
     List<Exercise> exercises = [];
@@ -2825,6 +2857,207 @@ class ExerciseStickyNoteService {
   Future<List<Map<String, dynamic>>> getAllStickyNotes() async {
     final db = await DatabaseService.instance.database;
     return await db.query(_stickyNotesTableName);
+  }
+}
+
+// Starred Exercises Service - for marking favorite exercises
+class StarredExercisesService {
+  // Singleton instance
+  static final StarredExercisesService _instance =
+      StarredExercisesService._internal();
+  factory StarredExercisesService() => _instance;
+  StarredExercisesService._internal();
+
+  // Notifier to inform listeners when starred exercises change
+  static final ValueNotifier<bool> starredExercisesUpdatedNotifier =
+      ValueNotifier(false);
+
+  // Table & column names
+  final String _starredTableName = "starred_exercises";
+  final String _idColumnName = "id";
+  final String _exerciseNameColumnName = "exercise_name";
+  final String _exerciseIdColumnName = "exercise_id"; // API ID or custom ID
+  final String _exerciseTypeColumnName = "exercise_type"; // 'api' or 'custom'
+  final String _starredAtColumnName = "starred_at";
+
+  // Create starred exercises table
+  Future<void> createStarredExercisesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_starredTableName (
+        $_idColumnName INTEGER PRIMARY KEY AUTOINCREMENT,
+        $_exerciseNameColumnName TEXT NOT NULL,
+        $_exerciseIdColumnName TEXT NOT NULL,
+        $_exerciseTypeColumnName TEXT NOT NULL,
+        $_starredAtColumnName TEXT NOT NULL,
+        UNIQUE($_exerciseIdColumnName, $_exerciseTypeColumnName)
+      )
+    ''');
+    print('✅ Created starred_exercises table');
+  }
+
+  // Helper to clean exercise name (remove API_ID and CUSTOM markers)
+  String _cleanExerciseName(String name) {
+    return name
+        .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+        .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+        .trim();
+  }
+
+  // Star an exercise
+  Future<void> starExercise(
+      String exerciseName, String exerciseId, String exerciseType) async {
+    final db = await DatabaseService.instance.database;
+    final cleanName = _cleanExerciseName(exerciseName);
+    final now = DateTime.now().toIso8601String();
+
+    await db.insert(
+      _starredTableName,
+      {
+        _exerciseNameColumnName: cleanName,
+        _exerciseIdColumnName: exerciseId,
+        _exerciseTypeColumnName: exerciseType,
+        _starredAtColumnName: now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    starredExercisesUpdatedNotifier.value =
+        !starredExercisesUpdatedNotifier.value;
+  }
+
+  // Unstar an exercise
+  Future<void> unstarExercise(String exerciseId, String exerciseType) async {
+    final db = await DatabaseService.instance.database;
+
+    await db.delete(
+      _starredTableName,
+      where: '$_exerciseIdColumnName = ? AND $_exerciseTypeColumnName = ?',
+      whereArgs: [exerciseId, exerciseType],
+    );
+
+    starredExercisesUpdatedNotifier.value =
+        !starredExercisesUpdatedNotifier.value;
+  }
+
+  // Check if an exercise is starred
+  Future<bool> isExerciseStarred(String exerciseId, String exerciseType) async {
+    final db = await DatabaseService.instance.database;
+
+    final result = await db.query(
+      _starredTableName,
+      where: '$_exerciseIdColumnName = ? AND $_exerciseTypeColumnName = ?',
+      whereArgs: [exerciseId, exerciseType],
+    );
+
+    return result.isNotEmpty;
+  }
+
+  // Get all starred exercises
+  Future<List<Map<String, dynamic>>> getStarredExercises() async {
+    final db = await DatabaseService.instance.database;
+    return await db.query(
+      _starredTableName,
+      orderBy: '$_starredAtColumnName DESC',
+    );
+  }
+
+  // Get starred exercise IDs as a set for quick lookup
+  Future<Set<String>> getStarredExerciseIds() async {
+    final db = await DatabaseService.instance.database;
+    final result = await db.query(_starredTableName);
+    return result
+        .map((row) =>
+            '${row[_exerciseIdColumnName]}_${row[_exerciseTypeColumnName]}')
+        .toSet();
+  }
+}
+
+// Service for managing exercise rest timer history
+class ExerciseRestTimerHistoryService {
+  // Singleton instance
+  static final ExerciseRestTimerHistoryService _instance =
+      ExerciseRestTimerHistoryService._internal();
+  factory ExerciseRestTimerHistoryService() => _instance;
+  ExerciseRestTimerHistoryService._internal();
+
+  // Table & column names
+  final String _restHistoryTableName = "exercise_rest_history";
+  final String _idColumnName = "id";
+  final String _exerciseNameColumnName = "exercise_name";
+  final String _lastRestTimeColumnName = "last_rest_time";
+  final String _updatedAtColumnName = "updated_at";
+
+  // Create rest history table
+  Future<void> createRestHistoryTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS $_restHistoryTableName (
+        $_idColumnName INTEGER PRIMARY KEY AUTOINCREMENT,
+        $_exerciseNameColumnName TEXT NOT NULL UNIQUE,
+        $_lastRestTimeColumnName INTEGER NOT NULL,
+        $_updatedAtColumnName TEXT NOT NULL
+      )
+    ''');
+    print('✅ Created exercise_rest_history table');
+  }
+
+  // Helper to clean exercise name (remove API_ID and CUSTOM markers)
+  String _cleanExerciseName(String name) {
+    return name
+        .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+        .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+        .trim();
+  }
+
+  // Save or update the last rest time for an exercise
+  Future<void> saveRestTime(String exerciseName, int restTimeSeconds) async {
+    final cleanName = _cleanExerciseName(exerciseName);
+    final db = await DatabaseService.instance.database;
+    final now = DateTime.now().toIso8601String();
+
+    await db.insert(
+      _restHistoryTableName,
+      {
+        _exerciseNameColumnName: cleanName,
+        _lastRestTimeColumnName: restTimeSeconds,
+        _updatedAtColumnName: now,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  // Get the last rest time for an exercise (returns null if not found)
+  Future<int?> getRestTime(String exerciseName) async {
+    final cleanName = _cleanExerciseName(exerciseName);
+    final db = await DatabaseService.instance.database;
+
+    final result = await db.query(
+      _restHistoryTableName,
+      where: '$_exerciseNameColumnName = ?',
+      whereArgs: [cleanName],
+      limit: 1,
+    );
+
+    if (result.isEmpty) return null;
+
+    return result.first[_lastRestTimeColumnName] as int?;
+  }
+
+  // Delete rest time history for an exercise
+  Future<void> deleteRestTime(String exerciseName) async {
+    final cleanName = _cleanExerciseName(exerciseName);
+    final db = await DatabaseService.instance.database;
+
+    await db.delete(
+      _restHistoryTableName,
+      where: '$_exerciseNameColumnName = ?',
+      whereArgs: [cleanName],
+    );
+  }
+
+  // Get all rest time history
+  Future<List<Map<String, dynamic>>> getAllRestHistory() async {
+    final db = await DatabaseService.instance.database;
+    return await db.query(_restHistoryTableName);
   }
 }
 

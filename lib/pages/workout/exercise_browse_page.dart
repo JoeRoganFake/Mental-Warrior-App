@@ -20,10 +20,13 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
   String _searchQuery = '';
   String _selectedBodyPart = 'All';
   String _selectedEquipment = 'All';
+  bool _showOnlyStarred = false; // Filter to show only starred exercises
   List<Map<String, dynamic>> _exercises = [];
   List<Map<String, dynamic>> _customExercises = [];
+  Set<String> _starredExerciseIds = {}; // Cache of starred exercise IDs
   List<String> _bodyParts = ['All'];
   List<String> _equipmentTypes = ['All'];
+  final StarredExercisesService _starredService = StarredExercisesService();
 
   // Helper function to clean exercise names from markers
   String _cleanExerciseName(String name) {
@@ -39,10 +42,15 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
     _searchController.addListener(_onSearchChanged);
     _loadExercisesFromJson();
     _loadCustomExercises();
+    _loadStarredExercises();
 
     // Listen for custom exercise updates
     CustomExerciseService.customExercisesUpdatedNotifier
         .addListener(_loadCustomExercises);
+    
+    // Listen for starred exercises updates
+    StarredExercisesService.starredExercisesUpdatedNotifier
+        .addListener(_loadStarredExercises);
   }
 
   void _loadExercisesFromJson() {
@@ -107,6 +115,17 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
     }
   }
 
+  void _loadStarredExercises() async {
+    try {
+      final starredIds = await _starredService.getStarredExerciseIds();
+      setState(() {
+        _starredExerciseIds = starredIds;
+      });
+    } catch (e) {
+      debugPrint('Error loading starred exercises: $e');
+    }
+  }
+
   void _updateFilterLists() {
     final allExercises = [..._exercises, ..._customExercises];
     final bodySet = allExercises.map((e) => e['type'] as String).toSet();
@@ -121,6 +140,8 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
     _searchController.dispose();
     CustomExerciseService.customExercisesUpdatedNotifier
         .removeListener(_loadCustomExercises);
+    StarredExercisesService.starredExercisesUpdatedNotifier
+        .removeListener(_loadStarredExercises);
     super.dispose();
   }
 
@@ -132,6 +153,15 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
 
   List<Map<String, dynamic>> get _filteredExercises {
     List<Map<String, dynamic>> result = [..._exercises, ..._customExercises];
+
+    // Filter by starred status
+    if (_showOnlyStarred) {
+      result = result.where((exercise) {
+        final exerciseId = exercise['apiId'] ?? exercise['id'];
+        final exerciseType = (exercise['isCustom'] ?? false) ? 'custom' : 'api';
+        return _starredExerciseIds.contains('${exerciseId}_$exerciseType');
+      }).toList();
+    }
 
     if (_selectedBodyPart != 'All') {
       result = result.where((exercise) {
@@ -229,6 +259,58 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
     }
   }
 
+  Future<void> _toggleStarExercise(Map<String, dynamic> exercise) async {
+    final exerciseId = (exercise['apiId'] ?? exercise['id']).toString();
+    final exerciseType = (exercise['isCustom'] ?? false) ? 'custom' : 'api';
+    final exerciseName = exercise['name'].toString();
+    final starKey = '${exerciseId}_$exerciseType';
+
+    try {
+      if (_starredExerciseIds.contains(starKey)) {
+        await _starredService.unstarExercise(exerciseId, exerciseType);
+        setState(() {
+          _starredExerciseIds.remove(starKey);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Removed ${_cleanExerciseName(exerciseName)} from favorites'),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      } else {
+        await _starredService.starExercise(
+            exerciseName, exerciseId, exerciseType);
+        setState(() {
+          _starredExerciseIds.add(starKey);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Added ${_cleanExerciseName(exerciseName)} to favorites'),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error toggling star: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating favorites'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bodyContent = Column(
@@ -259,6 +341,46 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
               ),
             ),
           ),
+
+        // Favorites filter
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              FilterChip(
+                label: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      _showOnlyStarred ? Icons.star : Icons.star_border,
+                      size: 18,
+                      color: _showOnlyStarred ? Colors.amber : null,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(_showOnlyStarred ? 'Favorites' : 'Show Favorites'),
+                  ],
+                ),
+                selected: _showOnlyStarred,
+                selectedColor: Colors.amber.withOpacity(0.3),
+                onSelected: (selected) {
+                  setState(() {
+                    _showOnlyStarred = selected;
+                  });
+                },
+              ),
+              if (_showOnlyStarred) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '${_filteredExercises.length} favorite${_filteredExercises.length != 1 ? 's' : ''}',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
 
           // Primary muscle filter
           SizedBox(
@@ -340,6 +462,12 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
               itemCount: _filteredExercises.length,
               itemBuilder: (context, index) {
                 final exercise = _filteredExercises[index];
+                    final exerciseId =
+                        (exercise['apiId'] ?? exercise['id']).toString();
+                    final exerciseType =
+                        (exercise['isCustom'] ?? false) ? 'custom' : 'api';
+                    final isStarred = _starredExerciseIds
+                        .contains('${exerciseId}_$exerciseType');
                 
                 return Card(
                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -395,6 +523,17 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                            // Star button
+                            IconButton(
+                              icon: Icon(
+                                isStarred ? Icons.star : Icons.star_border,
+                                color: isStarred ? Colors.amber : Colors.grey,
+                              ),
+                              onPressed: () => _toggleStarExercise(exercise),
+                              tooltip: isStarred
+                                  ? 'Remove from favorites'
+                                  : 'Add to favorites',
+                            ),
                         // Custom exercise indicator
                         if (exercise['isCustom'] ?? false)
                           Container(

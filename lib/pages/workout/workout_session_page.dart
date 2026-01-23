@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mental_warior/models/workouts.dart';
@@ -42,6 +43,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   final ExerciseStickyNoteService _stickyNoteService =
       ExerciseStickyNoteService();
   final SettingsService _settingsService = SettingsService();
+  final ExerciseRestTimerHistoryService _restTimerHistoryService =
+      ExerciseRestTimerHistoryService();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   Workout? _workout;
@@ -1174,7 +1177,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         SnackBar(
           content: Text('Workout discarded'),
           backgroundColor: _dangerColor,
-          behavior: SnackBarBehavior.floating,
+          behavior: SnackBarBehavior.fixed,
         ),
       );
     }
@@ -1638,12 +1641,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             }
           } else {
             // No previous history, create a single empty set
+            // Get the saved rest timer value for this exercise, or use default
+            final savedRestTime =
+                await _restTimerHistoryService.getRestTime(exerciseName);
+            final restTime = savedRestTime ?? _defaultRestTime;
+            
             await _workoutService.addSet(
               exerciseId,
               1, // Set number
               0, // Weight - will be displayed as empty
               0, // Reps - will be displayed as empty
-              _defaultRestTime, // Default rest time
+              restTime, // Use saved rest time or default
             );
           }
         }
@@ -1738,12 +1746,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           }
         } else {
           // No previous history, create a single empty set
+          // Get the saved rest timer value for this exercise, or use default
+          final savedRestTime =
+              await _restTimerHistoryService.getRestTime(exerciseName);
+          final restTime = savedRestTime ?? _defaultRestTime;
+          
           await _workoutService.addSet(
             exerciseId,
             1, // Set number
             0, // Weight - will be displayed as empty
             0, // Reps - will be displayed as empty
-            _defaultRestTime, // Default rest time
+            restTime, // Use saved rest time or default
           );
         }
 
@@ -1873,13 +1886,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
 
     try {
+      // Get the saved rest timer value for this exercise, or use default
+      final savedRestTime =
+          await _restTimerHistoryService.getRestTime(exercise.name);
+      final restTime = savedRestTime ?? _defaultRestTime;
+      
       // Add set to database - store empty fields as null in database
       final newSetId = await _workoutService.addSet(
         exerciseId,
         setNumber,
         0, // Initial weight (we'll show empty field in UI)
         0, // Initial reps (we'll show empty field in UI)
-        _defaultRestTime, // Default rest time
+        restTime, // Use saved rest time or default
       );
 
       // If we have the new set ID, create a local Set object and add it to our state
@@ -1890,7 +1908,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           setNumber: setNumber,
           weight: 0, // This will be displayed as empty field
           reps: 0, // This will be displayed as empty field
-          restTime: _defaultRestTime,
+          restTime: restTime,
           completed: false,
         );
 
@@ -1985,6 +2003,14 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 // Play a sound when completing a set (not when uncompleting)
                 if (completed) {
                   _playChimeSound();
+                  
+                  // Save the rest timer value for this exercise if there's an active rest timer
+                  if (_currentRestSetId == setId && _originalRestTime > 0) {
+                    _restTimerHistoryService.saveRestTime(
+                      exercise.name,
+                      _originalRestTime,
+                    );
+                  }
                 }
                 break;
               }
@@ -2892,6 +2918,109 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     } catch (e) {
       if (mounted) {
         _showSnackBar('Error deleting exercise: $e', isError: true);
+      }
+    }
+  }
+
+  // Replace an exercise with a new one while keeping all its sets
+  Future<void> _replaceExercise(Exercise exercise) async {
+    if (widget.readOnly) return;
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ExerciseSelectionPage(
+          singleSelectionMode: true,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      // Handle both single exercise and multiple exercise selection
+      List<Map<String, dynamic>> selectedExercises = [];
+
+      if (result is List) {
+        selectedExercises = result.cast<Map<String, dynamic>>();
+      } else if (result is Map) {
+        selectedExercises = [Map<String, dynamic>.from(result)];
+      }
+
+      // Only use the first selected exercise
+      if (selectedExercises.isEmpty) return;
+
+      final newExercise = selectedExercises.first;
+      final String newExerciseName = newExercise['name'] as String;
+      final String newEquipment = newExercise['equipment'] as String? ?? '';
+
+      // When replacing an exercise, use plain name without any markers
+      // This makes the replaced exercise editable like a regular exercise
+      String fullExerciseName = newExerciseName;
+
+      // Update the exercise name and equipment in local state
+      if (mounted) {
+        setState(() {
+          final exerciseIndex =
+              _workout!.exercises.indexWhere((e) => e.id == exercise.id);
+          if (exerciseIndex != -1) {
+            // Create a new Exercise object with updated name and equipment
+            final oldExercise = _workout!.exercises[exerciseIndex];
+            _workout!.exercises[exerciseIndex] = Exercise(
+              id: oldExercise.id,
+              name: fullExerciseName,
+              equipment: newEquipment,
+              sets: oldExercise.sets,
+              workoutId: oldExercise.workoutId,
+              notes: oldExercise.notes,
+              supersetGroup: oldExercise.supersetGroup,
+            );
+          }
+        });
+      }
+
+      // Update in database or temporary workout
+      try {
+        if (widget.isTemporary || exercise.id < 0) {
+          // Update temporary workout data
+          final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+          if (tempWorkouts.containsKey(widget.workoutId)) {
+            final workoutData = tempWorkouts[widget.workoutId];
+            final exercises = workoutData['exercises'] as List;
+
+            final exerciseData = exercises.firstWhere(
+              (e) => e['id'] == exercise.id,
+              orElse: () => <String, dynamic>{},
+            );
+
+            if (exerciseData.isNotEmpty) {
+              exerciseData['name'] = fullExerciseName;
+              exerciseData['equipment'] = newEquipment;
+
+              // Trigger notifier update
+              WorkoutService.tempWorkoutsNotifier.value =
+                  Map.from(tempWorkouts);
+            }
+          }
+        } else {
+          // Update in database for regular workouts
+          await _updateExercise(exercise.id, fullExerciseName, newEquipment);
+        }
+
+        // Auto-save the workout state
+        _updateActiveNotifier();
+
+        if (mounted) {
+          _showSnackBar(
+            'Exercise replaced successfully',
+            customColor: _successColor,
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          _showSnackBar(
+            'Error replacing exercise: $e',
+            isError: true,
+          );
+        }
       }
     }
   }
@@ -3841,7 +3970,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                           SnackBar(
                             content: Text('Empty workout discarded'),
                             backgroundColor: _primaryColor,
-                            behavior: SnackBarBehavior.floating,
+                            behavior: SnackBarBehavior.fixed,
                           ),
                         );
                         return;
@@ -3955,7 +4084,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                           SnackBar(
                             content: Text('Invalid workout discarded'),
                             backgroundColor: _primaryColor,
-                            behavior: SnackBarBehavior.floating,
+                            behavior: SnackBarBehavior.fixed,
                           ),
                         );
                         return;
@@ -4129,7 +4258,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                           SnackBar(
                             content: Text('Empty workout discarded'),
                             backgroundColor: _primaryColor,
-                            behavior: SnackBarBehavior.floating,
+                            behavior: SnackBarBehavior.fixed,
                           ),
                         );
                         return;
@@ -4225,7 +4354,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                           SnackBar(
                             content: Text('Empty workout discarded'),
                             backgroundColor: _primaryColor,
-                            behavior: SnackBarBehavior.floating,
+                            behavior: SnackBarBehavior.fixed,
                           ),
                         );
                         return;
@@ -4403,9 +4532,34 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     Expanded(
                       child: _workout!.exercises.isEmpty
                           ? _buildEmptyExercisesView()
-                          : ListView.builder(
+                          : ReorderableListView.builder(
                               padding: EdgeInsets.only(top: 8),
+                              buildDefaultDragHandles: false,
+                              proxyDecorator: (child, index, animation) {
+                                return AnimatedBuilder(
+                                  animation: animation,
+                                  builder: (context, child) {
+                                    final double animValue = Curves.easeInOut
+                                        .transform(animation.value);
+                                    final double elevation =
+                                        lerpDouble(0, 6, animValue)!;
+                                    final double scale =
+                                        lerpDouble(1.0, 1.02, animValue)!;
+                                    return Transform.scale(
+                                      scale: scale,
+                                      child: Material(
+                                        elevation: elevation,
+                                        color: Colors.transparent,
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: child,
+                                );
+                              },
                               itemCount: _workout!.exercises.length + 1,
+                              onReorder: _reorderExercises,
                               itemBuilder: (context, index) {
                                 if (index < _workout!.exercises.length) {
                                   final exercise = _workout!.exercises[index];
@@ -4435,13 +4589,19 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                     }
                                   }
 
-                                  return _buildExerciseCard(
-                                    exercise,
-                                    supersetId: supersetId,
-                                    supersetPosition: supersetPosition,
+                                  return ReorderableDelayedDragStartListener(
+                                    key: Key('exercise_${exercise.id}'),
+                                    index: index,
+                                    enabled: !widget.readOnly,
+                                    child: _buildExerciseCard(
+                                      exercise,
+                                      supersetId: supersetId,
+                                      supersetPosition: supersetPosition,
+                                    ),
                                   );
                                 } else {
                                   return Padding(
+                                    key: Key('add_exercise_button'),
                                     padding: EdgeInsets.all(16),
                                     child: Center(
                                       child: TextButton.icon(
@@ -4499,9 +4659,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     String? supersetId,
     String? supersetPosition,
   }) {
-    // Determine if this is a default (API) exercise
-    final bool isDefaultExercise =
-        RegExp(r'##API_ID:[^#]+##').hasMatch(exercise.name);
+    // Determine exercise type based on markers
+    // Only truly custom exercises (with CUSTOM marker) should be editable
+    final bool isCustomExercise =
+        RegExp(r'##CUSTOM:true##').hasMatch(exercise.name);
 
     final bool allSetsCompleted =
         exercise.sets.isNotEmpty && exercise.sets.every((set) => set.completed);
@@ -4935,12 +5096,15 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                     _openSupersetSelection(exercise);
                                   } else if (value == 'remove_superset') {
                                     _removeFromSuperset(exercise.id);
+                                  } else if (value == 'replace') {
+                                    _replaceExercise(exercise);
                                   }
                                 },
                                 itemBuilder: (BuildContext context) {
                                   final bool isInSuperset = supersetId != null;
                                   return <PopupMenuEntry<String>>[
-                                    if (!isDefaultExercise)
+                                    // Show Edit only for custom exercises (with ##CUSTOM:true## marker)
+                                    if (isCustomExercise)
                                       PopupMenuItem<String>(
                                         value: 'edit',
                                         child: ListTile(
@@ -4952,6 +5116,17 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                                   color: _textPrimaryColor)),
                                         ),
                                       ),
+                                    PopupMenuItem<String>(
+                                      value: 'replace',
+                                      child: ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: Icon(Icons.swap_horiz,
+                                            color: _primaryColor),
+                                        title: Text('Replace Exercise',
+                                            style: TextStyle(
+                                                color: _textPrimaryColor)),
+                                      ),
+                                    ),
                                     PopupMenuItem<String>(
                                       value: 'set_rest',
                                       child: ListTile(
@@ -5709,7 +5884,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               content: Text(message),
               backgroundColor: backgroundColor,
               duration: Duration(seconds: durationSeconds),
-              behavior: SnackBarBehavior.floating,
+              behavior: SnackBarBehavior.fixed,
               action: action,
             ),
           );
@@ -5795,6 +5970,65 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     _updateActiveNotifier();
 
     _showSnackBar('Exercise removed from superset');
+  }
+
+  // Reorder exercises when user drags and drops
+  void _reorderExercises(int oldIndex, int newIndex) async {
+    // Don't allow reordering in read-only mode
+    if (widget.readOnly) return;
+
+    if (oldIndex == newIndex) return;
+
+    // Don't allow reordering the add button
+    if (oldIndex >= _workout!.exercises.length) {
+      return;
+    }
+
+    // If newIndex is at or beyond the exercises length (add button position), place at the end
+    if (newIndex >= _workout!.exercises.length) {
+      newIndex = _workout!.exercises.length - 1;
+    } else if (newIndex > oldIndex) {
+      // Only adjust if moving down and not to the end
+      newIndex -= 1;
+    }
+
+    setState(() {
+      final exercise = _workout!.exercises.removeAt(oldIndex);
+      _workout!.exercises.insert(newIndex, exercise);
+    });
+
+    // Update the order in database for regular workouts (asynchronously to avoid blocking UI)
+    if (!widget.isTemporary) {
+      // Run database updates in background without awaiting
+      Future.microtask(() async {
+        try {
+          // Update the display order for all exercises
+          for (int i = 0; i < _workout!.exercises.length; i++) {
+            final exercise = _workout!.exercises[i];
+            await _workoutService.updateExerciseOrder(exercise.id, i);
+          }
+        } catch (e) {
+          print('Error updating exercise order: $e');
+        }
+      });
+    } else {
+      // For temporary workouts, update the in-memory order
+      final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+      if (tempWorkouts.containsKey(widget.workoutId)) {
+        final workoutData = tempWorkouts[widget.workoutId];
+        final exercises = workoutData['exercises'] as List;
+
+        // Reorder the exercises list
+        final exerciseData = exercises.removeAt(oldIndex);
+        exercises.insert(newIndex, exerciseData);
+
+        // Notify listeners
+        WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+      }
+    }
+
+    // Auto-save the workout state
+    _updateActiveNotifier();
   }
 
   // Toggle exercise note visibility

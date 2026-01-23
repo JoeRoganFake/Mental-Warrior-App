@@ -7,7 +7,9 @@ import 'package:mental_warior/pages/workout/create_exercise_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 
 class ExerciseSelectionPage extends StatefulWidget {
-  const ExerciseSelectionPage({super.key});
+  final bool singleSelectionMode;
+
+  const ExerciseSelectionPage({super.key, this.singleSelectionMode = false});
 
   @override
   ExerciseSelectionPageState createState() => ExerciseSelectionPageState();
@@ -18,8 +20,10 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   String _searchQuery = '';
   String _selectedBodyPart = 'All';
   String _selectedEquipment = 'All';
+  bool _showOnlyStarred = false; // Filter to show only starred exercises
   List<Map<String, dynamic>> _exercises = [];
   List<Map<String, dynamic>> _customExercises = [];
+  Set<String> _starredExerciseIds = {}; // Cache of starred exercise IDs
   List<String> _bodyParts = [
     'All'
   ]; // Initialize with 'All' to avoid LateInitializationError
@@ -29,6 +33,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   
   // Track selected exercises for multiple selection
   final Set<String> _selectedExercises = <String>{};
+  final StarredExercisesService _starredService = StarredExercisesService();
 
   // Helper function to clean exercise names from markers
   String _cleanExerciseName(String name) {
@@ -44,10 +49,15 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
     _searchController.addListener(_onSearchChanged);
     _loadExercisesFromJson();
     _loadCustomExercises();
+    _loadStarredExercises();
 
     // Listen for custom exercise updates
     CustomExerciseService.customExercisesUpdatedNotifier
         .addListener(_loadCustomExercises);
+    
+    // Listen for starred exercises updates
+    StarredExercisesService.starredExercisesUpdatedNotifier
+        .addListener(_loadStarredExercises);
   }
 
   void _loadExercisesFromJson() {
@@ -114,6 +124,17 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
     }
   }
 
+  void _loadStarredExercises() async {
+    try {
+      final starredIds = await _starredService.getStarredExerciseIds();
+      setState(() {
+        _starredExerciseIds = starredIds;
+      });
+    } catch (e) {
+      debugPrint('Error loading starred exercises: $e');
+    }
+  }
+
   void _updateFilterLists() {
     // Combine built-in and custom exercises for filter lists
     final allExercises = [..._exercises, ..._customExercises];
@@ -129,6 +150,8 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
     _searchController.dispose();
     CustomExerciseService.customExercisesUpdatedNotifier
         .removeListener(_loadCustomExercises);
+    StarredExercisesService.starredExercisesUpdatedNotifier
+        .removeListener(_loadStarredExercises);
     super.dispose();
   }
 
@@ -158,6 +181,15 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   List<Map<String, dynamic>> get _filteredExercises {
     // Combine built-in and custom exercises
     List<Map<String, dynamic>> result = [..._exercises, ..._customExercises];
+
+    // Filter by starred status
+    if (_showOnlyStarred) {
+      result = result.where((exercise) {
+        final exerciseId = exercise['apiId'] ?? exercise['id'];
+        final exerciseType = (exercise['isCustom'] ?? false) ? 'custom' : 'api';
+        return _starredExerciseIds.contains('${exerciseId}_$exerciseType');
+      }).toList();
+    }
 
     // Filter by body part if not set to "All"
     if (_selectedBodyPart != 'All') {
@@ -192,6 +224,58 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
     }
 
     return result;
+  }
+
+  Future<void> _toggleStarExercise(Map<String, dynamic> exercise) async {
+    final exerciseId = (exercise['apiId'] ?? exercise['id']).toString();
+    final exerciseType = (exercise['isCustom'] ?? false) ? 'custom' : 'api';
+    final exerciseName = exercise['name'].toString();
+    final starKey = '${exerciseId}_$exerciseType';
+
+    try {
+      if (_starredExerciseIds.contains(starKey)) {
+        await _starredService.unstarExercise(exerciseId, exerciseType);
+        setState(() {
+          _starredExerciseIds.remove(starKey);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Removed ${_cleanExerciseName(exerciseName)} from favorites'),
+              behavior: SnackBarBehavior.fixed,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      } else {
+        await _starredService.starExercise(
+            exerciseName, exerciseId, exerciseType);
+        setState(() {
+          _starredExerciseIds.add(starKey);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  'Added ${_cleanExerciseName(exerciseName)} to favorites'),
+              behavior: SnackBarBehavior.fixed,
+              duration: const Duration(seconds: 1),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error toggling star: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating favorites'),
+            behavior: SnackBarBehavior.fixed,
+          ),
+        );
+      }
+    }
   }
 
   void _navigateToCreateExercise() async {
@@ -344,7 +428,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
             ? 'Select Exercises'
             : '${_selectedExercises.length} selected'),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(110),
+          preferredSize: const Size.fromHeight(150),
           child: Column(
             children: [
               // Search bar
@@ -372,6 +456,49 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                     ),
                     contentPadding: const EdgeInsets.symmetric(vertical: 0),
                   ),
+                ),
+              ),
+
+              // Favorites filter
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Row(
+                  children: [
+                    FilterChip(
+                      label: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _showOnlyStarred ? Icons.star : Icons.star_border,
+                            size: 18,
+                            color: _showOnlyStarred ? Colors.amber : null,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(_showOnlyStarred
+                              ? 'Favorites'
+                              : 'Show Favorites'),
+                        ],
+                      ),
+                      selected: _showOnlyStarred,
+                      selectedColor: Colors.amber.withOpacity(0.3),
+                      onSelected: (selected) {
+                        setState(() {
+                          _showOnlyStarred = selected;
+                        });
+                      },
+                    ),
+                    if (_showOnlyStarred) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_filteredExercises.length} favorite${_filteredExercises.length != 1 ? 's' : ''}',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
 
@@ -453,6 +580,12 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                 final exercise = _filteredExercises[index];
                 final isSelected =
                     _selectedExercises.contains(_getExerciseKey(exercise));
+                final exerciseId =
+                    (exercise['apiId'] ?? exercise['id']).toString();
+                final exerciseType =
+                    (exercise['isCustom'] ?? false) ? 'custom' : 'api';
+                final isStarred =
+                    _starredExerciseIds.contains('${exerciseId}_$exerciseType');
                 
                 return Card(
                   margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -472,6 +605,15 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                           .withOpacity(0.1)
                       : null,
                   child: ListTile(
+                    onTap: widget.singleSelectionMode
+                        ? () {
+                            // In single-selection mode, immediately return the selected exercise
+                            Navigator.pop(context, [exercise]);
+                          }
+                        : () {
+                            // In multi-selection mode, toggle selection on tap
+                            _toggleExerciseSelection(exercise);
+                          },
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     title: Text(
@@ -519,16 +661,28 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Checkbox for multiple selection
-                        Checkbox(
-                          value: _selectedExercises
-                              .contains(_getExerciseKey(exercise)),
-                          onChanged: (bool? value) {
-                            _toggleExerciseSelection(exercise);
-                          },
-                          activeColor:
-                              _getColorForType(exercise['type'] ?? 'No Type'),
+                        // Star button
+                        IconButton(
+                          icon: Icon(
+                            isStarred ? Icons.star : Icons.star_border,
+                            color: isStarred ? Colors.amber : Colors.grey,
+                          ),
+                          onPressed: () => _toggleStarExercise(exercise),
+                          tooltip: isStarred
+                              ? 'Remove from favorites'
+                              : 'Add to favorites',
                         ),
+                        // Checkbox for multiple selection (hide in single-selection mode)
+                        if (!widget.singleSelectionMode)
+                          Checkbox(
+                            value: _selectedExercises
+                                .contains(_getExerciseKey(exercise)),
+                            onChanged: (bool? value) {
+                              _toggleExerciseSelection(exercise);
+                            },
+                            activeColor:
+                                _getColorForType(exercise['type'] ?? 'No Type'),
+                          ),
                         // Info button for built-in exercises with API details
                         if (exercise['id'] != null &&
                             exercise['id'].toString().isNotEmpty &&
@@ -616,10 +770,6 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                           ),
                       ],
                     ),
-                    onTap: () {
-                      // Toggle selection on tap instead of immediately returning
-                      _toggleExerciseSelection(exercise);
-                    },
                     // Show description on long press for built-in exercises,
                     // or show options menu for custom exercises
                     onLongPress: () {
@@ -654,13 +804,17 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                   final selectedExercisesList = allExercises
                       .where((exercise) => _selectedExercises
                           .contains(_getExerciseKey(exercise)))
-                      .map((exercise) => {
-                            'name': exercise['name'],
-                            'equipment': exercise['equipment'],
-                            'type': exercise['type'],
-                            'description': exercise['description'],
-                            'apiId': exercise['apiId'] ?? exercise['id'] ?? '',
-                            'isCustom': exercise['isCustom'] ?? false,
+                      .map((exercise) {
+                    final apiId = exercise['apiId'] ?? exercise['id'] ?? '';
+                    return {
+                      'name': exercise['name'],
+                      'equipment': exercise['equipment'],
+                      'type': exercise['type'],
+                      'description': exercise['description'],
+                      'id': exercise['id'],
+                      'apiId': apiId,
+                      'isCustom': exercise['isCustom'] ?? false,
+                    };
                           })
                       .toList();
                   Navigator.pop(context, selectedExercisesList);
