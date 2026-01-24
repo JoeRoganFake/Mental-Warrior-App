@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:mental_warior/pages/meditation_coundown.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 class MeditationPage extends StatefulWidget {
   const MeditationPage({super.key});
@@ -18,30 +19,57 @@ class MeditationPageState extends State<MeditationPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.spa_outlined, size: 70, color: Colors.blue),
-          SizedBox(height: 10),
-          Text(
-            "Recharge Your Mind",
-            style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-          ),
-          Text(
-            "Choose your meditation mode.",
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
-          SizedBox(height: 30),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildModeButton("Guided", Icons.headset, Colors.blue),
-              SizedBox(width: 20),
-              _buildModeButton(
-                  "Unguided", Icons.self_improvement, Colors.green),
+      backgroundColor: AppTheme.background,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppTheme.surface,
+              AppTheme.background,
             ],
           ),
-        ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.accent.withOpacity(0.3),
+                    AppTheme.accent.withOpacity(0.1),
+                  ],
+                ),
+              ),
+              child: Icon(Icons.spa_outlined, size: 70, color: AppTheme.accent),
+            ),
+            SizedBox(height: 24),
+            Text(
+              "Recharge Your Mind",
+              style: AppTheme.displayLarge,
+            ),
+            SizedBox(height: 8),
+            Text(
+              "Choose your meditation mode",
+              style:
+                  AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
+            ),
+            SizedBox(height: 40),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildModeButton("Guided", Icons.headset, AppTheme.accent),
+                SizedBox(width: 20),
+                _buildModeButton(
+                    "Unguided", Icons.self_improvement, AppTheme.success),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -58,10 +86,22 @@ class MeditationPageState extends State<MeditationPage> {
         width: 140,
         height: 140,
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(15),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              color,
+              color.withOpacity(0.7),
+            ],
+          ),
+          borderRadius: AppTheme.borderRadiusLg,
           boxShadow: [
-            BoxShadow(color: Colors.black26, blurRadius: 6, spreadRadius: 2)
+            BoxShadow(
+              color: color.withOpacity(0.4),
+              blurRadius: 12,
+              spreadRadius: 0,
+              offset: const Offset(0, 4),
+            ),
           ],
         ),
         child: Column(
@@ -71,10 +111,7 @@ class MeditationPageState extends State<MeditationPage> {
             SizedBox(height: 10),
             Text(
               title,
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white),
+              style: AppTheme.labelLarge.copyWith(color: Colors.white),
             ),
           ],
         ),
@@ -87,13 +124,16 @@ class MeditationPageState extends State<MeditationPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text("Select Duration"),
+          backgroundColor: AppTheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusXl),
+          title: Text("Select Duration", style: AppTheme.headlineSmall),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 ...durations.map((duration) => ListTile(
-                      title: Text("$duration minutes"),
+                      title:
+                          Text("$duration minutes", style: AppTheme.bodyMedium),
                       onTap: () {
                         Navigator.pop(context);
                         _startMeditation(duration);
@@ -103,6 +143,7 @@ class MeditationPageState extends State<MeditationPage> {
                   title: Text(
                     "Custom",
                     textAlign: TextAlign.center,
+                    style: AppTheme.bodyMedium.copyWith(color: AppTheme.accent),
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -126,7 +167,10 @@ class MeditationPageState extends State<MeditationPage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text("Set Custom Time"),
+              backgroundColor: AppTheme.surface,
+              shape:
+                  RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusXl),
+              title: Text("Set Custom Time", style: AppTheme.headlineSmall),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -146,7 +190,8 @@ class MeditationPageState extends State<MeditationPage> {
                           timer?.cancel();
                         },
                         child: IconButton(
-                          icon: Icon(Icons.remove_circle_outline),
+                          icon: Icon(Icons.remove_circle_outline,
+                              color: AppTheme.textSecondary),
                           onPressed: () {
                             if (customMinutes > 1) {
                               setDialogState(() => customMinutes--);
@@ -155,7 +200,7 @@ class MeditationPageState extends State<MeditationPage> {
                         ),
                       ),
                       Text("$customMinutes min",
-                          style: TextStyle(fontSize: 24)),
+                          style: AppTheme.displayMedium),
                       GestureDetector(
                         onLongPressStart: (_) {
                           timer =
@@ -167,7 +212,8 @@ class MeditationPageState extends State<MeditationPage> {
                           timer?.cancel();
                         },
                         child: IconButton(
-                          icon: Icon(Icons.add_circle_outline),
+                          icon: Icon(Icons.add_circle_outline,
+                              color: AppTheme.textSecondary),
                           onPressed: () {
                             setDialogState(() => customMinutes++);
                           },
@@ -175,12 +221,23 @@ class MeditationPageState extends State<MeditationPage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
                   ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: AppTheme.borderRadiusMd),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 32, vertical: 12),
+                    ),
                     onPressed: () {
                       Navigator.pop(context);
                       _startMeditation(customMinutes);
                     },
-                    child: Text("Start"),
+                    child: Text("Start",
+                        style:
+                            AppTheme.labelLarge.copyWith(color: Colors.white)),
                   ),
                 ],
               ),

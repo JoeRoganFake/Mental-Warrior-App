@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/plate_bar_customization_service.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 class WorkoutSettingsPage extends StatefulWidget {
   const WorkoutSettingsPage({super.key});
@@ -14,11 +15,6 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
   bool _isLoading = true;
   bool _hasUnsavedChanges = false;
 
-  // Theme colors
-  final Color _backgroundColor = const Color(0xFF1A1B1E);
-  final Color _surfaceColor = const Color(0xFF26272B);
-  final Color _primaryColor = const Color(0xFF3F8EFC);
-
   // Current settings values (what's being edited)
   int _weeklyWorkoutGoal = 5;
   int _defaultRestTimer = 90;
@@ -28,6 +24,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
   bool _confirmFinishWorkout = true;
   bool _showWeightInLbs = false;
   bool _useMeasurementInInches = false;
+  String _prDisplayMode = 'random'; // 'random' or 'pinned'
+  List<String> _pinnedExercises = [];
 
   // Original settings values (to compare for changes)
   int _originalWeeklyWorkoutGoal = 5;
@@ -38,6 +36,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
   bool _originalConfirmFinishWorkout = true;
   bool _originalShowWeightInLbs = false;
   bool _originalUseMeasurementInInches = false;
+  String _originalPrDisplayMode = 'random';
+  List<String> _originalPinnedExercises = [];
 
   @override
   void initState() {
@@ -59,6 +59,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         _confirmFinishWorkout = settings['confirmFinishWorkout'];
         _showWeightInLbs = settings['showWeightInLbs'];
         _useMeasurementInInches = settings['useMeasurementInInches'];
+        _prDisplayMode = settings['prDisplayMode'];
+        _pinnedExercises = List<String>.from(settings['pinnedExercises']);
 
         // Store original values
         _originalWeeklyWorkoutGoal = _weeklyWorkoutGoal;
@@ -69,6 +71,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         _originalConfirmFinishWorkout = _confirmFinishWorkout;
         _originalShowWeightInLbs = _showWeightInLbs;
         _originalUseMeasurementInInches = _useMeasurementInInches;
+        _originalPrDisplayMode = _prDisplayMode;
+        _originalPinnedExercises = List<String>.from(_pinnedExercises);
 
         _hasUnsavedChanges = false;
         _isLoading = false;
@@ -88,7 +92,9 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
           _keepScreenOn != _originalKeepScreenOn ||
           _confirmFinishWorkout != _originalConfirmFinishWorkout ||
           _showWeightInLbs != _originalShowWeightInLbs ||
-          _useMeasurementInInches != _originalUseMeasurementInInches;
+          _useMeasurementInInches != _originalUseMeasurementInInches ||
+          _prDisplayMode != _originalPrDisplayMode ||
+          _pinnedExercises.toString() != _originalPinnedExercises.toString();
     });
   }
 
@@ -103,6 +109,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       await _settingsService.setConfirmFinishWorkout(_confirmFinishWorkout);
       await _settingsService.setShowWeightInLbs(_showWeightInLbs);
       await _settingsService.setUseMeasurementInInches(_useMeasurementInInches);
+      await _settingsService.setPrDisplayMode(_prDisplayMode);
+      await _settingsService.setPinnedExercises(_pinnedExercises);
 
       // Update original values to match saved values
       _originalWeeklyWorkoutGoal = _weeklyWorkoutGoal;
@@ -113,6 +121,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       _originalConfirmFinishWorkout = _confirmFinishWorkout;
       _originalShowWeightInLbs = _showWeightInLbs;
       _originalUseMeasurementInInches = _useMeasurementInInches;
+      _originalPrDisplayMode = _prDisplayMode;
+      _originalPinnedExercises = List<String>.from(_pinnedExercises);
 
       setState(() {
         _hasUnsavedChanges = false;
@@ -123,7 +133,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Settings saved'),
-            backgroundColor: _primaryColor,
+            backgroundColor: AppTheme.accent,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -133,9 +143,9 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('Error saving settings'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -151,24 +161,24 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: _surfaceColor,
-        title: const Text('Unsaved Changes',
-            style: TextStyle(color: Colors.white)),
-        content: const Text(
+        backgroundColor: AppTheme.surface,
+        title: Text('Unsaved Changes', style: AppTheme.headlineSmall),
+        content: Text(
           'You have unsaved changes. What would you like to do?',
-          style: TextStyle(color: Colors.white70),
+          style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, 'discard'),
-            child: const Text('Discard', style: TextStyle(color: Colors.red)),
+            child: Text('Discard', style: TextStyle(color: AppTheme.error)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, 'cancel'),
-            child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+            child:
+                Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
             onPressed: () => Navigator.pop(context, 'save'),
             child: const Text('Save'),
           ),
@@ -197,13 +207,13 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         }
       },
       child: Scaffold(
-        backgroundColor: _backgroundColor,
+        backgroundColor: AppTheme.background,
         appBar: AppBar(
-          title: const Text('Workout Settings'),
-          backgroundColor: _backgroundColor,
+          title: Text('Workout Settings', style: AppTheme.headlineSmall),
+          backgroundColor: AppTheme.surface,
           elevation: 0,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
+            icon: Icon(Icons.arrow_back, color: AppTheme.textPrimary),
             onPressed: () async {
               if (_hasUnsavedChanges) {
                 final shouldPop = await _onWillPop();
@@ -219,14 +229,14 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
             if (_hasUnsavedChanges)
               TextButton.icon(
                 onPressed: _saveAllSettings,
-                icon: const Icon(Icons.save, color: Colors.white),
+                icon: Icon(Icons.save, color: AppTheme.accent),
                 label:
-                    const Text('Save', style: TextStyle(color: Colors.white)),
+                    Text('Save', style: TextStyle(color: AppTheme.accent)),
               ),
           ],
         ),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(child: CircularProgressIndicator(color: AppTheme.accent))
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
@@ -299,6 +309,23 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                   ]),
                   const SizedBox(height: 24),
 
+                  // Personal Records Section
+                  _buildSectionHeader(
+                      'Personal Records', Icons.emoji_events_outlined),
+                  _buildSettingsCard([
+                    _buildPRDisplayModeTile(),
+                    if (_prDisplayMode == 'pinned') ...[
+                      _buildDivider(),
+                      _buildActionTile(
+                        'Manage Pinned Exercises',
+                        '${_pinnedExercises.length} exercise${_pinnedExercises.length != 1 ? 's' : ''} pinned',
+                        Icons.push_pin,
+                        () => _showManagePinnedExercisesDialog(),
+                      ),
+                    ],
+                  ]),
+                  const SizedBox(height: 24),
+
                   // Plate Calculator Section
                   _buildSectionHeader('Plate Calculator', Icons.fitness_center),
                   _buildSettingsCard([
@@ -348,15 +375,11 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
         children: [
-          Icon(icon, color: _primaryColor, size: 20),
+          Icon(icon, color: AppTheme.accent, size: 20),
           const SizedBox(width: 8),
           Text(
             title,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: _primaryColor,
-            ),
+            style: AppTheme.labelLarge.copyWith(color: AppTheme.accent),
           ),
         ],
       ),
@@ -365,8 +388,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
 
   Widget _buildSettingsCard(List<Widget> children) {
     return Card(
-      color: _surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: AppTheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusMd),
       child: Column(children: children),
     );
   }
@@ -374,7 +397,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
   Widget _buildDivider() {
     return Divider(
       height: 1,
-      color: Colors.grey[800],
+      color: AppTheme.surfaceBorder,
       indent: 16,
       endIndent: 16,
     );
@@ -387,12 +410,12 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
     void Function(bool) onChanged,
   ) {
     return SwitchListTile(
-      title: Text(title, style: const TextStyle(color: Colors.white)),
+      title: Text(title, style: AppTheme.bodyMedium),
       subtitle: Text(subtitle,
-          style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+          style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary)),
       value: value,
       onChanged: onChanged,
-      activeColor: _primaryColor,
+      activeColor: AppTheme.accent,
     );
   }
 
@@ -404,27 +427,28 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
     bool isDestructive = false,
   }) {
     return ListTile(
-      leading: Icon(icon, color: isDestructive ? Colors.red : Colors.white70),
+      leading: Icon(icon,
+          color: isDestructive ? AppTheme.error : AppTheme.textSecondary),
       title: Text(
         title,
-        style: TextStyle(color: isDestructive ? Colors.red : Colors.white),
+        style: AppTheme.bodyMedium.copyWith(
+            color: isDestructive ? AppTheme.error : AppTheme.textPrimary),
       ),
       subtitle: Text(
         subtitle,
-        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
       ),
-      trailing: Icon(Icons.chevron_right, color: Colors.grey[600]),
+      trailing: Icon(Icons.chevron_right, color: AppTheme.textTertiary),
       onTap: onTap,
     );
   }
 
   Widget _buildWeeklyGoalTile() {
     return ListTile(
-      title: const Text('Weekly Workout Goal',
-          style: TextStyle(color: Colors.white)),
+      title: Text('Weekly Workout Goal', style: AppTheme.bodyMedium),
       subtitle: Text(
         '$_weeklyWorkoutGoal workouts per week',
-        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -432,19 +456,19 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: _primaryColor.withOpacity(0.2),
+              color: AppTheme.accent.withOpacity(0.2),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               '$_weeklyWorkoutGoal',
               style: TextStyle(
-                color: _primaryColor,
+                color: AppTheme.accent,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
           const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: Colors.grey[600]),
+          Icon(Icons.chevron_right, color: AppTheme.textTertiary),
         ],
       ),
       onTap: _showWeeklyGoalDialog,
@@ -459,11 +483,10 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         : '$seconds sec';
 
     return ListTile(
-      title: const Text('Default Rest Time',
-          style: TextStyle(color: Colors.white)),
+      title: Text('Default Rest Time', style: AppTheme.bodyMedium),
       subtitle: Text(
         'Time between sets',
-        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -471,13 +494,13 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: _primaryColor.withOpacity(0.2),
+              color: AppTheme.accent.withOpacity(0.2),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               displayTime,
               style: TextStyle(
-                color: _primaryColor,
+                color: AppTheme.accent,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -504,13 +527,13 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: _primaryColor.withOpacity(0.2),
+              color: AppTheme.accent.withOpacity(0.2),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               currentUnit,
               style: TextStyle(
-                color: _primaryColor,
+                color: AppTheme.accent,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -539,13 +562,13 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: _primaryColor.withOpacity(0.2),
+              color: AppTheme.accent.withOpacity(0.2),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
               currentUnit,
               style: TextStyle(
-                color: _primaryColor,
+                color: AppTheme.accent,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -558,12 +581,56 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
     );
   }
 
+  Widget _buildPRDisplayModeTile() {
+    final displayText = _prDisplayMode == 'random'
+        ? 'Random Daily'
+        : _prDisplayMode == 'pinned'
+            ? 'Pinned Exercises'
+            : 'None';
+    final subtitle = _prDisplayMode == 'random'
+        ? '5 random PRs that change daily'
+        : _prDisplayMode == 'pinned'
+            ? 'Show PRs for specific exercises'
+            : 'PRs hidden on workout page';
+
+    return ListTile(
+      title:
+          const Text('PR Display Mode', style: TextStyle(color: Colors.white)),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              displayText,
+              style: TextStyle(
+                color: AppTheme.accent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(Icons.chevron_right, color: Colors.grey[600]),
+        ],
+      ),
+      onTap: _showPRDisplayModeDialog,
+    );
+  }
+
   void _showWeightUnitDialog() {
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: _surfaceColor,
+          backgroundColor: AppTheme.surface,
           title:
               const Text('Weight Unit', style: TextStyle(color: Colors.white)),
           content: Column(
@@ -630,7 +697,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: _surfaceColor,
+          backgroundColor: AppTheme.surface,
           title: const Text('Body Measurement Unit',
               style: TextStyle(color: Colors.white)),
           content: Column(
@@ -705,7 +772,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: _surfaceColor,
+          backgroundColor: AppTheme.surface,
           title: const Text(
             'Convert Existing Data?',
             style: TextStyle(color: Colors.white),
@@ -736,13 +803,13 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: _primaryColor.withOpacity(0.1),
+                    color: AppTheme.accent.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: _primaryColor.withOpacity(0.3)),
+                    border: Border.all(color: AppTheme.accent.withOpacity(0.3)),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.sync, color: _primaryColor),
+                      Icon(Icons.sync, color: AppTheme.accent),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -751,7 +818,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                             Text(
                               'Convert all data',
                               style: TextStyle(
-                                color: _primaryColor,
+                                color: AppTheme.accent,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -834,10 +901,10 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        backgroundColor: _surfaceColor,
+        backgroundColor: AppTheme.surface,
         content: Row(
           children: [
-            CircularProgressIndicator(color: _primaryColor),
+            CircularProgressIndicator(color: AppTheme.accent),
             const SizedBox(width: 16),
             const Text('Converting data...',
                 style: TextStyle(color: Colors.white)),
@@ -874,7 +941,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('All data converted to $toUnit'),
-            backgroundColor: _primaryColor,
+            backgroundColor: AppTheme.accent,
           ),
         );
       }
@@ -904,10 +971,11 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? _primaryColor.withOpacity(0.2) : Colors.grey[800],
+          color:
+              isSelected ? AppTheme.accent.withOpacity(0.2) : Colors.grey[800],
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? _primaryColor : Colors.transparent,
+            color: isSelected ? AppTheme.accent : Colors.transparent,
             width: 2,
           ),
         ),
@@ -920,7 +988,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                   Text(
                     title,
                     style: TextStyle(
-                      color: isSelected ? _primaryColor : Colors.white,
+                      color: isSelected ? AppTheme.accent : Colors.white,
                       fontWeight: FontWeight.w600,
                       fontSize: 16,
                     ),
@@ -937,7 +1005,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
               ),
             ),
             if (isSelected)
-              Icon(Icons.check_circle, color: _primaryColor, size: 24),
+              Icon(Icons.check_circle, color: AppTheme.accent, size: 24),
           ],
         ),
       ),
@@ -953,7 +1021,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              backgroundColor: _surfaceColor,
+              backgroundColor: AppTheme.surface,
               title: const Text('Weekly Workout Goal',
                   style: TextStyle(color: Colors.white)),
               content: Column(
@@ -969,7 +1037,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                     children: [
                       IconButton(
                         icon: Icon(Icons.remove_circle,
-                            color: _primaryColor, size: 36),
+                            color: AppTheme.accent, size: 36),
                         onPressed: tempGoal > 1
                             ? () => setDialogState(() => tempGoal--)
                             : null,
@@ -979,14 +1047,14 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                         width: 60,
                         height: 60,
                         decoration: BoxDecoration(
-                          color: _primaryColor.withOpacity(0.2),
+                          color: AppTheme.accent.withOpacity(0.2),
                           shape: BoxShape.circle,
                         ),
                         alignment: Alignment.center,
                         child: Text(
                           tempGoal.toString(),
                           style: TextStyle(
-                            color: _primaryColor,
+                            color: AppTheme.accent,
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
                           ),
@@ -995,7 +1063,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                       const SizedBox(width: 16),
                       IconButton(
                         icon: Icon(Icons.add_circle,
-                            color: _primaryColor, size: 36),
+                            color: AppTheme.accent, size: 36),
                         onPressed: tempGoal < 14
                             ? () => setDialogState(() => tempGoal++)
                             : null,
@@ -1016,7 +1084,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                     Navigator.pop(context);
                   },
                   style:
-                      ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+                      ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accent),
                   child: const Text('Apply'),
                 ),
               ],
@@ -1038,7 +1107,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              backgroundColor: _surfaceColor,
+              backgroundColor: AppTheme.surface,
               title: const Text('Default Rest Time',
                   style: TextStyle(color: Colors.white)),
               content: Column(
@@ -1048,13 +1117,13 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: _primaryColor.withOpacity(0.1),
+                      color: AppTheme.accent.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       _formatRestTime(tempSeconds),
                       style: TextStyle(
-                        color: _primaryColor,
+                        color: AppTheme.accent,
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
                       ),
@@ -1067,7 +1136,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                     min: 15,
                     max: 600,
                     divisions: 39,
-                    activeColor: _primaryColor,
+                    activeColor: AppTheme.accent,
                     onChanged: (value) {
                       setDialogState(() => tempSeconds = value.round());
                     },
@@ -1090,7 +1159,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                               horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
                             color:
-                                isSelected ? _primaryColor : Colors.grey[800],
+                                isSelected ? AppTheme.accent : Colors.grey[800],
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -1121,7 +1190,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                     Navigator.pop(context);
                   },
                   style:
-                      ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+                      ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accent),
                   child: const Text('Apply'),
                 ),
               ],
@@ -1144,6 +1214,166 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
     }
   }
 
+  void _showPRDisplayModeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: const Text('PR Display Mode',
+              style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildUnitOption(
+                'Random Daily',
+                '5 random PRs that change every day',
+                _prDisplayMode == 'random',
+                () {
+                  setState(() {
+                    _prDisplayMode = 'random';
+                    _pinnedExercises
+                        .clear(); // Clear pinned exercises when switching to random
+                  });
+                  _checkForChanges();
+                  Navigator.pop(context);
+                },
+              ),
+              const SizedBox(height: 12),
+              _buildUnitOption(
+                'Pinned Exercises',
+                'Show specific exercises you choose',
+                _prDisplayMode == 'pinned',
+                () {
+                  setState(() => _prDisplayMode = 'pinned');
+                  _checkForChanges();
+                  Navigator.pop(context);
+                },
+              ),
+              const SizedBox(height: 12),
+              _buildUnitOption(
+                'None',
+                'Don\'t show PRs on workout page',
+                _prDisplayMode == 'none',
+                () {
+                  setState(() {
+                    _prDisplayMode = 'none';
+                    _pinnedExercises.clear();
+                  });
+                  _checkForChanges();
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showManagePinnedExercisesDialog() async {
+    // Get all unique exercise names from workout history
+    final workoutService = WorkoutService();
+    final workouts = await workoutService.getWorkouts();
+
+    final Set<String> allExercises = {};
+    for (var workout in workouts) {
+      for (var exercise in workout.exercises) {
+        final cleanName = exercise.name
+            .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+            .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+            .trim();
+        if (cleanName.isNotEmpty) {
+          allExercises.add(cleanName);
+        }
+      }
+    }
+
+    if (allExercises.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No exercises found in workout history')),
+      );
+      return;
+    }
+
+    final sortedExercises = allExercises.toList()..sort();
+    final tempPinned = List<String>.from(_pinnedExercises);
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surface,
+              title: const Text('Pin Exercises',
+                  style: TextStyle(color: Colors.white)),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Select up to 5 exercises to display',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    ),
+                    const SizedBox(height: 16),
+                    Flexible(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: sortedExercises.length,
+                        itemBuilder: (context, index) {
+                          final exercise = sortedExercises[index];
+                          final isPinned = tempPinned.contains(exercise);
+
+                          return CheckboxListTile(
+                            title: Text(exercise,
+                                style: const TextStyle(color: Colors.white)),
+                            value: isPinned,
+                            activeColor: AppTheme.accent,
+                            onChanged: tempPinned.length >= 5 && !isPinned
+                                ? null
+                                : (value) {
+                                    setDialogState(() {
+                                      if (value == true) {
+                                        if (tempPinned.length < 5) {
+                                          tempPinned.add(exercise);
+                                        }
+                                      } else {
+                                        tempPinned.remove(exercise);
+                                      }
+                                    });
+                                  },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() => _pinnedExercises = tempPinned);
+                    _checkForChanges();
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accent),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showComingSoonSnackbar() {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Coming soon!')),
@@ -1155,7 +1385,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: _surfaceColor,
+          backgroundColor: AppTheme.surface,
           title: const Text('Clear All Workout History?',
               style: TextStyle(color: Colors.white)),
           content: const Text(
@@ -1218,10 +1448,6 @@ class _PlateBarCustomizationPageImplState
   final PlateBarCustomizationService _customizationService =
       PlateBarCustomizationService();
 
-  final Color _backgroundColor = const Color(0xFF1A1B1E);
-  final Color _surfaceColor = const Color(0xFF26272B);
-  final Color _primaryColor = const Color(0xFF3F8EFC);
-
   bool _isLoading = true;
   bool _useLbs = false;
 
@@ -1281,7 +1507,7 @@ class _PlateBarCustomizationPageImplState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: _surfaceColor,
+        backgroundColor: AppTheme.surface,
         title: Text(title, style: const TextStyle(color: Colors.white)),
         content: Text(message, style: const TextStyle(color: Colors.white70)),
         actions: [
@@ -1345,7 +1571,7 @@ class _PlateBarCustomizationPageImplState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: _surfaceColor,
+        backgroundColor: AppTheme.surface,
         title:
             const Text('Delete plate?', style: TextStyle(color: Colors.white)),
         content: Text('Delete ${_formatNumber(plate.weight)} $_unit plate?',
@@ -1412,7 +1638,7 @@ class _PlateBarCustomizationPageImplState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: _surfaceColor,
+        backgroundColor: AppTheme.surface,
         title: const Text('Delete bar?', style: TextStyle(color: Colors.white)),
         content: Text('Delete ${bar.name} ($_unit)?',
             style: const TextStyle(color: Colors.white70)),
@@ -1438,16 +1664,17 @@ class _PlateBarCustomizationPageImplState
     final unitLabel = _useLbs ? 'lbs' : 'kg';
 
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: Text('Customize Plates & Bars ($unitLabel)'),
-        backgroundColor: _backgroundColor,
+        title: Text('Customize Plates & Bars ($unitLabel)',
+            style: AppTheme.headlineSmall),
+        backgroundColor: AppTheme.background,
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: _primaryColor,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.grey[400],
+          indicatorColor: AppTheme.accent,
+          labelColor: AppTheme.textPrimary,
+          unselectedLabelColor: AppTheme.textSecondary,
           tabs: const [
             Tab(text: 'Plates'),
             Tab(text: 'Bars'),
@@ -1464,7 +1691,7 @@ class _PlateBarCustomizationPageImplState
       floatingActionButton: _isLoading
           ? null
           : FloatingActionButton(
-              backgroundColor: _primaryColor,
+              backgroundColor: AppTheme.accent,
               onPressed: () {
                 if (_tabController.index == 0) {
                   _addPlate();
@@ -1504,7 +1731,7 @@ class _PlateBarCustomizationPageImplState
         final color = Color(plate.color);
         return Container(
           decoration: BoxDecoration(
-            color: _surfaceColor,
+            color: AppTheme.surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.grey[800]!),
           ),
@@ -1569,7 +1796,7 @@ class _PlateBarCustomizationPageImplState
         );
         return Container(
           decoration: BoxDecoration(
-            color: _surfaceColor,
+            color: AppTheme.surface,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: Colors.grey[800]!),
           ),

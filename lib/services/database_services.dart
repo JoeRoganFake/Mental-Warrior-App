@@ -5,6 +5,7 @@ import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/models/books.dart';
 import 'package:mental_warior/models/categories.dart';
 import 'package:mental_warior/models/workouts.dart';
+import 'package:mental_warior/models/user_xp.dart';
 import 'package:mental_warior/services/foreground_service.dart';
 import 'package:mental_warior/services/plate_bar_customization_service.dart';
 import 'package:mental_warior/utils/functions.dart';
@@ -12,6 +13,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:math';
 
 class DatabaseService {
   static Database? _db;
@@ -32,7 +34,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 19, // Increment version for exercise_rest_history table
+      version: 20, // Increment version for user_xp table
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -60,6 +62,7 @@ class DatabaseService {
             .createPlateConfigsTable(db); // Added plate configs table
         PlateBarCustomizationService().createCustomizationTables(
             db); // Added plate/bar customization tables
+        XPService().createXPTable(db); // Added XP table
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 4) {
@@ -140,6 +143,10 @@ class DatabaseService {
         if (oldVersion < 19) {
           // Create exercise rest timer history table
           await ExerciseRestTimerHistoryService().createRestHistoryTable(db);
+        }
+        if (oldVersion < 20) {
+          // Create user XP table
+          XPService().createXPTable(db);
         }
       },
     );
@@ -2340,6 +2347,8 @@ class SettingsService {
   static const String _showRestTimerKey = 'show_rest_timer';
   static const String _confirmFinishWorkoutKey = 'confirm_finish_workout';
   static const String _useMeasurementInInchesKey = 'use_measurement_in_inches';
+  static const String _prDisplayModeKey = 'pr_display_mode';
+  static const String _pinnedExercisesKey = 'pinned_exercises';
 
   // Default values
   static const int defaultWeeklyWorkoutGoal = 5;
@@ -2353,6 +2362,7 @@ class SettingsService {
   static const bool defaultShowRestTimer = true;
   static const bool defaultConfirmFinishWorkout = true;
   static const bool defaultUseMeasurementInInches = false;
+  static const String defaultPrDisplayMode = 'random'; // 'random' or 'pinned'
 
   // Get the weekly workout goal
   Future<int> getWeeklyWorkoutGoal() async {
@@ -2485,6 +2495,43 @@ class SettingsService {
     settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
   }
 
+  // PR Display Settings
+  Future<String> getPrDisplayMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_prDisplayModeKey) ?? defaultPrDisplayMode;
+  }
+
+  Future<void> setPrDisplayMode(String mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prDisplayModeKey, mode);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  Future<List<String>> getPinnedExercises() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_pinnedExercisesKey) ?? [];
+  }
+
+  Future<void> setPinnedExercises(List<String> exercises) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_pinnedExercisesKey, exercises);
+    settingsUpdatedNotifier.value = !settingsUpdatedNotifier.value;
+  }
+
+  Future<void> addPinnedExercise(String exerciseName) async {
+    final pinned = await getPinnedExercises();
+    if (!pinned.contains(exerciseName)) {
+      pinned.add(exerciseName);
+      await setPinnedExercises(pinned);
+    }
+  }
+
+  Future<void> removePinnedExercise(String exerciseName) async {
+    final pinned = await getPinnedExercises();
+    pinned.remove(exerciseName);
+    await setPinnedExercises(pinned);
+  }
+
   // Get all settings at once (useful for settings page)
   Future<Map<String, dynamic>> getAllSettings() async {
     return {
@@ -2498,6 +2545,8 @@ class SettingsService {
       'confirmFinishWorkout': await getConfirmFinishWorkout(),
       'showWeightInLbs': await getShowWeightInLbs(),
       'defaultWeightIncrement': await getDefaultWeightIncrement(),
+      'prDisplayMode': await getPrDisplayMode(),
+      'pinnedExercises': await getPinnedExercises(),
       'useMeasurementInInches': await getUseMeasurementInInches(),
     };
   }
@@ -4138,4 +4187,175 @@ class MeasurementProgress {
     required this.latestDate,
     required this.unit,
   });
+}
+
+// XP Service for managing user experience points and leveling
+class XPService {
+  static final ValueNotifier<UserXP?> xpNotifier = ValueNotifier(null);
+  static final ValueNotifier<bool> levelUpNotifier = ValueNotifier(false);
+
+  final String _xpTableName = "user_xp";
+  final String _idColumnName = "id";
+  final String _totalXPColumnName = "totalXP";
+  final String _levelColumnName = "level";
+  final String _rankColumnName = "rank";
+  final String _lastUpdatedColumnName = "lastUpdated";
+
+  // XP reward amounts for different activities
+  static const int XP_TASK_COMPLETE = 20;
+  static const int XP_HABIT_COMPLETE = 30;
+  static const int XP_MEDITATION_MINUTE = 5;
+  static const int XP_WORKOUT_COMPLETE = 50;
+  static const int XP_GOAL_COMPLETE = 100;
+  static const int XP_BOOK_COMPLETE = 150;
+  static const int XP_PR_BONUS = 10; // Bonus XP for each personal record
+
+  void createXPTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE $_xpTableName (
+        $_idColumnName INTEGER PRIMARY KEY,
+        $_totalXPColumnName INTEGER NOT NULL DEFAULT 0,
+        $_levelColumnName INTEGER NOT NULL DEFAULT 1,
+        $_rankColumnName TEXT NOT NULL DEFAULT 'Novice',
+        $_lastUpdatedColumnName TEXT NOT NULL
+      )
+    ''');
+
+    // Insert initial user XP record
+    await db.insert(_xpTableName, {
+      _idColumnName: 1,
+      _totalXPColumnName: 0,
+      _levelColumnName: 1,
+      _rankColumnName: 'Novice',
+      _lastUpdatedColumnName: DateTime.now().toIso8601String(),
+    });
+  }
+
+  // Get current user XP
+  Future<UserXP> getUserXP() async {
+    final db = await DatabaseService.instance.database;
+    final data = await db
+        .query(_xpTableName, where: '$_idColumnName = ?', whereArgs: [1]);
+
+    if (data.isEmpty) {
+      // Create initial record if it doesn't exist
+      final now = DateTime.now();
+      await db.insert(_xpTableName, {
+        _idColumnName: 1,
+        _totalXPColumnName: 0,
+        _levelColumnName: 1,
+        _rankColumnName: 'Novice',
+        _lastUpdatedColumnName: now.toIso8601String(),
+      });
+
+      final userXP = UserXP(
+        id: 1,
+        totalXP: 0,
+        level: 1,
+        rank: 'Novice',
+        lastUpdated: now,
+      );
+      xpNotifier.value = userXP;
+      return userXP;
+    }
+
+    final userXP = UserXP.fromMap(data.first);
+    xpNotifier.value = userXP;
+    return userXP;
+  }
+
+  // Add XP and check for level up
+  Future<Map<String, dynamic>> addXP(int xpAmount) async {
+    final db = await DatabaseService.instance.database;
+    final currentXP = await getUserXP();
+
+    final newTotalXP = currentXP.totalXP + xpAmount;
+    final newLevel = UserXP.calculateLevel(newTotalXP);
+    final newRank = UserXP.calculateRank(newLevel);
+
+    final didLevelUp = newLevel > currentXP.level;
+
+    await db.update(
+      _xpTableName,
+      {
+        _totalXPColumnName: newTotalXP,
+        _levelColumnName: newLevel,
+        _rankColumnName: newRank,
+        _lastUpdatedColumnName: DateTime.now().toIso8601String(),
+      },
+      where: '$_idColumnName = ?',
+      whereArgs: [1],
+    );
+
+    final updatedXP = await getUserXP();
+    xpNotifier.value = updatedXP;
+
+    if (didLevelUp) {
+      levelUpNotifier.value = true;
+      // Reset the notifier after a short delay so it can be triggered again
+      Future.delayed(Duration(milliseconds: 100), () {
+        levelUpNotifier.value = false;
+      });
+    }
+
+    return {
+      'userXP': updatedXP,
+      'xpGained': xpAmount,
+      'didLevelUp': didLevelUp,
+      'oldLevel': currentXP.level,
+      'newLevel': newLevel,
+    };
+  }
+
+  // Subtract XP and check for level down
+  Future<Map<String, dynamic>> subtractXP(int xpAmount) async {
+    final db = await DatabaseService.instance.database;
+    final currentXP = await getUserXP();
+
+    final newTotalXP =
+        (currentXP.totalXP - xpAmount).clamp(0, double.infinity).toInt();
+    final newLevel = UserXP.calculateLevel(newTotalXP);
+    final newRank = UserXP.calculateRank(newLevel);
+
+    final didLevelDown = newLevel < currentXP.level;
+
+    await db.update(
+      _xpTableName,
+      {
+        _totalXPColumnName: newTotalXP,
+        _levelColumnName: newLevel,
+        _rankColumnName: newRank,
+        _lastUpdatedColumnName: DateTime.now().toIso8601String(),
+      },
+      where: '$_idColumnName = ?',
+      whereArgs: [1],
+    );
+
+    final updatedXP = await getUserXP();
+    xpNotifier.value = updatedXP;
+
+    return {
+      'userXP': updatedXP,
+      'xpLost': xpAmount,
+      'didLevelDown': didLevelDown,
+      'oldLevel': currentXP.level,
+      'newLevel': newLevel,
+    };
+  }
+
+  // Convenience methods for specific activities
+  Future<Map<String, dynamic>> addTaskXP() => addXP(XP_TASK_COMPLETE);
+  Future<Map<String, dynamic>> addHabitXP() => addXP(XP_HABIT_COMPLETE);
+  Future<Map<String, dynamic>> addMeditationXP(int minutes) =>
+      addXP(XP_MEDITATION_MINUTE * minutes);
+  Future<Map<String, dynamic>> addWorkoutXP() => addXP(XP_WORKOUT_COMPLETE);
+  Future<Map<String, dynamic>> addWorkoutXPWithPRs(int prCount) =>
+      addXP(XP_WORKOUT_COMPLETE + (XP_PR_BONUS * prCount));
+  Future<Map<String, dynamic>> addGoalXP() => addXP(XP_GOAL_COMPLETE);
+  Future<Map<String, dynamic>> addBookXP() => addXP(XP_BOOK_COMPLETE);
+
+  // Convenience methods for subtracting XP
+  Future<Map<String, dynamic>> subtractTaskXP() => subtractXP(XP_TASK_COMPLETE);
+  Future<Map<String, dynamic>> subtractHabitXP() =>
+      subtractXP(XP_HABIT_COMPLETE);
 }

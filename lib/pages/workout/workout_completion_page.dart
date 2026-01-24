@@ -3,6 +3,9 @@ import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:intl/intl.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:mental_warior/widgets/level_up_animation.dart';
+import 'package:mental_warior/widgets/xp_gain_bubble.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 class WorkoutCompletionPage extends StatefulWidget {
   final Workout workout;
@@ -24,13 +27,6 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
   late AnimationController _contentAnimationController;
   late Animation<double> _starsAnimation;
   late Animation<double> _contentAnimation;
-
-  // Theme colors
-  final Color _backgroundColor = const Color(0xFF1A1A1A);
-  final Color _surfaceColor = const Color(0xFF26272B);
-  final Color _primaryColor = const Color(0xFFFF9500);
-  final Color _textPrimaryColor = Colors.white;
-  final Color _textSecondaryColor = const Color(0xFFB3B3B3);
   
   bool _showWeightInLbs = false;
   String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';
@@ -44,32 +40,8 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
   }
 
   // Helper method to get set type display text
-  String _getSetTypeDisplay(SetType setType) {
-    switch (setType) {
-      case SetType.warmup:
-        return 'W';
-      case SetType.dropset:
-        return 'D';
-      case SetType.failure:
-        return 'F';
-      case SetType.normal:
-        return '';
-    }
-  }
 
   // Helper method to get set type label
-  String _getSetTypeLabel(SetType setType) {
-    switch (setType) {
-      case SetType.warmup:
-        return 'Warm-up';
-      case SetType.dropset:
-        return 'Drop Set';
-      case SetType.failure:
-        return 'Failure';
-      case SetType.normal:
-        return '';
-    }
-  }
 
   Future<void> _loadWeightUnit() async {
     final useLbs = await SettingsService().getShowWeightInLbs();
@@ -87,6 +59,9 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
     
     // Play fanfare sound
     _playFanfareSound();
+    
+    // Award XP for completing the workout
+    _awardWorkoutXP();
     
     // Initialize animations
     _starsAnimationController = AnimationController(
@@ -114,6 +89,38 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
     Future.delayed(const Duration(milliseconds: 300), () {
       _contentAnimationController.forward();
     });
+  }
+
+  // Award XP for completing the workout
+  Future<void> _awardWorkoutXP() async {
+    final xpService = XPService();
+
+    // Calculate number of PRs in this workout
+    final stats = _calculateWorkoutStats();
+    final prCount = stats['totalPRs'] as int;
+
+    // Award base workout XP plus bonus for each PR
+    final xpResult = await xpService.addWorkoutXPWithPRs(prCount);
+
+    if (mounted) {
+      // Show XP gain bubble
+      showXPGainBubble(context, xpResult['xpGained']);
+    }
+
+    // Show level up animation if leveled up
+    if (xpResult['didLevelUp'] == true) {
+      // Delay to let the completion page animations play first
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted) {
+          showLevelUpAnimation(
+            context,
+            newLevel: xpResult['newLevel'],
+            newRank: xpResult['userXP'].rank,
+            xpGained: xpResult['xpGained'],
+          );
+        }
+      });
+    }
   }
 
   @override
@@ -236,7 +243,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
               Icon(
                 Icons.star_rate,
                 size: 35,
-                color: _primaryColor,
+                color: AppTheme.accent,
               ),
               const SizedBox(width: 8),
               
@@ -244,7 +251,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
               Icon(
                 Icons.star_rate,
                 size: 50,
-                color: _primaryColor,
+                color: AppTheme.accent,
               ),
               const SizedBox(width: 8),
               
@@ -252,7 +259,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
               Icon(
                 Icons.star_rate,
                 size: 35,
-                color: _primaryColor,
+                color: AppTheme.accent,
               ),
               const SizedBox(width: 8),
               
@@ -277,12 +284,13 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
       margin: const EdgeInsets.symmetric(horizontal: 24),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _surfaceColor,
-        borderRadius: BorderRadius.circular(16),
+        color: AppTheme.surface,
+        borderRadius: AppTheme.borderRadiusLg,
         border: Border.all(
           color: Colors.white.withOpacity(0.1),
           width: 1,
         ),
+        boxShadow: AppTheme.shadowMd,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -290,21 +298,14 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
           // Workout title
           Text(
             widget.workout.name,
-            style: TextStyle(
-              color: _textPrimaryColor,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+            style: AppTheme.headlineMedium,
           ),
           const SizedBox(height: 4),
           
           // Date and time
           Text(
             _getFormattedDate(),
-            style: TextStyle(
-              color: _textSecondaryColor,
-              fontSize: 14,
-            ),
+            style: AppTheme.bodySmall,
           ),
           const SizedBox(height: 20),
           
@@ -314,20 +315,14 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
               Expanded(
                 child: Text(
                   'Sets',
-                  style: TextStyle(
-                    color: _textSecondaryColor,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: AppTheme.labelLarge
+                      .copyWith(color: AppTheme.textSecondary),
                 ),
               ),
               Text(
                 'Best set',
-                style: TextStyle(
-                  color: _textSecondaryColor,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+                style:
+                    AppTheme.labelLarge.copyWith(color: AppTheme.textSecondary),
               ),
             ],
           ),
@@ -360,10 +355,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                   Expanded(
                     child: Text(
                       '$completedSets × ${_cleanExerciseName(exercise.name)}',
-                      style: TextStyle(
-                        color: _textPrimaryColor,
-                        fontSize: 16,
-                      ),
+                      style: AppTheme.bodyMedium,
                     ),
                   ),
                   if (bestSet != null)
@@ -371,10 +363,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                       children: [
                         Text(
                           '${bestSet.weight.toStringAsFixed(bestSet.weight % 1 == 0 ? 0 : 1)} $_weightUnit × ${bestSet.reps}',
-                          style: TextStyle(
-                            color: _textPrimaryColor,
-                            fontSize: 16,
-                          ),
+                          style: AppTheme.bodyMedium,
                         ),
                         if (bestSet.isPR) ...[
                           const SizedBox(width: 6),
@@ -382,23 +371,24 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.amber.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.amber, width: 1),
+                              color: AppTheme.warning.withOpacity(0.2),
+                              borderRadius: AppTheme.borderRadiusSm,
+                              border:
+                                  Border.all(color: AppTheme.warning, width: 1),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
                                   Icons.emoji_events,
-                                  color: Colors.amber,
+                                  color: AppTheme.warning,
                                   size: 12,
                                 ),
                                 const SizedBox(width: 2),
                                 Text(
                                   'PR',
                                   style: TextStyle(
-                                    color: Colors.amber,
+                                    color: AppTheme.warning,
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -426,16 +416,12 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                   Icon(
                     Icons.access_time,
                     size: 20,
-                    color: _textSecondaryColor,
+                    color: AppTheme.textSecondary,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     _formatDuration(widget.workout.duration),
-                    style: TextStyle(
-                      color: _textPrimaryColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: AppTheme.labelLarge,
                   ),
                 ],
               ),
@@ -446,16 +432,12 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                   Icon(
                     Icons.fitness_center,
                     size: 20,
-                    color: _textSecondaryColor,
+                    color: AppTheme.textSecondary,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     '${(stats['totalWeight'] as double).toStringAsFixed(0)} $_weightUnit',
-                    style: TextStyle(
-                      color: _textPrimaryColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: AppTheme.labelLarge,
                   ),
                 ],
               ),
@@ -466,16 +448,12 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                   Icon(
                     Icons.emoji_events,
                     size: 20,
-                    color: _textSecondaryColor,
+                    color: AppTheme.textSecondary,
                   ),
                   const SizedBox(width: 4),
                   Text(
                     '${stats['totalPRs']} PRs',
-                    style: TextStyle(
-                      color: _textPrimaryColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: AppTheme.labelLarge,
                   ),
                 ],
               ),
@@ -491,17 +469,17 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
     final stats = _calculateWorkoutStats();
     
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: _backgroundColor,
+        backgroundColor: AppTheme.background,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.close, color: _textPrimaryColor),
+          icon: Icon(Icons.close, color: AppTheme.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.share, color: _textPrimaryColor),
+            icon: Icon(Icons.share, color: AppTheme.textPrimary),
             onPressed: () {
               // TODO: Implement sharing functionality
             },
@@ -530,19 +508,13 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                         children: [
                           Text(
                             'Congratulations!',
-                            style: TextStyle(
-                              color: _textPrimaryColor,
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: AppTheme.displayLarge,
                           ),
                           const SizedBox(height: 16),
                           Text(
                             'That\'s workout ${widget.workoutNumber}!',
-                            style: TextStyle(
-                              color: _textSecondaryColor,
-                              fontSize: 18,
-                            ),
+                            style: AppTheme.bodyLarge
+                                .copyWith(color: AppTheme.textSecondary),
                           ),
                         ],
                       ),
@@ -586,19 +558,18 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
                                   .popUntil((route) => route.isFirst);
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _primaryColor,
+                              backgroundColor: AppTheme.accent,
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: AppTheme.borderRadiusMd,
                               ),
+                              elevation: 0,
                             ),
-                            child: const Text(
+                            child: Text(
                               'Continue',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: AppTheme.labelLarge
+                                  .copyWith(color: Colors.white),
                             ),
                           ),
                         ),

@@ -7,10 +7,13 @@ import 'package:mental_warior/pages/workout/exercise_browse_page.dart';
 import 'package:mental_warior/pages/workout/template_editor_page.dart';
 import 'package:mental_warior/pages/workout/body_measurements_page.dart';
 import 'package:mental_warior/pages/workout/workout_settings_page.dart';
+import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
+import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/widgets/workout_week_chart.dart';
 import 'package:mental_warior/utils/functions.dart';
-
+import 'package:mental_warior/utils/app_theme.dart';
+import 'package:mental_warior/widgets/xp_bar.dart';
 
 class WorkoutPage extends StatefulWidget {
   const WorkoutPage({super.key});
@@ -32,6 +35,9 @@ class WorkoutPageState extends State<WorkoutPage>
   bool _isLoading = true;
   int _weeklyWorkoutGoal = 5; // Default goal
   bool _showWeightInLbs = false;
+  List<Map<String, dynamic>> _personalRecords = [];
+  String _prDisplayMode = 'random'; // 'random' or 'pinned'
+  List<String> _pinnedExercises = [];
 
   @override
   void initState() {
@@ -42,16 +48,18 @@ class WorkoutPageState extends State<WorkoutPage>
     _loadWeightUnit();
     _loadTemplates();
     _loadFolders();
+    _loadPRSettings();
+    _loadPersonalRecords();
 
     // Listen for changes to workouts
     WorkoutService.workoutsUpdatedNotifier.addListener(_onWorkoutsUpdated);
 
     // Listen for settings changes
     SettingsService.settingsUpdatedNotifier.addListener(_onSettingsUpdated);
-    
+
     // Listen for template changes
     TemplateService.templatesUpdatedNotifier.addListener(_onTemplatesUpdated);
-    
+
     // Listen for folder changes
     TemplateService.foldersUpdatedNotifier.addListener(_onFoldersUpdated);
   }
@@ -69,17 +77,20 @@ class WorkoutPageState extends State<WorkoutPage>
 
   void _onWorkoutsUpdated() {
     _loadWorkouts();
+    _loadPersonalRecords();
   }
 
   void _onSettingsUpdated() {
     _loadWeeklyGoal();
     _loadWeightUnit();
+    _loadPRSettings();
+    _loadPersonalRecords();
   }
-  
+
   void _onTemplatesUpdated() {
     _loadTemplates();
   }
-  
+
   void _onFoldersUpdated() {
     _loadFolders();
   }
@@ -123,8 +134,330 @@ class WorkoutPageState extends State<WorkoutPage>
     setState(() => _showWeightInLbs = useLbs);
   }
 
+  Future<void> _loadPRSettings() async {
+    final mode = await _settingsService.getPrDisplayMode();
+    final pinned = await _settingsService.getPinnedExercises();
+    setState(() {
+      _prDisplayMode = mode;
+      _pinnedExercises = pinned;
+    });
+  }
+
   // Get the weight unit based on settings
   String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';
+
+  Future<void> _loadPersonalRecords() async {
+    try {
+      final prs = <Map<String, dynamic>>[];
+
+      // Get all workouts with exercises
+      final allWorkouts = await _workoutService.getWorkouts();
+
+      // Track best set for each exercise
+      final Map<String, Map<String, dynamic>> bestSets = {};
+
+      for (var workout in allWorkouts) {
+        for (var exercise in workout.exercises) {
+          // Clean exercise name
+          final cleanName = exercise.name
+              .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
+              .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
+              .trim();
+
+          for (var set in exercise.sets) {
+            if (!set.completed) continue;
+
+            // Calculate one-rep max estimate (Epley formula)
+            final oneRepMax = set.weight * (1 + set.reps / 30.0);
+
+            if (!bestSets.containsKey(cleanName) ||
+                oneRepMax > (bestSets[cleanName]!['oneRepMax'] as double)) {
+              bestSets[cleanName] = {
+                'exerciseName': cleanName,
+                'originalName': exercise
+                    .name, // Keep original name with API_ID or CUSTOM tag
+                'equipment': exercise.equipment,
+                'weight': set.weight,
+                'reps': set.reps,
+                'oneRepMax': oneRepMax,
+                'date': workout.date,
+              };
+            }
+          }
+        }
+      }
+
+      if (_prDisplayMode == 'pinned') {
+        // Show only pinned exercises
+        for (var exerciseName in _pinnedExercises) {
+          if (bestSets.containsKey(exerciseName)) {
+            prs.add(bestSets[exerciseName]!);
+          }
+        }
+      } else {
+        // Random mode - convert to list and sort by date (most recent first)
+        prs.addAll(bestSets.values);
+        prs.sort((a, b) {
+          try {
+            final dateA = DateFormat('yyyy-MM-dd').parse(a['date']);
+            final dateB = DateFormat('yyyy-MM-dd').parse(b['date']);
+            return dateB.compareTo(dateA);
+          } catch (_) {
+            return 0;
+          }
+        });
+
+        // For random mode, shuffle based on current date for daily variety
+        if (prs.length > 5) {
+          final now = DateTime.now();
+          final seed = now.year * 10000 + now.month * 100 + now.day;
+          final random = DateTime(seed).millisecondsSinceEpoch;
+
+          // Simple daily shuffle by rotating the list based on date
+          final rotateAmount = random % prs.length;
+          prs.addAll(prs.sublist(0, rotateAmount));
+          prs.removeRange(0, rotateAmount);
+        }
+      }
+
+      setState(() {
+        _personalRecords = prs;
+      });
+    } catch (e) {
+      debugPrint('Error loading personal records: $e');
+    }
+  }
+
+  // Build PR card from database
+  Widget _buildPRCard(int index) {
+    final pr = _personalRecords[index];
+    final exerciseName = pr['exerciseName'] as String;
+    final originalName = pr['originalName'] as String? ?? exerciseName;
+    final equipment = pr['equipment'] as String? ?? '';
+    final weight = pr['weight'] as double;
+    final reps = pr['reps'] as int;
+    final dateStr = pr['date'] as String;
+
+    // Format date
+    DateTime prDate;
+    try {
+      prDate = DateFormat('yyyy-MM-dd').parse(dateStr);
+    } catch (_) {
+      prDate = DateTime.now();
+    }
+
+    final now = DateTime.now();
+    final difference = now.difference(prDate).inDays;
+    final formattedDate = difference == 0
+        ? 'Today'
+        : difference == 1
+            ? 'Yesterday'
+            : DateFormat('MMM d').format(prDate);
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      child: Card(
+        elevation: 8,
+        color: Colors.grey[900],
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: Colors.amber.withOpacity(0.4),
+            width: 1.5,
+          ),
+        ),
+        child: InkWell(
+          onTap: () =>
+              _navigateToExerciseDetail(originalName, exerciseName, equipment),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.grey[900]!,
+                  Colors.grey[850]!,
+                  Colors.grey[900]!,
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
+            ),
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.amber.withOpacity(0.5),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.amber.withOpacity(0.2),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.emoji_events,
+                              size: 12, color: Colors.amber),
+                          SizedBox(width: 4),
+                          Text(
+                            'PR',
+                            style: TextStyle(
+                              color: Colors.amber,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      formattedDate,
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  exerciseName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    height: 1.2,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Theme.of(context).primaryColor.withOpacity(0.25),
+                        Theme.of(context).primaryColor.withOpacity(0.15),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Theme.of(context).primaryColor.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        weight > 0
+                            ? '${weight.toStringAsFixed(weight.truncateToDouble() == weight ? 0 : 1)} $_weightUnit'
+                            : 'BW',
+                        style: TextStyle(
+                          color: Theme.of(context).primaryColor,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        ' × ',
+                        style: TextStyle(
+                          color:
+                              Theme.of(context).primaryColor.withOpacity(0.7),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        '$reps',
+                        style: TextStyle(
+                          color: Theme.of(context).primaryColor,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Navigate to exercise detail page based on exercise type
+  void _navigateToExerciseDetail(
+      String originalName, String cleanName, String equipment) {
+    // Check if it's a custom exercise
+    final isCustomExercise = originalName.contains('##CUSTOM:');
+
+    // Extract API ID or Custom ID
+    String apiId = '';
+    final apiIdMatch = RegExp(r'##API_ID:([^#]+)##').firstMatch(originalName);
+    final customIdMatch =
+        RegExp(r'##CUSTOM:([^#]+)##').firstMatch(originalName);
+
+    if (apiIdMatch != null) {
+      apiId = apiIdMatch.group(1) ?? '';
+    } else if (customIdMatch != null) {
+      apiId = customIdMatch.group(1) ?? '';
+    }
+
+    if (isCustomExercise) {
+      // Navigate to custom exercise detail page
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CustomExerciseDetailPage(
+            exerciseId: apiId.isNotEmpty ? apiId : cleanName,
+            exerciseName: cleanName,
+            exerciseEquipment: equipment,
+          ),
+        ),
+      );
+    } else {
+      // Navigate to the regular exercise detail page
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ExerciseDetailPage(
+            exerciseId: apiId.isNotEmpty ? apiId : cleanName,
+          ),
+          settings: RouteSettings(
+            arguments: {
+              'exerciseName': cleanName,
+              'exerciseEquipment': equipment,
+            },
+          ),
+        ),
+      );
+    }
+  }
 
   Future<void> _loadWorkouts() async {
     setState(() {
@@ -219,6 +552,7 @@ class WorkoutPageState extends State<WorkoutPage>
       },
     );
   }
+
   Future<void> _startNewWorkout() async {
     // Check if there's an active workout already
     if (WorkoutService.activeWorkoutNotifier.value != null) {
@@ -270,7 +604,7 @@ class WorkoutPageState extends State<WorkoutPage>
     try {
       // Get time-based greeting (Morning/Afternoon/Evening)
       final greeting = Functions().getTimeOfDayDescription();
-      
+
       // Create temporary workout in memory, not in database
       final tempWorkoutId = _workoutService.createTemporaryWorkout(
         '$greeting Workout',
@@ -324,6 +658,7 @@ class WorkoutPageState extends State<WorkoutPage>
       );
     }
   }
+
   String _formatDuration(int seconds) {
     final hours = seconds ~/ 3600;
     final minutes = (seconds % 3600) ~/ 60;
@@ -336,7 +671,7 @@ class WorkoutPageState extends State<WorkoutPage>
       return '$seconds sec';
     }
   }
-  
+
   String _calculateTotalVolume(Workout workout) {
     double totalVolume = 0;
     int totalPrs = 0;
@@ -358,29 +693,47 @@ class WorkoutPageState extends State<WorkoutPage>
   // Compact custom header to replace the default AppBar
   Widget _buildCompactHeader() {
     return Container(
-      padding: const EdgeInsets.only(top: 16, left: 16, right: 8, bottom: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      padding: const EdgeInsets.only(top: 16, left: 20, right: 12, bottom: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.background,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Workouts',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, size: 24),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const WorkoutSettingsPage(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Workouts',
+                style: AppTheme.headlineLarge,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: AppTheme.borderRadiusMd,
                 ),
-              );
-            },
-            tooltip: 'Settings',
+                child: IconButton(
+                  icon: Icon(Icons.settings_outlined,
+                      size: 22, color: AppTheme.textSecondary),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const WorkoutSettingsPage(),
+                      ),
+                    );
+                  },
+                  tooltip: 'Settings',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // XP Bar
+          const Padding(
+            padding: EdgeInsets.only(right: 8),
+            child: XPBar(compact: true),
           ),
         ],
       ),
@@ -418,6 +771,42 @@ class WorkoutPageState extends State<WorkoutPage>
             ),
           ),
           const SizedBox(height: 16),
+          // PRs Section - Carousel (only show if PRs exist and mode is not 'none')
+          if (_personalRecords.isNotEmpty && _prDisplayMode != 'none') ...[
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Personal Records',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 128,
+                  child: PageView.builder(
+                    controller: PageController(viewportFraction: 0.85),
+                    padEnds: false,
+                    itemCount: _personalRecords.length > 5
+                        ? 5
+                        : _personalRecords.length,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: _buildPRCard(index),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+          ],
           // Templates section
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -492,7 +881,7 @@ class WorkoutPageState extends State<WorkoutPage>
     // Group templates by folder
     final uncategorizedTemplates =
         _templates.where((t) => t.folderId == null).toList();
-    
+
     return Column(
       children: [
         // Show folders first
@@ -1440,28 +1829,43 @@ class WorkoutPageState extends State<WorkoutPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppTheme.background,
       appBar: null,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: AppTheme.accent))
           : SafeArea(
               child: Column(
                 children: [
                   // Header with title and browse button
                   _buildCompactHeader(),
                   // Tab bar
-                  TabBar(
-                    controller: _tabController,
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    tabs: const [
-                      Tab(text: 'Workout'),
-                      Tab(text: 'History'),
-                      Tab(text: 'Exercises'),
-                      Tab(text: 'Measurements'),
-                    ],
-                    labelColor: Theme.of(context).primaryColor,
-                    unselectedLabelColor: Colors.grey,
-                    indicatorColor: Theme.of(context).primaryColor,
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: AppTheme.surfaceBorder.withOpacity(0.5),
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    child: TabBar(
+                      controller: _tabController,
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      tabs: const [
+                        Tab(text: 'Workout'),
+                        Tab(text: 'History'),
+                        Tab(text: 'Exercises'),
+                        Tab(text: 'Measurements'),
+                      ],
+                      labelColor: AppTheme.accent,
+                      unselectedLabelColor: AppTheme.textTertiary,
+                      indicatorColor: AppTheme.accent,
+                      indicatorWeight: 2,
+                      labelStyle: AppTheme.titleSmall,
+                      unselectedLabelStyle: AppTheme.titleSmall
+                          .copyWith(fontWeight: FontWeight.w400),
+                    ),
                   ),
                   // Tab content
                   Expanded(

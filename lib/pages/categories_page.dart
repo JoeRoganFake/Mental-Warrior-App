@@ -3,6 +3,9 @@ import 'package:mental_warior/models/tasks.dart';
 import 'package:mental_warior/models/categories.dart';
 import 'package:mental_warior/pages/home.dart';
 import 'package:mental_warior/services/database_services.dart';
+import 'package:mental_warior/widgets/xp_gain_bubble.dart';
+import 'package:mental_warior/widgets/level_up_animation.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 class CategoriesPage extends StatefulWidget {
   const CategoriesPage({super.key});
@@ -15,6 +18,7 @@ class _CategoriesPageState extends State<CategoriesPage>
     with TickerProviderStateMixin {
   final TaskService _taskService = TaskService();
   final CategoryService _categoryService = CategoryService();
+  final XPService _xpService = XPService();
   TabController? _tabController;
   List<Category> _categories = [];
   bool _isLoading = true;
@@ -1198,6 +1202,7 @@ class CategoryTasksView extends StatefulWidget {
 class _CategoryTasksViewState extends State<CategoryTasksView> {
   final TaskService _taskService = TaskService();
   final CompletedTaskService _completedTaskService = CompletedTaskService();
+  final XPService _xpService = XPService();
   List<Task> _tasks = [];
   List<Task> _completedTasks = [];
   bool _isLoading = true;
@@ -1392,6 +1397,28 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
 
     // Delete the original task
     await _taskService.deleteTask(task.id);
+
+    // Award XP for completing the task
+    final xpResult = await _xpService.addTaskXP();
+
+    if (mounted) {
+      // Show XP gain bubble
+      showXPGainBubble(context, xpResult['xpGained']);
+
+      // Show level up animation if leveled up
+      if (xpResult['didLevelUp'] == true) {
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            showLevelUpAnimation(
+              context,
+              newLevel: xpResult['newLevel'],
+              newRank: xpResult['userXP'].rank,
+              xpGained: xpResult['xpGained'],
+            );
+          }
+        });
+      }
+    }
 
     // Check for any pending tasks that might now be due
     final pendingTaskService = PendingTaskService();
@@ -1741,6 +1768,9 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
 
     // Remove from completed tasks
     await _completedTaskService.deleteCompTask(task.id);
+
+    // Subtract XP since task is being uncompleted
+    await _xpService.subtractTaskXP();
 
     // Refresh both lists
     _loadTasks();

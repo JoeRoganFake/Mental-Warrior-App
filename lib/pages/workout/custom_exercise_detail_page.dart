@@ -3,6 +3,7 @@ import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/pages/workout/edit_exercise_page.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 // Helper class to represent exercise history entries
 class ExerciseHistoryEntry {
@@ -74,18 +75,6 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
   }
 
   // Helper method to get set type label
-  String _getSetTypeLabel(SetType setType) {
-    switch (setType) {
-      case SetType.warmup:
-        return 'Warm-up';
-      case SetType.dropset:
-        return 'Drop Set';
-      case SetType.failure:
-        return 'Failure';
-      case SetType.normal:
-        return '';
-    }
-  }
 
   @override
   void dispose() {

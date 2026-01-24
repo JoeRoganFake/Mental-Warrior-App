@@ -804,26 +804,6 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
     );
   }
 
-  Widget _buildUnitChip(String unit, String selectedUnit, Function(String) onTap) {
-    final isSelected = unit == selectedUnit;
-    return GestureDetector(
-      onTap: () => onTap(unit),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? _primaryColor : const Color(0xFF303136),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          unit,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
-    );
-  }
 
   void _showMeasurementHistory(MuscleType muscleType) {
     Navigator.push(

@@ -11,6 +11,7 @@ import 'package:mental_warior/pages/categories_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/quote_service.dart';
 import 'package:mental_warior/utils/functions.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 import 'package:mental_warior/models/tasks.dart';
 import 'dart:isolate';
 import 'package:mental_warior/pages/meditation.dart';
@@ -18,6 +19,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:mental_warior/services/background_task_manager.dart';
 import 'package:mental_warior/pages/workout/workout_page.dart';
 import 'package:mental_warior/widgets/active_workout_bar.dart';
+import 'package:mental_warior/widgets/xp_bar.dart';
+import 'package:mental_warior/widgets/level_up_animation.dart';
+import 'package:mental_warior/widgets/xp_gain_bubble.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -43,6 +47,7 @@ class HomePageState extends State<HomePage>
   final HabitService _habitService = HabitService();
   final GoalService _goalService = GoalService();
   final BookService _bookServiceLib = BookService();
+  final XPService _xpService = XPService();
   Map<int, bool> taskDeletedState = {};
   static const String isolateName = 'background_task_port';
   final ReceivePort _receivePort = ReceivePort();
@@ -68,6 +73,15 @@ class HomePageState extends State<HomePage>
     });
 
     _loadStoredQuote();
+
+    // Listen for habit updates
+    DatabaseService.habitsUpdatedNotifier.addListener(_onHabitsUpdated);
+  }
+
+  void _onHabitsUpdated() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadStoredQuote() async {
@@ -89,6 +103,7 @@ class HomePageState extends State<HomePage>
 
   @override
   void dispose() {
+    DatabaseService.habitsUpdatedNotifier.removeListener(_onHabitsUpdated);
     IsolateNameServer.removePortNameMapping(isolateName);
     super.dispose();
   }
@@ -112,6 +127,7 @@ class HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
+      backgroundColor: AppTheme.background,
       // Add the ActiveWorkoutBar at the bottom of the screen
       // It will automatically show only when a workout is active
       bottomSheet: ValueListenableBuilder<Map<String, dynamic>?>(
@@ -124,10 +140,11 @@ class HomePageState extends State<HomePage>
       ),
       floatingActionButton: _currentIndex == 0
           ? FloatingActionButton(
-              splashColor: Colors.blue,
+              splashColor: AppTheme.accent,
               onPressed: () {
                 showMenu(
                   context: context,
+                  color: AppTheme.surface,
                   position: RelativeRect.fromLTRB(
                     MediaQuery.of(context).size.width - 5,
                     MediaQuery.of(context).size.height - 250,
@@ -137,88 +154,99 @@ class HomePageState extends State<HomePage>
                   items: [
                     PopupMenuItem<String>(
                       value: 'task',
-                      child: Text('Task'),
+                      child: Text('Task', style: AppTheme.bodyMedium),
                       onTap: () => taskFormDialog(context),
                     ),
                     PopupMenuItem<String>(
                       value: 'habit',
-                      child: Text('Habit',
-                          style: TextStyle(
-                              color: const Color.fromARGB(255, 107, 107, 107))),
+                      child: Text('Habit', style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary)),
                       onTap: () => habitFormDialog(),
                     ),
                     PopupMenuItem<String>(
                       value: 'goal',
                       child: Text(
                         'Long Term Goal',
-                        style: TextStyle(
-                            color: const Color.fromARGB(255, 107, 107, 107)),
+                        style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
                       ),
                       onTap: () => goalFormDialog(),
                     ),
                     PopupMenuItem<String>(
                       value: 'book',
-                      child: Text('Book'),
+                      child: Text('Book', style: AppTheme.bodyMedium),
                       onTap: () => bookFormDialog(context),
                     ),
                   ],
                 );
               },
-              backgroundColor: const Color.fromARGB(255, 103, 113, 121),
+              backgroundColor: AppTheme.accent,
               child: const Icon(
                 Icons.add,
                 color: Colors.white,
               ),
             )
           : null,
-      backgroundColor: Colors.white,
       body: MediaQuery.removePadding(
         context: context,
         removeTop: true,
         child:
             _getCurrentPage(), // Use the method instead of _pages[_currentIndex]
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          // If we're returning to Home tab from another tab, force refresh data
-          if (_currentIndex != 0 && index == 0) {
-            // First update the index
-            setState(() {
-              _currentIndex = index;
-            });
-            // Then force a rebuild of the home content
-            setState(() {});
-          } else {
-            // Normal tab change
-            setState(() {
-              _currentIndex = index;
-            });
-          }
-        },
-        items: [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home,
-                color: _currentIndex == 0 ? Colors.blue : Colors.grey),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.self_improvement,
-                color: _currentIndex == 1 ? Colors.blue : Colors.grey),
-            label: 'Meditation',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.category,
-                color: _currentIndex == 2 ? Colors.blue : Colors.grey),
-            label: 'Tasks',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.fitness_center,
-                color: _currentIndex == 3 ? Colors.blue : Colors.grey),
-            label: 'Workout',
-          ),
-        ],
-        type: BottomNavigationBarType.fixed, // Required for more than 3 items
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surface,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: AppTheme.surface,
+          selectedItemColor: AppTheme.accent,
+          unselectedItemColor: AppTheme.textSecondary,
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            // If we're returning to Home tab from another tab, force refresh data
+            if (_currentIndex != 0 && index == 0) {
+              // First update the index
+              setState(() {
+                _currentIndex = index;
+              });
+              // Then force a rebuild of the home content
+              setState(() {});
+            } else {
+              // Normal tab change
+              setState(() {
+                _currentIndex = index;
+              });
+            }
+          },
+          items: [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home,
+                  color: _currentIndex == 0 ? AppTheme.accent : AppTheme.textSecondary),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.self_improvement,
+                  color: _currentIndex == 1 ? AppTheme.accent : AppTheme.textSecondary),
+              label: 'Meditation',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.category,
+                  color: _currentIndex == 2 ? AppTheme.accent : AppTheme.textSecondary),
+              label: 'Tasks',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.fitness_center,
+                  color: _currentIndex == 3 ? AppTheme.accent : AppTheme.textSecondary),
+              label: 'Workout',
+            ),
+          ],
+          type: BottomNavigationBarType.fixed, // Required for more than 3 items
+        ),
       ),
     );
   }
@@ -1849,18 +1877,52 @@ class HomePageState extends State<HomePage>
         future: _taskService.getTasks(),
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(child: Text("No tasks yet"));
+            return Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.surface.withOpacity(0.5),
+                borderRadius: AppTheme.borderRadiusMd,
+                border: Border.all(
+                  color: AppTheme.textSecondary.withOpacity(0.1),
+                  width: 1,
+                ),
+              ),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.check_circle_outline,
+                      color: AppTheme.textSecondary.withOpacity(0.3),
+                      size: 32,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "No tasks yet",
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
           return Column(
             children: snapshot.data!.map<Widget>((task) {
               return Padding(
-                padding: const EdgeInsets.all(6.0),
+                padding: const EdgeInsets.only(bottom: 8.0),
                 child: GestureDetector(
                   child: Container(
                     width: double.infinity,
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      color: const Color.fromARGB(255, 119, 119, 119),
+                      borderRadius: AppTheme.borderRadiusMd,
+                      color: AppTheme.surface,
+                      boxShadow: AppTheme.shadowSm,
+                      border: Border.all(
+                        color: AppTheme.accent.withOpacity(0.1),
+                        width: 1,
+                      ),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1920,7 +1982,10 @@ class HomePageState extends State<HomePage>
                               await Future.delayed(
                                   const Duration(milliseconds: 250));
 
-                              if (value == true) {
+                              if (value == false) {
+                                // Task is being unchecked - subtract XP
+                                await _xpService.subtractTaskXP();
+                              } else if (value == true) {
                                 // Check if this task has repeating functionality
                                 String? nextDeadlineStr;
                                 if (task.repeatFrequency != null &&
@@ -2038,36 +2103,24 @@ class HomePageState extends State<HomePage>
                                 // Delete the original task
                                 await _taskService.deleteTask(task.id);
 
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text("Task Completed"),
-                                    action: SnackBarAction(
-                                      label: "UNDO",
-                                      onPressed: () {
-                                        ScaffoldMessenger.of(context)
-                                            .hideCurrentSnackBar();
-                                        _taskService.addTask(
-                                          task.label,
-                                          task.deadline,
-                                          task.description,
-                                          task.category,
-                                          repeatFrequency: task.repeatFrequency,
-                                          repeatInterval: task.repeatInterval,
-                                          repeatEndType: task.repeatEndType,
-                                          repeatEndDate: task.repeatEndDate,
-                                          repeatOccurrences:
-                                              task.repeatOccurrences,
-                                        );
-                                        _completedTaskService
-                                            .deleteCompTask(task.id);
-                                        setState(() {});
-                                      },
-                                      textColor: Colors.white,
-                                    ),
-                                    duration: Duration(seconds: 2),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
-                                );
+                                // Award XP for completing the task
+                                final xpResult = await _xpService.addTaskXP();
+
+                                // Show XP gain bubble
+                                showXPGainBubble(context, xpResult['xpGained']);
+
+                                // Show level up animation if leveled up
+                                if (xpResult['didLevelUp'] == true) {
+                                  Future.delayed(
+                                      const Duration(milliseconds: 300), () {
+                                    showLevelUpAnimation(
+                                      context,
+                                      newLevel: xpResult['newLevel'],
+                                      newRank: xpResult['userXP'].rank,
+                                      xpGained: xpResult['xpGained'],
+                                    );
+                                  });
+                                }
                               }
                               setState(() {});
                             },
@@ -2094,14 +2147,66 @@ class HomePageState extends State<HomePage>
       future: _habitService.getHabits(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return Center(child: Text("No habits yet"));
+          return Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.surface.withOpacity(0.5),
+              borderRadius: AppTheme.borderRadiusMd,
+              border: Border.all(
+                color: AppTheme.textSecondary.withOpacity(0.1),
+                width: 1,
+              ),
+            ),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.repeat_rounded,
+                    color: AppTheme.textSecondary.withOpacity(0.3),
+                    size: 32,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "No habits yet",
+                    style: AppTheme.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
 
         List<Widget> habitWidgets = snapshot.data!
             .map<Widget>((habit) => GestureDetector(
                   onHorizontalDragStart: (details) async {
-                    await _habitService.updateHabitStatus(
-                        habit.id, habit.status == 0 ? 1 : 0);
+                    final newStatus = habit.status == 0 ? 1 : 0;
+                    await _habitService.updateHabitStatus(habit.id, newStatus);
+
+                    if (newStatus == 1) {
+                      // Habit is being completed - award XP
+                      final xpResult = await _xpService.addHabitXP();
+
+                      // Show XP gain bubble
+                      showXPGainBubble(context, xpResult['xpGained']);
+
+                      // Show level up animation if leveled up
+                      if (xpResult['didLevelUp'] == true) {
+                        Future.delayed(const Duration(milliseconds: 300), () {
+                          showLevelUpAnimation(
+                            context,
+                            newLevel: xpResult['newLevel'],
+                            newRank: xpResult['userXP'].rank,
+                            xpGained: xpResult['xpGained'],
+                          );
+                        });
+                      }
+                    } else {
+                      // Habit is being unchecked - subtract XP
+                      await _xpService.subtractHabitXP();
+                    }
+
                     setState(() {});
                   },
                   onVerticalDragEnd: (details) => setState(() {}),
@@ -2158,19 +2263,17 @@ class HomePageState extends State<HomePage>
   }
 
   Widget _goalList() {
-    return Container(
-      decoration: BoxDecoration(border: Border.all()),
-      child: FutureBuilder(
-        future: _goalService.getGoals(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(child: Text("No goals yet"));
-          }
+    return FutureBuilder(
+      future: _goalService.getGoals(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return const SizedBox.shrink();
+        }
 
-          List<Goal> goals = snapshot.data!;
+        List<Goal> goals = snapshot.data!;
 
-          return Column(
-            children: goals.map((goal) {
+        return Column(
+          children: goals.map((goal) {
               DateTime deadline;
 
               try {
@@ -2187,16 +2290,48 @@ class HomePageState extends State<HomePage>
                 onTap: () {
                   _showAchievementDialog(context, goal);
                 },
-                child: Column(
-                  children: [
-                    Text(
-                      goal.label,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 24,
-                      ),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: AppTheme.borderRadiusMd,
+                    boxShadow: AppTheme.shadowSm,
+                    border: Border.all(
+                      color: AppTheme.warning.withOpacity(0.3),
+                      width: 1,
                     ),
-                    StreamBuilder(
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: AppTheme.warning.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Icon(
+                              Icons.emoji_events_rounded,
+                              color: AppTheme.warning,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              goal.label,
+                              style: AppTheme.headlineSmall.copyWith(
+                                fontSize: 18,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      StreamBuilder(
                       stream: Stream.periodic(Duration(seconds: 1), (_) {
                         return deadline.difference(DateTime.now());
                       }),
@@ -2206,8 +2341,11 @@ class HomePageState extends State<HomePage>
                         Duration remaining = snapshot.data!;
                         if (remaining.isNegative) {
                           return Text(
-                            "Deadline Passed!",
-                            style: TextStyle(color: Colors.red),
+                            "Goal Overdue!",
+                            style: AppTheme.bodyMedium.copyWith(
+                              color: AppTheme.error,
+                              fontWeight: FontWeight.bold,
+                            ),
                           );
                         }
 
@@ -2216,21 +2354,33 @@ class HomePageState extends State<HomePage>
                         int minutes = remaining.inMinutes % 60;
                         int seconds = remaining.inSeconds % 60;
 
-                        return Text(
-                          "$days days, $hours h, $minutes m, $seconds s",
-                          style: TextStyle(color: Colors.grey),
+                        return Row(
+                          children: [
+                            Icon(
+                              Icons.access_time_rounded,
+                              size: 16,
+                              color: AppTheme.accent,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              "$days days, $hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}",
+                              style: AppTheme.bodyMedium.copyWith(
+                                color: AppTheme.accent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         );
                       },
                     ),
-                    Divider(),
-                  ],
+                    ],
+                  ),
                 ),
               );
             }).toList(),
           );
         },
-      ),
-    );
+      );
   }
 
   Widget _bookList() {
@@ -2246,42 +2396,106 @@ class HomePageState extends State<HomePage>
           final books = snapshot.data;
 
           if (books == null || books.isEmpty) {
-            return const Center(child: Text("No books yet"));
+            return const SizedBox.shrink();
           }
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                "Books Progress",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withOpacity(0.15),
+                      borderRadius: AppTheme.borderRadiusSm,
+                    ),
+                    child: Icon(
+                      Icons.menu_book_rounded,
+                      color: AppTheme.accent,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    "Reading Progress",
+                    style: AppTheme.headlineMedium.copyWith(fontSize: 20),
+                  ),
+                ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 16),
               Column(
                 children: books.map((book) {
                   return GestureDetector(
                     onTap: () => _showUpdateBookDialog(context, book),
-                    child: ListTile(
-                      title: Text(book.label),
-                      subtitle: Text(
-                          'Current Page:${book.currentPage} out of ${book.totalPages}'),
-                      trailing: SizedBox(
-                        width: 80,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                                "${(book.progress * 100).toStringAsFixed(1)}%"),
-                            const SizedBox(height: 8),
-                            LinearProgressIndicator(
-                              value: book.progress,
-                              minHeight: 8,
-                              backgroundColor: Colors.grey.shade300,
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                  Colors.blue),
-                            ),
-                          ],
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surface,
+                        borderRadius: AppTheme.borderRadiusMd,
+                        boxShadow: AppTheme.shadowSm,
+                        border: Border.all(
+                          color: AppTheme.accent.withOpacity(0.1),
+                          width: 1,
                         ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.accent.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Icon(
+                                  Icons.book,
+                                  color: AppTheme.accent,
+                                  size: 18,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  book.label,
+                                  style: AppTheme.headlineSmall.copyWith(fontSize: 16),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Page ${book.currentPage} of ${book.totalPages}',
+                                style: AppTheme.bodySmall.copyWith(
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                              Text(
+                                "${(book.progress * 100).toStringAsFixed(0)}%",
+                                style: AppTheme.bodyMedium.copyWith(
+                                  color: AppTheme.accent,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: book.progress,
+                              minHeight: 6,
+                              backgroundColor: AppTheme.textSecondary.withOpacity(0.1),
+                              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accent),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   );
@@ -2317,8 +2531,26 @@ class HomePageState extends State<HomePage>
     );
   }
 
-  Future<dynamic> _showCongratulationsDialog(BuildContext context, Goal goal) {
+  Future<dynamic> _showCongratulationsDialog(
+      BuildContext context, Goal goal) async {
     _goalService.deleteGoal(goal.id);
+
+    // Award XP for completing goal
+    final xpResult = await _xpService.addGoalXP();
+
+    // Show XP gain bubble
+    showXPGainBubble(context, xpResult['xpGained']);
+
+    // Show level up animation if leveled up
+    if (xpResult['didLevelUp'] == true) {
+      showLevelUpAnimation(
+        context,
+        newLevel: xpResult['newLevel'],
+        newRank: xpResult['userXP'].rank,
+        xpGained: xpResult['xpGained'],
+      );
+    }
+
     setState(() {});
     List<String> quotes = [
       "Success is not final, failure is not fatal: It is the courage to continue that counts. – Winston Churchill",
@@ -2342,6 +2574,15 @@ class HomePageState extends State<HomePage>
           children: [
             Text(
                 "You achieved your goal: '${goal.label}'! Keep up the great work!"),
+            SizedBox(height: 12),
+            Text(
+              "+${XPService.XP_GOAL_COMPLETE} XP",
+              style: TextStyle(
+                color: Colors.amber,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
             SizedBox(height: 20),
             Text(
               randomQuote,
@@ -2505,9 +2746,26 @@ class HomePageState extends State<HomePage>
             child: Text("Not Yet"),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
               _bookServiceLib.deleteBook(book.id);
+
+              // Award XP for completing book
+              final xpResult = await _xpService.addBookXP();
+
+              // Show XP gain bubble
+              showXPGainBubble(context, xpResult['xpGained']);
+
+              // Show level up animation if leveled up
+              if (xpResult['didLevelUp'] == true) {
+                showLevelUpAnimation(
+                  context,
+                  newLevel: xpResult['newLevel'],
+                  newRank: xpResult['userXP'].rank,
+                  xpGained: xpResult['xpGained'],
+                );
+              }
+
               setState(() {});
             },
             child: Text("Yes!"),
@@ -2525,90 +2783,233 @@ class HomePageState extends State<HomePage>
 
   Widget _buildHomePage() {
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.zero,
       children: [
-        IconButton(
-            onPressed: () async {
-              await BackgroundTaskManager.runAllTasksNow();
-              _loadStoredQuote(); // Reload the quote after running tasks
-            },
-            icon: Icon(Icons.run_circle_outlined)),
-        Padding(
-          padding: const EdgeInsets.only(top: 30),
-          child: Text(
-            "Good Productive ${function.getTimeOfDayDescription()}.",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        // Header with gradient background
+        Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppTheme.accent.withOpacity(0.15),
+                AppTheme.accent.withOpacity(0.08),
+                AppTheme.background,
+              ],
+              stops: const [0.0, 0.7, 1.0],
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 60, 20, 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      "Good Productive\n${function.getTimeOfDayDescription()}",
+                      style: AppTheme.displayLarge.copyWith(
+                        height: 1.2,
+                        fontSize: 28,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () async {
+                      await BackgroundTaskManager.runAllTasksNow();
+                      _loadStoredQuote();
+                    },
+                    icon: Icon(Icons.refresh_rounded, color: AppTheme.accent),
+                    iconSize: 28,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const XPBar(),
+            ],
           ),
         ),
-        Text(
-          " Daily Quote",
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        SizedBox(height: 20),
-        // Show loading indicator while quote is null, otherwise show the quote
-        _currentDailyQuote == null
-            ? Center(child: CircularProgressIndicator())
-            : Text(
-                '"${_currentDailyQuote!.text}"',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, fontStyle: FontStyle.italic),
+        
+        // Content area
+        Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Daily Quote Card
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: AppTheme.borderRadiusLg,
+                    boxShadow: AppTheme.shadowMd,
+                    border: Border.all(
+                      color: AppTheme.accent.withOpacity(0.1),
+                      width: 1,
+                    ),
+                  ),
+                  child: _currentDailyQuote == null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: CircularProgressIndicator(color: AppTheme.accent),
+                          ),
+                        )
+                      : Column(
+                          children: [
+                            Icon(
+                              Icons.format_quote,
+                              color: AppTheme.accent.withOpacity(0.3),
+                              size: 32,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              _currentDailyQuote!.text,
+                              textAlign: TextAlign.center,
+                              style: AppTheme.bodyLarge.copyWith(
+                                fontStyle: FontStyle.italic,
+                                height: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              "— ${_currentDailyQuote!.author}",
+                              style: AppTheme.bodySmall.copyWith(
+                                color: AppTheme.accent,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
               ),
-        SizedBox(height: 20),
-        // Show loading indicator while quote is null, otherwise show the author
-        _currentDailyQuote == null
-            ? SizedBox.shrink()
-            : Text(
-                "- ${_currentDailyQuote!.author}",
-                style: TextStyle(fontSize: 14, fontStyle: FontStyle.normal),
+              
+              const SizedBox(height: 30),
+              
+              // Goals Section
+              FutureBuilder(
+                future: _goalService.getGoals(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent.withOpacity(0.15),
+                              borderRadius: AppTheme.borderRadiusSm,
+                            ),
+                            child: Icon(
+                              Icons.flag_rounded,
+                              color: AppTheme.accent,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            "Long-Term Goals",
+                            style: AppTheme.headlineMedium.copyWith(fontSize: 20),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _goalList(),
+                      const SizedBox(height: 30),
+                    ],
+                  );
+                },
               ),
-        const SizedBox(height: 25),
-        Text(
-          "Goals",
-          textAlign: TextAlign.left,
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 20),
-        _goalList(),
-        const SizedBox(height: 25),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Flexible(
-              flex: 2,
-              child: Column(
+              
+              // Tasks and Habits Grid
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "Tasks Today",
-                    textAlign: TextAlign.start,
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  Expanded(
+                    child: _buildTasksSection(),
                   ),
-                  const SizedBox(height: 20),
-                  _taskList(),
-                  // Completed tasks are now in the categories page
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _buildHabitsSection(),
+                  ),
                 ],
+              ),
+              
+              const SizedBox(height: 30),
+              
+              // Books Section
+              _bookList(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTasksSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withOpacity(0.15),
+                borderRadius: AppTheme.borderRadiusSm,
+              ),
+              child: Icon(
+                Icons.check_circle_outline_rounded,
+                color: AppTheme.accent,
+                size: 18,
               ),
             ),
-            const SizedBox(width: 20),
-            Flexible(
-              flex: 2,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Habits",
-                    textAlign: TextAlign.start,
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 20),
-                  _habitList()
-                ],
-              ),
+            const SizedBox(width: 10),
+            Text(
+              "Tasks Today",
+              style: AppTheme.headlineSmall.copyWith(fontSize: 18),
             ),
           ],
         ),
-        const SizedBox(height: 20),
-        _bookList(),
+        const SizedBox(height: 12),
+        _taskList(),
+      ],
+    );
+  }
+
+  Widget _buildHabitsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppTheme.success.withOpacity(0.15),
+                borderRadius: AppTheme.borderRadiusSm,
+              ),
+              child: Icon(
+                Icons.repeat_rounded,
+                color: AppTheme.success,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              "Daily Habits",
+              style: AppTheme.headlineSmall.copyWith(fontSize: 18),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _habitList(),
       ],
     );
   }

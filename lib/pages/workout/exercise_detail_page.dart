@@ -5,6 +5,7 @@ import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:mental_warior/widgets/barbell_plate_calculator.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 // Helper class to represent exercise history entries
 class ExerciseHistoryEntry {
@@ -109,18 +110,6 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
   }
 
   // Helper method to get set type label
-  String _getSetTypeLabel(SetType setType) {
-    switch (setType) {
-      case SetType.warmup:
-        return 'Warm-up';
-      case SetType.dropset:
-        return 'Drop Set';
-      case SetType.failure:
-        return 'Failure';
-      case SetType.normal:
-        return '';
-    }
-  }
 
   // Show plate viewer for a specific weight
   Future<void> _showPlateViewer(double weight) async {
@@ -2000,6 +1989,9 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
     double maxWeightAdded = 0;
     int totalReps = 0;
     double totalWeightAdded = 0;
+    int bestOneRM = 0;
+    double prWeight = 0;
+    int prReps = 0;
 
     for (var historyEntry in _exerciseHistory) {
       double sessionVolume = 0;
@@ -2014,6 +2006,14 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
         if (set.weight > maxWeightAdded) {
           maxWeightAdded = set.weight;
         }
+        
+        // Calculate 1RM for PR tracking
+        int oneRM = _calculateOneRM(set.weight, set.reps);
+        if (oneRM > bestOneRM) {
+          bestOneRM = oneRM;
+          prWeight = set.weight;
+          prReps = set.reps;
+        }
       }
       if (sessionVolume > maxVolumeAdded) {
         maxVolumeAdded = sessionVolume;
@@ -2025,6 +2025,120 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Current PR Section (Featured)
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFFFF9500).withValues(alpha: 0.15),
+                  const Color(0xFFFF9500).withValues(alpha: 0.05),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFFFF9500).withValues(alpha: 0.4),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF9500).withValues(alpha: 0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF9500).withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.emoji_events,
+                        color: Color(0xFFFF9500),
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'CURRENT PR',
+                      style: TextStyle(
+                        color: Color(0xFFFF9500),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      '$bestOneRM',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 48,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -1,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _weightUnit,
+                      style: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Est. 1RM',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    prWeight > 0
+                        ? '${prWeight.toStringAsFixed(prWeight.truncateToDouble() == prWeight ? 0 : 1)} $_weightUnit × $prReps reps'
+                        : '$prReps reps',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
           // Personal Records Section
           Container(
             padding: const EdgeInsets.all(20),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mental_warior/pages/home.dart';
 import 'package:mental_warior/pages/meditation.dart';
 import 'package:mental_warior/pages/categories_page.dart';
@@ -8,6 +9,7 @@ import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/background_task_manager.dart';
 import 'package:mental_warior/services/notification_service.dart';
 import 'package:mental_warior/services/foreground_service.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 // Initialize FlutterLocalNotificationsPlugin
@@ -87,10 +89,15 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Apply system UI overlay style for the dark theme
+    AppTheme.setSystemUIOverlayStyle();
+    
     return MaterialApp(
       navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(fontFamily: "Poppins"),
+      theme: AppTheme.darkTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.dark,
       home: SplashScreen(),
       routes: {
         '/home': (context) => HomePage(),

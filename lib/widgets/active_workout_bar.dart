@@ -5,6 +5,7 @@ import 'package:mental_warior/pages/workout/workout_session_page.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 class ActiveWorkoutBar extends StatefulWidget {
   const ActiveWorkoutBar({super.key});
@@ -14,9 +15,6 @@ class ActiveWorkoutBar extends StatefulWidget {
 }
 
 class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
-  final Color _backgroundColor = const Color(0xFF26272B);
-  final Color _primaryColor = const Color(0xFF3F8EFC);
-  final Color _textColor = Colors.white;
   String _formattedTime = "00:00";
   int _elapsedSeconds = 0;
   Timer? _timer;
@@ -208,14 +206,8 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
           child: Container(
             height: 60,
             decoration: BoxDecoration(
-              color: _backgroundColor,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 5,
-                  offset: const Offset(0, -1),
-                ),
-              ],
+              color: AppTheme.surface,
+              boxShadow: AppTheme.shadowMd,
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -225,12 +217,12 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: _primaryColor.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
+                      color: AppTheme.accent.withOpacity(0.2),
+                      borderRadius: AppTheme.borderRadiusSm,
                     ),
                     child: Icon(
                       Icons.fitness_center,
-                      color: _primaryColor,
+                      color: AppTheme.accent,
                       size: 20,
                     ),
                   ),
@@ -244,11 +236,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                       children: [
                         Text(
                           workoutName,
-                          style: TextStyle(
-                            color: _textColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
+                          style: AppTheme.labelLarge,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),                        Row(
@@ -275,7 +263,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                                   isPaused
                                       ? Icons.hourglass_empty
                                       : Icons.hourglass_bottom,
-                                  color: Colors.orange,
+                                  color: AppTheme.warning,
                                   size: 14,
                                 );
                               }
@@ -283,7 +271,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                               // Default workout timer icon
                               return Icon(
                                 Icons.timer,
-                                color: _primaryColor,
+                                color: AppTheme.accent,
                                 size: 14,
                               );
                             }),
@@ -373,7 +361,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                                 return Text(
                                   displayText,
                                   style: TextStyle(
-                                    color: Colors.orange,
+                                    color: AppTheme.warning,
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -393,7 +381,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                                         strokeWidth: 1.5,
                                         valueColor:
                                             AlwaysStoppedAnimation<Color>(
-                                          _textColor.withOpacity(0.6),
+                                          AppTheme.textSecondary,
                                         ),
                                       ),
                                     ),
@@ -401,7 +389,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                                     Text(
                                       'Loading...',
                                       style: TextStyle(
-                                        color: _textColor.withOpacity(0.6),
+                                        color: AppTheme.textSecondary,
                                         fontSize: 11,
                                         fontStyle: FontStyle.italic,
                                       ),
@@ -412,7 +400,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                               return Text(
                                 _formattedTime,
                                 style: TextStyle(
-                                  color: _textColor.withOpacity(0.8),
+                                  color: AppTheme.textSecondary,
                                   fontSize: 12,
                                   fontWeight: _timer != null
                                       ? FontWeight.bold
@@ -426,7 +414,7 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                                 width: 6,
                                 height: 6,
                                 decoration: BoxDecoration(
-                                  color: Colors.green,
+                                  color: AppTheme.success,
                                   shape: BoxShape.circle,
                                 ),
                               ),
@@ -456,10 +444,12 @@ class _ActiveWorkoutBarState extends State<ActiveWorkoutBar> {
                         ),
                       );
                     },
-                    icon: const Icon(Icons.arrow_upward, size: 16),
-                    label: const Text('Continue'),
+                    icon: Icon(Icons.arrow_upward,
+                        size: 16, color: AppTheme.accent),
+                    label: Text('Continue',
+                        style: TextStyle(color: AppTheme.accent)),
                     style: TextButton.styleFrom(
-                      foregroundColor: _primaryColor,
+                      foregroundColor: AppTheme.accent,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                     ),
                   ),

@@ -86,19 +86,6 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
     }
   }
 
-  // Helper method to get set type label
-  String _getSetTypeLabel(SetType setType) {
-    switch (setType) {
-      case SetType.warmup:
-        return 'Warm-up';
-      case SetType.dropset:
-        return 'Drop Set';
-      case SetType.failure:
-        return 'Failure';
-      case SetType.normal:
-        return '';
-    }
-  }
 
   // Helper method to check if an exercise uses plates (barbell, ez-curl bar, trap bar, smith machine)
   bool _exerciseUsesPlates(String equipment) {

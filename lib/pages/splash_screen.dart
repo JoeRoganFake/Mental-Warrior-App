@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 import 'home.dart';
 import '../services/background_task_manager.dart';
 
@@ -14,7 +15,8 @@ class SplashScreen extends StatefulWidget {
 class SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
-  late Animation<double> _animation;
+  late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
   bool _isLoading = true;
 
   @override
@@ -24,12 +26,19 @@ class SplashScreenState extends State<SplashScreen>
     // Setup animation for the logo
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 800),
     );
 
-    _animation = CurvedAnimation(
+    _fadeAnimation = CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeInOut,
+      curve: Curves.easeOutCubic,
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeOutCubic,
+      ),
     );
 
     _animationController.forward();
@@ -41,9 +50,16 @@ class SplashScreenState extends State<SplashScreen>
       });
 
       // Navigate to home page after data is loaded
-      Timer(const Duration(milliseconds: 500), () {
+      Timer(const Duration(milliseconds: 600), () {
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => HomePage()),
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => HomePage(),
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 400),
+          ),
         );
       });
     });
@@ -79,41 +95,90 @@ class SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF9F9F9), // Light soft background
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Elegant text
-              FadeTransition(
-                opacity: _animation,
-                child: const Text(
-                  "Mental Warrior",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF222222), // Very dark grey, not pure black
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 40),
-
-              // Simple loading indicator
-              if (_isLoading)
+      backgroundColor: AppTheme.background,
+      body: Container(
+        decoration: AppTheme.gradientBackground(),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Logo/Icon with glow effect
                 FadeTransition(
-                  opacity: _animation,
-                  child: const CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                        Color(0xFF3A86FF)), // Soft blue
-                    strokeWidth: 3,
+                  opacity: _fadeAnimation,
+                  child: ScaleTransition(
+                    scale: _scaleAnimation,
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        gradient: AppTheme.accentGradient,
+                        borderRadius: AppTheme.borderRadiusXl,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.accent.withOpacity(0.4),
+                            blurRadius: 30,
+                            spreadRadius: 5,
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.psychology_outlined,
+                        size: 50,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
-            ],
+
+                const SizedBox(height: 32),
+
+                // App name
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Text(
+                    "Mental Warrior",
+                    textAlign: TextAlign.center,
+                    style: AppTheme.displayMedium.copyWith(
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                // Tagline
+                FadeTransition(
+                  opacity: _fadeAnimation,
+                  child: Text(
+                    "Build discipline. Grow stronger.",
+                    textAlign: TextAlign.center,
+                    style: AppTheme.bodyMedium.copyWith(
+                      color: AppTheme.textTertiary,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 48),
+
+                // Loading indicator
+                if (_isLoading)
+                  FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppTheme.accent.withOpacity(0.8),
+                        ),
+                        strokeWidth: 3,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),

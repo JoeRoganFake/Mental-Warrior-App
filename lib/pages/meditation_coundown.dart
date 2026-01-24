@@ -6,6 +6,10 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:mental_warior/main.dart';
 import 'package:mental_warior/pages/home.dart';
 import 'package:mental_warior/services/database_services.dart';
+import 'package:mental_warior/models/habits.dart';
+import 'package:mental_warior/utils/app_theme.dart';
+import 'package:mental_warior/widgets/level_up_animation.dart';
+import 'package:mental_warior/widgets/xp_gain_bubble.dart';
 
 class MeditationCountdownScreen extends StatefulWidget {
   static MeditationCountdownScreenState? currentState;
@@ -217,11 +221,69 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
   }
 
   void completeMeditation() async {
-    final habit = await habits.getHabitByLabel("meditation");
-    if (habit != null && habit.status == 0) {
-      await habits.updateHabitStatusByLabel("meditation", 1);
+    // Get all habits to check available labels
+    final allHabits = await habits.getHabits();
+    print(
+        'All habits: ${allHabits.map((h) => '${h.label} (status: ${h.status})').toList()}');
+
+    // Try to find meditation habit with case-insensitive search
+    var meditationHabit = allHabits.firstWhere(
+      (h) => h.label.toLowerCase() == 'meditation',
+      orElse: () => allHabits.firstWhere(
+        (h) => h.label.toLowerCase().contains('meditation'),
+        orElse: () => Habit(id: -1, label: '', status: -1, description: ''),
+      ),
+    );
+
+    print(
+        'Found meditation habit: ${meditationHabit.label} (id: ${meditationHabit.id}, status: ${meditationHabit.status})');
+
+    bool habitCompleted = false;
+    if (meditationHabit.id != -1 && meditationHabit.status == 0) {
+      await habits.updateHabitStatus(meditationHabit.id, 1);
+      // Notify listeners that habits have been updated
+      DatabaseService.habitsUpdatedNotifier.value =
+          !DatabaseService.habitsUpdatedNotifier.value;
+      habitCompleted = true;
+      print('Meditation habit marked as completed!');
+    } else {
+      print('Meditation habit not found or already completed');
     }
+
+    // Award XP based on meditation duration
+    final xpService = XPService();
+    final xpResult = await xpService.addMeditationXP(widget.duration);
+
     if (mounted) {
+      // Show habit completion notification if habit was marked
+      if (habitCompleted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✓ Meditation habit completed!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        // Small delay to show snackbar before navigation
+        await Future.delayed(Duration(milliseconds: 500));
+      }
+
+      // Show XP gain bubble
+      showXPGainBubble(context, xpResult['xpGained']);
+
+      // Show level up animation if leveled up
+      if (xpResult['didLevelUp'] == true) {
+        showLevelUpAnimation(
+          context,
+          newLevel: xpResult['newLevel'],
+          newRank: xpResult['userXP'].rank,
+          xpGained: xpResult['xpGained'],
+        );
+        // Delay navigation to show animation
+        await Future.delayed(const Duration(milliseconds: 2500));
+      }
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => HomePage()),
@@ -255,23 +317,35 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Terminate Meditation'),
-          content: Text('Are you sure you want to terminate the meditation?'),
+          backgroundColor: AppTheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusXl),
+          title: Text('End Session?', style: AppTheme.headlineSmall),
+          content: Text(
+            'Are you sure you want to end this meditation session early?',
+            style: AppTheme.bodyMedium,
+          ),
           actions: [
             TextButton(
               onPressed: () {
                 isTerminateDialogOpen = false;
-                Navigator.of(context).pop(); // Close the dialog
+                Navigator.of(context).pop();
               },
-              child: Text('Cancel'),
+              child: Text('Continue',
+                  style: TextStyle(color: AppTheme.textSecondary)),
             ),
-            TextButton(
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.error,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: AppTheme.borderRadiusMd),
+              ),
               onPressed: () {
                 isTerminateDialogOpen = false;
-                Navigator.of(context).pop(); // Close the dialog
-                terminateMeditation(); // Terminate the meditation
+                Navigator.of(context).pop();
+                terminateMeditation();
               },
-              child: Text('Terminate'),
+              child: Text('End Session'),
             ),
           ],
         );
@@ -289,69 +363,180 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
         return true;
       },
       child: Scaffold(
+        backgroundColor: AppTheme.background,
         appBar: AppBar(
-          title: Text("Meditation Timer"),
+          backgroundColor: AppTheme.background,
+          title: Text("Meditation", style: AppTheme.headlineMedium),
           centerTitle: true,
           automaticallyImplyLeading: false,
+          elevation: 0,
         ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              RepaintBoundary(
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    SizedBox(
-                      width: 400,
-                      height: 400,
-                      child: CircularProgressIndicator(
-                        backgroundColor:
-                            const Color.fromARGB(255, 197, 197, 197),
-                        value: remainingSeconds / (widget.duration * 60),
-                        strokeWidth: 10,
+        body: Container(
+          decoration: AppTheme.gradientBackground(),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Meditation mode indicator
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accent.withOpacity(0.15),
+                    borderRadius: AppTheme.borderRadiusFull,
+                    border: Border.all(color: AppTheme.accent.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    widget.mode.toUpperCase(),
+                    style: AppTheme.labelMedium.copyWith(
+                      color: AppTheme.accent,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 48),
+
+                // Timer circle
+                RepaintBoundary(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Glow effect
+                      Container(
+                        width: 280,
+                        height: 280,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.accent.withOpacity(0.2),
+                              blurRadius: 60,
+                              spreadRadius: 10,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Text(
-                      "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
-                      style:
-                          TextStyle(fontSize: 50, fontWeight: FontWeight.bold),
-                    ),
+                      // Progress ring
+                      SizedBox(
+                        width: 260,
+                        height: 260,
+                        child: CircularProgressIndicator(
+                          backgroundColor: AppTheme.surfaceBorder,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(AppTheme.accent),
+                          value: remainingSeconds / (widget.duration * 60),
+                          strokeWidth: 8,
+                          strokeCap: StrokeCap.round,
+                        ),
+                      ),
+                      // Time display
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
+                            style: AppTheme.displayLarge.copyWith(
+                              fontSize: 56,
+                              fontWeight: FontWeight.w300,
+                              letterSpacing: 2,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            remainingSeconds > 0 ? "remaining" : "complete",
+                            style: AppTheme.bodySmall.copyWith(
+                              color: AppTheme.textTertiary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 64),
+
+                // Control buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (remainingSeconds > 0) ...[
+                      // Pause/Resume button
+                      _buildControlButton(
+                        icon: isPaused
+                            ? Icons.play_arrow_rounded
+                            : Icons.pause_rounded,
+                        color: isPaused ? AppTheme.success : AppTheme.warning,
+                        onPressed: isPaused ? resumeTimer : pauseTimer,
+                        label: isPaused ? "Resume" : "Pause",
+                      ),
+                      const SizedBox(width: 32),
+                      // Stop button
+                      _buildControlButton(
+                        icon: Icons.stop_rounded,
+                        color: AppTheme.error,
+                        onPressed: showTerminateConfirmationDialog,
+                        label: "Stop",
+                      ),
+                    ] else ...[
+                      // Complete button
+                      _buildControlButton(
+                        icon: Icons.check_rounded,
+                        color: AppTheme.success,
+                        onPressed: completeMeditation,
+                        label: "Complete",
+                        large: true,
+                      ),
+                    ],
                   ],
                 ),
-              ),
-              SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (remainingSeconds > 0) ...[
-                    IconButton(
-                      icon: Icon(
-                        isPaused ? Icons.play_arrow : Icons.pause,
-                        color: isPaused ? Colors.green : Colors.orange,
-                        size: 30,
-                      ),
-                      onPressed: isPaused ? resumeTimer : pauseTimer,
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.stop, color: Colors.red),
-                      onPressed: showTerminateConfirmationDialog,
-                      iconSize: 30,
-                    ),
-                  ] else ...[
-                    IconButton(
-                      iconSize: 30,
-                      icon: Icon(Icons.check,
-                          color: const Color.fromARGB(255, 33, 243, 86)),
-                      onPressed: completeMeditation,
-                    ),
-                  ],
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildControlButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+    required String label,
+    bool large = false,
+  }) {
+    final size = large ? 72.0 : 56.0;
+    final iconSize = large ? 36.0 : 28.0;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.15),
+            shape: BoxShape.circle,
+            border: Border.all(color: color.withOpacity(0.4), width: 2),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onPressed,
+              borderRadius: BorderRadius.circular(size / 2),
+              child: Center(
+                child: Icon(icon, color: color, size: iconSize),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: AppTheme.labelSmall.copyWith(color: color),
+        ),
+      ],
     );
   }
 }

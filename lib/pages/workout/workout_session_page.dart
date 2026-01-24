@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/foreground_service.dart';
@@ -13,6 +14,7 @@ import 'package:mental_warior/pages/workout/rest_timer_page.dart';
 import 'package:mental_warior/pages/workout/workout_completion_page.dart';
 import 'package:mental_warior/pages/workout/superset_selection_page.dart';
 import 'package:mental_warior/widgets/barbell_plate_calculator.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:vibration/vibration.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -88,15 +90,15 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   final Map<int, bool> _noteEditingState = {};
   final Map<int, TextEditingController> _noteControllers = {};
 
-  // Theme colors
-  final Color _backgroundColor = Color(0xFF1A1B1E); // Dark background
-  final Color _surfaceColor = Color(0xFF26272B); // Surface for cards
-  final Color _primaryColor = Color(0xFF3F8EFC); // Blue accent
-  final Color _successColor = Color(0xFF4CAF50); // Green for success
-  final Color _dangerColor = Color(0xFFE53935); // Red for cancel/danger
-  final Color _textPrimaryColor = Colors.white; // Main text
-  final Color _textSecondaryColor = Color(0xFFBBBBBB); // Secondary text
-  final Color _inputBgColor = Color(0xFF303136); // Input background
+  // Theme colors - using AppTheme for consistency
+  final Color _backgroundColor = AppTheme.background;
+  final Color _surfaceColor = AppTheme.surface;
+  final Color _primaryColor = AppTheme.accent;
+  final Color _successColor = AppTheme.success;
+  final Color _dangerColor = AppTheme.error;
+  final Color _textPrimaryColor = AppTheme.textPrimary;
+  final Color _textSecondaryColor = AppTheme.textSecondary;
+  final Color _inputBgColor = AppTheme.surfaceLight;
 
   // Default rest time (loaded from settings)
   int _defaultRestTime = 90; // Will be updated from settings
@@ -555,7 +557,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       context: context,
       initialWeight: currentWeight,
       useLbs: _showWeightInLbs,
-      exerciseName: exercise.name, // Pass exercise name to save/load plate config
+      exerciseName:
+          exercise.name, // Pass exercise name to save/load plate config
       equipment: exercise.equipment, // Pass equipment to determine default bar
     );
 
@@ -682,7 +685,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   for (var setData in exerciseData['sets']) {
                     final setId = setData['id'] ??
                         -(DateTime.now().millisecondsSinceEpoch);
-                    
+
                     // Parse set type
                     SetType setType = SetType.normal;
                     if (setData.containsKey('setType')) {
@@ -705,7 +708,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         }
                       }
                     }
-                    
+
                     sets.add(ExerciseSet(
                       id: setId,
                       exerciseId: exerciseId,
@@ -1645,7 +1648,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             final savedRestTime =
                 await _restTimerHistoryService.getRestTime(exerciseName);
             final restTime = savedRestTime ?? _defaultRestTime;
-            
+
             await _workoutService.addSet(
               exerciseId,
               1, // Set number
@@ -1750,7 +1753,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           final savedRestTime =
               await _restTimerHistoryService.getRestTime(exerciseName);
           final restTime = savedRestTime ?? _defaultRestTime;
-          
+
           await _workoutService.addSet(
             exerciseId,
             1, // Set number
@@ -1890,7 +1893,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       final savedRestTime =
           await _restTimerHistoryService.getRestTime(exercise.name);
       final restTime = savedRestTime ?? _defaultRestTime;
-      
+
       // Add set to database - store empty fields as null in database
       final newSetId = await _workoutService.addSet(
         exerciseId,
@@ -2003,7 +2006,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 // Play a sound when completing a set (not when uncompleting)
                 if (completed) {
                   _playChimeSound();
-                  
+
                   // Save the rest timer value for this exercise if there's an active rest timer
                   if (_currentRestSetId == setId && _originalRestTime > 0) {
                     _restTimerHistoryService.saveRestTime(
@@ -3510,7 +3513,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         set.weight = setData['weight'] ?? 0;
         set.reps = setData['reps'] ?? 0;
         set.completed = setData['completed'] ?? false;
-        
+
         // Restore set type if present
         if (setData.containsKey('setType')) {
           final String? setTypeStr = setData['setType'] as String?;
@@ -4398,6 +4401,54 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
                     // Clear saved foreground service data to prevent restoration
                     await WorkoutForegroundService.clearSavedWorkoutData();
+
+                    // Mark workout habit as completed if it exists
+                    final habitService = HabitService();
+                    // Get all habits to check available labels
+                    final allHabits = await habitService.getHabits();
+                    debugPrint(
+                        'All habits: ${allHabits.map((h) => '${h.label} (status: ${h.status})').toList()}');
+
+                    // Try to find workout habit with case-insensitive search
+                    var workoutHabit = allHabits.firstWhere(
+                      (h) => h.label.toLowerCase() == 'workout',
+                      orElse: () => allHabits.firstWhere(
+                        (h) => h.label.toLowerCase().contains('workout'),
+                        orElse: () => Habit(
+                            id: -1, label: '', status: -1, description: ''),
+                      ),
+                    );
+
+                    debugPrint(
+                        'Found workout habit: ${workoutHabit.label} (id: ${workoutHabit.id}, status: ${workoutHabit.status})');
+
+                    bool habitWasCompleted = false;
+                    if (workoutHabit.id != -1 && workoutHabit.status == 0) {
+                      await habitService.updateHabitStatus(workoutHabit.id, 1);
+                      // Notify listeners that habits have been updated
+                      DatabaseService.habitsUpdatedNotifier.value =
+                          !DatabaseService.habitsUpdatedNotifier.value;
+                      habitWasCompleted = true;
+                      debugPrint('Workout habit marked as completed!');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('✓ Workout habit completed!'),
+                            backgroundColor: _successColor,
+                            behavior: SnackBarBehavior.floating,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    } else {
+                      debugPrint(
+                          'Workout habit not found or already completed');
+                    }
+
+                    // Add a small delay to allow snackbar to be visible
+                    if (habitWasCompleted && mounted) {
+                      await Future.delayed(Duration(milliseconds: 500));
+                    }
 
                     // Navigate to completion screen with the captured workout data
                     if (mounted && workoutForCompletion != null) {
