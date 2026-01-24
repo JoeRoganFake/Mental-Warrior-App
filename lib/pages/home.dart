@@ -1910,81 +1910,95 @@ class HomePageState extends State<HomePage>
           return Column(
             children: snapshot.data!.map<Widget>((task) {
               return Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
+                padding: const EdgeInsets.only(bottom: 6.0),
                 child: GestureDetector(
                   child: Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(12),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      borderRadius: AppTheme.borderRadiusMd,
-                      color: AppTheme.surface,
-                      boxShadow: AppTheme.shadowSm,
+                      borderRadius: AppTheme.borderRadiusLg,
+                      color: AppTheme.surface.withOpacity(0.6),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.accent.withOpacity(0.08),
+                          blurRadius: 12,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                       border: Border.all(
-                        color: AppTheme.accent.withOpacity(0.1),
-                        width: 1,
+                        color: AppTheme.accent.withOpacity(0.15),
+                        width: 1.5,
                       ),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center, // Add this
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
-                          flex: 4,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 12, horizontal: 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min, // Add this
-                              children: [
-                                Text(
-                                  task.label,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                  ),
-                                  softWrap: false,
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: task.deadline.isEmpty
+                                ? MainAxisAlignment.end
+                                : MainAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                task.label,
+                                style: AppTheme.bodyMedium.copyWith(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
                                 ),
-                                if (task.deadline.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Expanded(
-                                            child: Functions.whenDue(task)),
-                                        if (task.repeatFrequency != null)
-                                          Icon(
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                              if (task.deadline.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Functions.whenDue(task),
+                                      ),
+                                      if (task.repeatFrequency != null)
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(left: 8),
+                                          child: Icon(
                                             Icons.repeat,
-                                            color: Colors.white,
-                                            size: 16,
+                                            color: AppTheme.accent,
+                                            size: 10,
                                           ),
-                                      ],
-                                    ),
+                                        ),
+                                    ],
                                   ),
-                              ],
-                            ),
+                                )
+                              else
+                                SizedBox(height: 14),
+                            ],
                           ),
                         ),
                         Padding(
-                          padding: const EdgeInsets.only(right: 16),
-                          child: Checkbox(
-                            value: task.status == 1,
-                            onChanged: (value) async {
-                              setState(() {
-                                _taskService.updateTaskStatus(
-                                    task.id, value == true ? 1 : 0);
-                              });
+                            padding: const EdgeInsets.only(left: 8),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: Checkbox(
+                                value: task.status == 1,
+                                onChanged: (value) async {
+                                  setState(() {
+                                    _taskService.updateTaskStatus(
+                                        task.id, value == true ? 1 : 0);
+                                  });
 
-                              await Future.delayed(
-                                  const Duration(milliseconds: 250));
+                                  await Future.delayed(
+                                      const Duration(milliseconds: 250));
 
-                              if (value == false) {
-                                // Task is being unchecked - subtract XP
-                                await _xpService.subtractTaskXP();
+                                  if (value == false) {
+                                    // Task is being unchecked - subtract XP
+                                    await _xpService.subtractTaskXP();
                               } else if (value == true) {
                                 // Check if this task has repeating functionality
                                 String? nextDeadlineStr;
@@ -2126,7 +2140,8 @@ class HomePageState extends State<HomePage>
                             },
                           ),
                         )
-                      ],
+                    )
+                      ], 
                     ),
                   ),
                   onTap: () {
@@ -2291,45 +2306,37 @@ class HomePageState extends State<HomePage>
                   _showAchievementDialog(context, goal);
                 },
                 child: Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.only(bottom: 16),
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                   decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: AppTheme.borderRadiusMd,
-                    boxShadow: AppTheme.shadowSm,
+                  color: AppTheme.background,
+                  borderRadius: AppTheme.borderRadiusLg,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.warning.withOpacity(0.12),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                     border: Border.all(
-                      color: AppTheme.warning.withOpacity(0.3),
-                      width: 1,
+                    color: AppTheme.warning.withOpacity(0.08),
+                    width: 1.5,
                     ),
                   ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: AppTheme.warning.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Icon(
-                              Icons.emoji_events_rounded,
-                              color: AppTheme.warning,
-                              size: 18,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              goal.label,
-                              style: AppTheme.headlineSmall.copyWith(
-                                fontSize: 18,
-                              ),
-                            ),
-                          ),
-                        ],
+                    Text(
+                      goal.label,
+                      textAlign: TextAlign.center,
+                      style: AppTheme.headlineMedium.copyWith(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
                       ),
+                    ),
                       const SizedBox(height: 12),
                       StreamBuilder(
                       stream: Stream.periodic(Duration(seconds: 1), (_) {
@@ -2341,10 +2348,11 @@ class HomePageState extends State<HomePage>
                         Duration remaining = snapshot.data!;
                         if (remaining.isNegative) {
                           return Text(
-                            "Goal Overdue!",
+                            "Overdue",
                             style: AppTheme.bodyMedium.copyWith(
                               color: AppTheme.error,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
                             ),
                           );
                         }
@@ -2354,22 +2362,14 @@ class HomePageState extends State<HomePage>
                         int minutes = remaining.inMinutes % 60;
                         int seconds = remaining.inSeconds % 60;
 
-                        return Row(
-                          children: [
-                            Icon(
-                              Icons.access_time_rounded,
-                              size: 16,
-                              color: AppTheme.accent,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              "$days days, $hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}",
-                              style: AppTheme.bodyMedium.copyWith(
-                                color: AppTheme.accent,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                        return Text(
+                          "$days days · ${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}",
+                          style: AppTheme.bodyMedium.copyWith(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                            letterSpacing: 0.2,
+                          ),
                         );
                       },
                     ),
@@ -2429,15 +2429,28 @@ class HomePageState extends State<HomePage>
                   return GestureDetector(
                     onTap: () => _showUpdateBookDialog(context, book),
                     child: Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: AppTheme.surface,
-                        borderRadius: AppTheme.borderRadiusMd,
-                        boxShadow: AppTheme.shadowSm,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            AppTheme.surface,
+                            AppTheme.surface.withOpacity(0.7),
+                          ],
+                        ),
+                        borderRadius: AppTheme.borderRadiusLg,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.accent.withOpacity(0.15),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                         border: Border.all(
-                          color: AppTheme.accent.withOpacity(0.1),
-                          width: 1,
+                          color: AppTheme.accent.withOpacity(0.25),
+                          width: 1.5,
                         ),
                       ),
                       child: Column(
@@ -2446,53 +2459,102 @@ class HomePageState extends State<HomePage>
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.all(6),
+                                padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.accent.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(6),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppTheme.accent.withOpacity(0.25),
+                                      AppTheme.accent.withOpacity(0.12),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Icon(
-                                  Icons.book,
+                                  Icons.menu_book_rounded,
                                   color: AppTheme.accent,
-                                  size: 18,
+                                  size: 24,
                                 ),
                               ),
-                              const SizedBox(width: 12),
+                              const SizedBox(width: 14),
                               Expanded(
                                 child: Text(
                                   book.label,
-                                  style: AppTheme.headlineSmall.copyWith(fontSize: 16),
+                                  style: AppTheme.headlineSmall.copyWith(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Page ${book.currentPage} of ${book.totalPages}',
-                                style: AppTheme.bodySmall.copyWith(
-                                  color: AppTheme.textSecondary,
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: AppTheme.background.withOpacity(0.5),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Page ${book.currentPage} of ${book.totalPages}',
+                                      style: AppTheme.bodyMedium.copyWith(
+                                        color: AppTheme.textSecondary,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color:
+                                            AppTheme.accent.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        "${(book.progress * 100).toStringAsFixed(0)}%",
+                                        style: AppTheme.bodyMedium.copyWith(
+                                          color: AppTheme.accent,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              Text(
-                                "${(book.progress * 100).toStringAsFixed(0)}%",
-                                style: AppTheme.bodyMedium.copyWith(
-                                  color: AppTheme.accent,
-                                  fontWeight: FontWeight.bold,
+                                const SizedBox(height: 10),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.textSecondary
+                                          .withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: FractionallySizedBox(
+                                      widthFactor: book.progress,
+                                      alignment: Alignment.centerLeft,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              AppTheme.accent,
+                                              AppTheme.accent.withOpacity(0.7),
+                                            ],
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: LinearProgressIndicator(
-                              value: book.progress,
-                              minHeight: 6,
-                              backgroundColor: AppTheme.textSecondary.withOpacity(0.1),
-                              valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accent),
+                              ],
                             ),
                           ),
                         ],
@@ -2793,13 +2855,11 @@ class HomePageState extends State<HomePage>
               end: Alignment.bottomCenter,
               colors: [
                 AppTheme.accent.withOpacity(0.15),
-                AppTheme.accent.withOpacity(0.08),
                 AppTheme.background,
               ],
-              stops: const [0.0, 0.7, 1.0],
             ),
           ),
-          padding: const EdgeInsets.fromLTRB(20, 60, 20, 40),
+          padding: const EdgeInsets.fromLTRB(20, 60, 20, 30),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2827,6 +2887,7 @@ class HomePageState extends State<HomePage>
               ),
               const SizedBox(height: 20),
               const XPBar(),
+              const SizedBox(height: 15),
             ],
           ),
         ),
@@ -2896,28 +2957,18 @@ class HomePageState extends State<HomePage>
                     return const SizedBox.shrink();
                   }
                   return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppTheme.accent.withOpacity(0.15),
-                              borderRadius: AppTheme.borderRadiusSm,
-                            ),
-                            child: Icon(
-                              Icons.flag_rounded,
-                              color: AppTheme.accent,
-                              size: 20,
-                            ),
+                      Center(
+                        child: Text(
+                          "Long-Term Goals",
+                          style: AppTheme.headlineMedium.copyWith(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.3,
+                            color: AppTheme.textSecondary,
                           ),
-                          const SizedBox(width: 12),
-                          Text(
-                            "Long-Term Goals",
-                            style: AppTheme.headlineMedium.copyWith(fontSize: 20),
-                          ),
-                        ],
+                        ),
                       ),
                       const SizedBox(height: 16),
                       _goalList(),
@@ -2954,28 +3005,18 @@ class HomePageState extends State<HomePage>
 
   Widget _buildTasksSection() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppTheme.accent.withOpacity(0.15),
-                borderRadius: AppTheme.borderRadiusSm,
-              ),
-              child: Icon(
-                Icons.check_circle_outline_rounded,
-                color: AppTheme.accent,
-                size: 18,
-              ),
+        Center(
+          child: Text(
+            "Tasks Today",
+            style: AppTheme.headlineMedium.copyWith(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+              color: AppTheme.textSecondary,
             ),
-            const SizedBox(width: 10),
-            Text(
-              "Tasks Today",
-              style: AppTheme.headlineSmall.copyWith(fontSize: 18),
-            ),
-          ],
+          ),
         ),
         const SizedBox(height: 12),
         _taskList(),
