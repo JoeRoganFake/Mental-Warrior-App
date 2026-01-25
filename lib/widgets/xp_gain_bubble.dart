@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 class XPGainBubble extends StatefulWidget {
   final int xpAmount;
@@ -26,7 +27,7 @@ class _XPGainBubbleState extends State<XPGainBubble>
     super.initState();
 
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 2000),
+      duration: const Duration(milliseconds: 1000),
       vsync: this,
     );
 
@@ -93,56 +94,27 @@ class _XPGainBubbleState extends State<XPGainBubble>
             child: Transform.scale(
               scale: _scaleAnimation.value,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: widget.xpAmount >= 0
-                        ? [
-                            Colors.amber.shade400,
-                            Colors.orange.shade500,
-                          ]
-                        : [
-                            Colors.red.shade400,
-                            Colors.red.shade600,
-                          ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(20),
+                  color: AppTheme.background,
+                  borderRadius: AppTheme.borderRadiusLg,
                   boxShadow: [
                     BoxShadow(
-                      color: (widget.xpAmount >= 0 
-                          ? Colors.amber 
-                          : Colors.red).withOpacity(0.5),
+                      color: AppTheme.warning.withOpacity(0.12),
                       blurRadius: 12,
-                      spreadRadius: 2,
+                      offset: const Offset(0, 4),
                     ),
                   ],
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      widget.xpAmount >= 0 ? Icons.star : Icons.remove_circle,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${widget.xpAmount >= 0 ? '+' : ''}${widget.xpAmount} XP',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black26,
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  '${widget.xpAmount >= 0 ? '+' : ''}${widget.xpAmount} XP',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    decoration: TextDecoration.none,
+                  ),
                 ),
               ),
             ),
@@ -181,7 +153,7 @@ void showXPGainBubble(BuildContext context, int xpAmount) {
   overlay.insert(overlayEntry);
 
   // Remove the overlay after animation completes
-  Future.delayed(const Duration(milliseconds: 2000), () {
+  Future.delayed(const Duration(milliseconds: 1000), () {
     overlayEntry.remove();
   });
 }
@@ -201,7 +173,7 @@ void showXPGainBubbleAt(BuildContext context, int xpAmount, Offset position) {
   overlay.insert(overlayEntry);
 
   // Remove the overlay after animation completes
-  Future.delayed(const Duration(milliseconds: 2000), () {
+  Future.delayed(const Duration(milliseconds: 1000), () {
     overlayEntry.remove();
   });
 }

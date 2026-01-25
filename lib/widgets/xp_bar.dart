@@ -95,7 +95,7 @@ class XPBar extends StatelessWidget {
                     Icon(Icons.star, color: Colors.white, size: 16),
                     const SizedBox(width: 4),
                     Text(
-                      'Level ${userXP.level}',
+                      'Rank ${userXP.level}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,

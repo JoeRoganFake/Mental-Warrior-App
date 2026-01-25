@@ -67,7 +67,7 @@ class Functions {
           "Overdue",
           style: TextStyle(
             color: Colors.red,
-            fontSize: 12,
+            fontSize: 11,
           ),
         );
       } else if (deadline.isAtSameMomentAs(today)) {
@@ -75,7 +75,7 @@ class Functions {
           "Today",
           style: TextStyle(
             color: Colors.blue,
-            fontSize: 10,
+            fontSize: 11,
           ),
         );
       } else if (deadline.isAtSameMomentAs(tomorrow)) {
@@ -83,7 +83,7 @@ class Functions {
           "Tomorrow",
           style: TextStyle(
             color: Colors.orange,
-            fontSize: 10,
+            fontSize: 11,
           ),
           overflow: TextOverflow.ellipsis,
           softWrap: false,
@@ -94,7 +94,7 @@ class Functions {
           formattedDate,
           style: const TextStyle(
             color: Colors.white70,
-            fontSize: 10,
+            fontSize: 11,
           ),
         );
       }

@@ -49,6 +49,7 @@ class HomePageState extends State<HomePage>
   final BookService _bookServiceLib = BookService();
   final XPService _xpService = XPService();
   Map<int, bool> taskDeletedState = {};
+  Map<int, Stream<Duration>> _goalCountdownStreams = {}; // Cache for goal countdown streams
   static const String isolateName = 'background_task_port';
   final ReceivePort _receivePort = ReceivePort();
   final QuoteService _quoteService = QuoteService();
@@ -188,8 +189,16 @@ class HomePageState extends State<HomePage>
       body: MediaQuery.removePadding(
         context: context,
         removeTop: true,
-        child:
-            _getCurrentPage(), // Use the method instead of _pages[_currentIndex]
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 400),
+          transitionBuilder: (Widget child, Animation<double> animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: child,
+            );
+          },
+          child: _getCurrentPage(), // Use the method instead of _pages[_currentIndex]
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -208,20 +217,9 @@ class HomePageState extends State<HomePage>
           unselectedItemColor: AppTheme.textSecondary,
           currentIndex: _currentIndex,
           onTap: (index) {
-            // If we're returning to Home tab from another tab, force refresh data
-            if (_currentIndex != 0 && index == 0) {
-              // First update the index
-              setState(() {
-                _currentIndex = index;
-              });
-              // Then force a rebuild of the home content
-              setState(() {});
-            } else {
-              // Normal tab change
-              setState(() {
-                _currentIndex = index;
-              });
-            }
+            setState(() {
+              _currentIndex = index;
+            });
           },
           items: [
             BottomNavigationBarItem(
@@ -1032,8 +1030,7 @@ class HomePageState extends State<HomePage>
                     ],
                   ),
                 ),
-              ),
-            );
+                ));
           },
         );
       },
@@ -1914,8 +1911,9 @@ class HomePageState extends State<HomePage>
                 child: GestureDetector(
                   child: Container(
                     width: double.infinity,
+                    constraints: const BoxConstraints(minHeight: 52),
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       borderRadius: AppTheme.borderRadiusLg,
                       color: AppTheme.surface.withOpacity(0.6),
@@ -1935,13 +1933,19 @@ class HomePageState extends State<HomePage>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
+                        Container(
+                          width: 3,
+                          height: 32, // Consistent height for both
+                          decoration: BoxDecoration(
+                            color: AppTheme.accent.withOpacity(0.8),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: task.deadline.isEmpty
-                                ? MainAxisAlignment.end
-                                : MainAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
                                 task.label,
@@ -1954,29 +1958,38 @@ class HomePageState extends State<HomePage>
                                 overflow: TextOverflow.ellipsis,
                                 maxLines: 1,
                               ),
-                              if (task.deadline.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 2),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Functions.whenDue(task),
-                                      ),
-                                      if (task.repeatFrequency != null)
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(left: 8),
-                                          child: Icon(
-                                            Icons.repeat,
-                                            color: AppTheme.accent,
-                                            size: 10,
-                                          ),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: task.deadline.isNotEmpty
+                                          ? Functions.whenDue(task)
+                                          : Text(
+                                              'No deadline',
+                                              style:
+                                                  AppTheme.bodyMedium.copyWith(
+                                                fontSize: 11,
+                                                color: AppTheme.textSecondary
+                                                    .withOpacity(0.6),
+                                              ),
+                                              softWrap: false,
+                                              overflow: TextOverflow.ellipsis,
+                                              maxLines: 1,
+                                            ),
+                                    ),
+                                    if (task.repeatFrequency != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 8),
+                                        child: Icon(
+                                          Icons.repeat,
+                                          color: AppTheme.accent,
+                                          size: 10,
                                         ),
-                                    ],
-                                  ),
-                                )
-                              else
-                                SizedBox(height: 14),
+                                      ),
+                                  ],
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -1987,6 +2000,9 @@ class HomePageState extends State<HomePage>
                               height: 20,
                               child: Checkbox(
                                 value: task.status == 1,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
                                 onChanged: (value) async {
                                   setState(() {
                                     _taskService.updateTaskStatus(
@@ -2235,34 +2251,75 @@ class HomePageState extends State<HomePage>
                     habitFormDialog(add: false, habit: habit);
                   },
                   child: Padding(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.only(bottom: 9.5),
                     child: Container(
-                      padding: EdgeInsets.all(12),
+                      width: double.infinity,
+                      constraints: const BoxConstraints(minHeight: 52),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(10),
-                        color: Colors.grey.shade100,
+                        borderRadius: AppTheme.borderRadiusLg,
+                        color: habit.status == 1
+                            ? AppTheme.success.withOpacity(0.05)
+                            : AppTheme.surface.withOpacity(0.6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.success.withOpacity(0.05),
+                            blurRadius: 12,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                        border: Border.all(
+                          color: habit.status == 1
+                              ? AppTheme.success.withOpacity(0.3)
+                              : AppTheme.success.withOpacity(0.12),
+                          width: 1.5,
+                        ),
                       ),
                       child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          Flexible(
-                            child: Text(
-                              habit.label,
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: habit.status == 0
-                                    ? Color.fromARGB(255, 0, 0, 0)
-                                    : Colors.grey,
-                                decoration: habit.status == 0
-                                    ? TextDecoration.none
-                                    : TextDecoration.lineThrough,
-                                decorationThickness: 2,
-                                decorationColor:
-                                    const Color.fromARGB(255, 255, 0, 0),
-                              ),
+                          Container(
+                            width: 3,
+                            height: 32, // Consistent height for both
+                            decoration: BoxDecoration(
+                              color: habit.status == 1
+                                  ? AppTheme.success
+                                  : AppTheme.success.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(2),
                             ),
                           ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.max,
+                              children: [
+                                Text(
+                                  habit.label,
+                                  style: AppTheme.bodyMedium.copyWith(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: habit.status == 1
+                                        ? AppTheme.textSecondary
+                                        : AppTheme.textPrimary,
+                                    decoration: habit.status == 1
+                                        ? TextDecoration.lineThrough
+                                        : TextDecoration.none,
+                                    decorationColor: AppTheme.textSecondary,
+                                    decorationThickness: 2,
+                                  ),
+                                  softWrap: false,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(
+                              width: 28), // Spacer to match Tasks checkbox
                         ],
                       ),
                     ),
@@ -2287,6 +2344,10 @@ class HomePageState extends State<HomePage>
 
         List<Goal> goals = snapshot.data!;
 
+        // Clean up streams for deleted goals
+        final currentGoalIds = goals.map((g) => g.id).toSet();
+        _goalCountdownStreams.removeWhere((id, _) => !currentGoalIds.contains(id));
+
         return Column(
           children: goals.map((goal) {
               DateTime deadline;
@@ -2295,6 +2356,14 @@ class HomePageState extends State<HomePage>
                 deadline = DateTime.parse(goal.deadline.trim());
               } catch (e) {
                 return Text("Raw deadline string: ${goal.deadline}");
+              }
+
+              // Get or create cached stream for this goal
+              if (!_goalCountdownStreams.containsKey(goal.id)) {
+                _goalCountdownStreams[goal.id] = Stream.periodic(
+                  Duration(seconds: 1),
+                  (_) => deadline.difference(DateTime.now()),
+                ).asBroadcastStream();
               }
 
               return GestureDetector(
@@ -2339,9 +2408,7 @@ class HomePageState extends State<HomePage>
                     ),
                       const SizedBox(height: 12),
                       StreamBuilder(
-                      stream: Stream.periodic(Duration(seconds: 1), (_) {
-                        return deadline.difference(DateTime.now());
-                      }),
+                      stream: _goalCountdownStreams[goal.id],
                       builder: (context, snapshot) {
                         if (!snapshot.hasData) return Text("Loading...");
 
@@ -2400,164 +2467,102 @@ class HomePageState extends State<HomePage>
           }
 
           return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.accent.withOpacity(0.15),
-                      borderRadius: AppTheme.borderRadiusSm,
-                    ),
-                    child: Icon(
-                      Icons.menu_book_rounded,
-                      color: AppTheme.accent,
-                      size: 20,
-                    ),
+              Center(
+                child: Text(
+                  "Reading Progress",
+                  style: AppTheme.headlineMedium.copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                    color: AppTheme.textSecondary,
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    "Reading Progress",
-                    style: AppTheme.headlineMedium.copyWith(fontSize: 20),
-                  ),
-                ],
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Column(
                 children: books.map((book) {
                   return GestureDetector(
                     onTap: () => _showUpdateBookDialog(context, book),
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            AppTheme.surface,
-                            AppTheme.surface.withOpacity(0.7),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: AppTheme.borderRadiusLg,
+                          color: AppTheme.surface.withOpacity(0.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 12,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                          border: Border.all(
+                            color: AppTheme.textSecondary.withOpacity(0.15),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              book.label,
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Page ${book.currentPage} of ${book.totalPages}',
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontSize: 11,
+                                color: AppTheme.textSecondary.withOpacity(0.6),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.textSecondary.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: FractionallySizedBox(
+                                  widthFactor: book.progress,
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.textSecondary.withOpacity(0.7),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                "${(book.progress * 100).toStringAsFixed(0)}%",
+                                style: AppTheme.bodyMedium.copyWith(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary.withOpacity(0.8),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
-                        borderRadius: AppTheme.borderRadiusLg,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.accent.withOpacity(0.15),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                        border: Border.all(
-                          color: AppTheme.accent.withOpacity(0.25),
-                          width: 1.5,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      AppTheme.accent.withOpacity(0.25),
-                                      AppTheme.accent.withOpacity(0.12),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Icon(
-                                  Icons.menu_book_rounded,
-                                  color: AppTheme.accent,
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Text(
-                                  book.label,
-                                  style: AppTheme.headlineSmall.copyWith(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppTheme.background.withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Column(
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(
-                                      'Page ${book.currentPage} of ${book.totalPages}',
-                                      style: AppTheme.bodyMedium.copyWith(
-                                        color: AppTheme.textSecondary,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            AppTheme.accent.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        "${(book.progress * 100).toStringAsFixed(0)}%",
-                                        style: AppTheme.bodyMedium.copyWith(
-                                          color: AppTheme.accent,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Container(
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.textSecondary
-                                          .withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: FractionallySizedBox(
-                                      widthFactor: book.progress,
-                                      alignment: Alignment.centerLeft,
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              AppTheme.accent,
-                                              AppTheme.accent.withOpacity(0.7),
-                                            ],
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   );
@@ -2566,8 +2571,7 @@ class HomePageState extends State<HomePage>
             ],
           );
         },
-      ),
-    );
+        ));
   }
 
   Future<dynamic> _showAchievementDialog(BuildContext context, Goal goal) {
@@ -2947,7 +2951,7 @@ class HomePageState extends State<HomePage>
                 ),
               ),
               
-              const SizedBox(height: 30),
+              const SizedBox(height: 40),
               
               // Goals Section
               FutureBuilder(
@@ -2970,9 +2974,9 @@ class HomePageState extends State<HomePage>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
                       _goalList(),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: 50),
                     ],
                   );
                 },
@@ -2985,14 +2989,14 @@ class HomePageState extends State<HomePage>
                   Expanded(
                     child: _buildTasksSection(),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 24),
                   Expanded(
                     child: _buildHabitsSection(),
                   ),
                 ],
               ),
               
-              const SizedBox(height: 30),
+              const SizedBox(height: 50),
               
               // Books Section
               _bookList(),
@@ -3018,7 +3022,7 @@ class HomePageState extends State<HomePage>
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         _taskList(),
       ],
     );
@@ -3026,30 +3030,20 @@ class HomePageState extends State<HomePage>
 
   Widget _buildHabitsSection() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppTheme.success.withOpacity(0.15),
-                borderRadius: AppTheme.borderRadiusSm,
-              ),
-              child: Icon(
-                Icons.repeat_rounded,
-                color: AppTheme.success,
-                size: 18,
-              ),
+        Center(
+          child: Text(
+            "Daily Habits",
+            style: AppTheme.headlineMedium.copyWith(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.3,
+              color: AppTheme.textSecondary,
             ),
-            const SizedBox(width: 10),
-            Text(
-              "Daily Habits",
-              style: AppTheme.headlineSmall.copyWith(fontSize: 18),
-            ),
-          ],
+          ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         _habitList(),
       ],
     );
