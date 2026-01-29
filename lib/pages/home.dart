@@ -1591,86 +1591,195 @@ class HomePageState extends State<HomePage>
 
   Future<dynamic> habitFormDialog({bool add = true, Habit? habit}) {
     final GlobalKey<FormState> habitFormKey = GlobalKey<FormState>();
+    // For existing habits, open dialog in informational (read-only) mode
+    String originalLabel = _labelController.text;
+    String originalDescription = _descriptionController.text;
+
     return showDialog(
       context: context,
-      builder: (context) => SimpleDialog(
-        children: [
-          Form(
-            key: habitFormKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    add ? "New Habit" : "Edit Habit",
-                  ),
-                ),
-                TextFormField(
-                  controller: _labelController,
-                  autofocus: true,
-                  validator: (value) {
-                    if (value!.isEmpty || value == "") {
-                      return "     *Field Is Required";
-                    }
-                    return null;
-                  },
-                  decoration: InputDecoration(
-                      hintText: "Label",
-                      prefixIcon: const Icon(Icons.label),
-                      border: InputBorder.none),
-                ),
-                TextFormField(
-                  controller: _descriptionController,
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  decoration: InputDecoration(
-                      hintText: "Description",
-                      prefixIcon: const Icon(Icons.description),
-                      border: InputBorder.none),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (add) {
-                      if (habitFormKey.currentState!.validate()) {
-                        _habitService.addHabit(
-                          _labelController.text,
-                          _descriptionController.text,
-                        );
-                        Navigator.pop(context);
-                        setState(() {});
-                      }
-                    } else {
-                      if (habitFormKey.currentState!.validate()) {
-                        _habitService.updateHabit(
-                            habit!.id, "label", _labelController.text);
-                        _habitService.updateHabit(habit.id, "description",
-                            _descriptionController.text);
-                        Navigator.pop(context);
-                        setState(() {});
-                      }
-                    }
-                  },
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: const Icon(Icons.add_task_outlined),
+      barrierDismissible: true,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setDialogState) {
+          bool isEditing = add ? true : false;
+
+          void enterEditMode() {
+            setDialogState(() => isEditing = true);
+          }
+
+          void cancelEdit() {
+            // Revert to original values
+            _labelController.text = originalLabel;
+            _descriptionController.text = originalDescription;
+            setDialogState(() => isEditing = false);
+          }
+
+          return Dialog(
+            backgroundColor: AppTheme.surface,
+            shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+              child: Form(
+                key: habitFormKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Header row with optional Edit button
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            add ? "New Habit" : (isEditing ? "Edit Habit" : "Habit Details"),
+                            style: AppTheme.headlineMedium.copyWith(
+                              color: AppTheme.accent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        if (!add)
+                          IconButton(
+                            icon: Icon(isEditing ? Icons.close : Icons.edit, color: AppTheme.textSecondary),
+                            onPressed: () {
+                              if (isEditing) cancelEdit();
+                              else enterEditMode();
+                            },
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _labelController,
+                      readOnly: !isEditing,
+                      autofocus: add || isEditing,
+                      onTap: () {
+                        if (!isEditing) enterEditMode();
+                      },
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return "*Field is required";
+                        }
+                        return null;
+                      },
+                      style: AppTheme.bodyLarge.copyWith(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: "Label",
+                        labelStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
+                        prefixIcon: const Icon(Icons.label, color: AppTheme.accent),
+                        filled: true,
+                        fillColor: AppTheme.surfaceLight,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: AppTheme.borderRadiusMd,
+                          borderSide: BorderSide(color: AppTheme.surfaceBorder),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: AppTheme.borderRadiusMd,
+                          borderSide: BorderSide(color: AppTheme.accent, width: 1.5),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: AppTheme.borderRadiusMd,
+                          borderSide: BorderSide(color: AppTheme.error),
+                        ),
                       ),
-                      Text(
-                        add ? "Add Habit" : "Edit Habit",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(),
-                      )
-                    ],
-                  ),
-                )
-              ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _descriptionController,
+                      maxLines: null,
+                      readOnly: !isEditing,
+                      onTap: () {
+                        if (!isEditing) enterEditMode();
+                      },
+                      keyboardType: TextInputType.multiline,
+                      style: AppTheme.bodyLarge.copyWith(color: AppTheme.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: "Description",
+                        labelStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
+                        prefixIcon: const Icon(Icons.description, color: AppTheme.accent),
+                        filled: true,
+                        fillColor: AppTheme.surfaceLight,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: AppTheme.borderRadiusMd,
+                          borderSide: BorderSide(color: AppTheme.surfaceBorder),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: AppTheme.borderRadiusMd,
+                          borderSide: BorderSide(color: AppTheme.accent, width: 1.5),
+                        ),
+                        errorBorder: OutlineInputBorder(
+                          borderRadius: AppTheme.borderRadiusMd,
+                          borderSide: BorderSide(color: AppTheme.error),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Action row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              if (isEditing && !add) {
+                                // Cancel edits and revert
+                                cancelEdit();
+                              } else {
+                                Navigator.pop(context);
+                              }
+                            },
+                            child: Text(isEditing && !add ? 'Cancel' : 'Close'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.textSecondary,
+                              side: BorderSide(color: AppTheme.textSecondary.withOpacity(0.12)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (!isEditing) {
+                                enterEditMode();
+                                return;
+                              }
+
+                              // Save (add or update)
+                              if (habitFormKey.currentState!.validate()) {
+                                if (add) {
+                                  _habitService.addHabit(
+                                    _labelController.text,
+                                    _descriptionController.text,
+                                  );
+                                  Navigator.pop(context);
+                                  setState(() {});
+                                } else {
+                                  _habitService.updateHabit(habit!.id, "label", _labelController.text);
+                                  _habitService.updateHabit(habit.id, "description", _descriptionController.text);
+                                  Navigator.pop(context);
+                                  setState(() {});
+                                }
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.accent,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: Text(
+                              add ? 'Add Habit' : (isEditing ? 'Save Changes' : 'Edit'),
+                              style: AppTheme.bodyMedium.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ],
-      ),
+          );
+        });
+      },
     ).then((_) {
       Future.delayed(const Duration(milliseconds: 100), () {
         _labelController.clear();
@@ -2577,22 +2686,64 @@ class HomePageState extends State<HomePage>
   Future<dynamic> _showAchievementDialog(BuildContext context, Goal goal) {
     return showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Goal Achieved?"),
-        content: Text("Have you completed '${goal.label}' ?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context), // Close dialog
-            child: Text("Not Yet"),
+      builder: (context) => Dialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                "Goal Achieved?",
+                style: AppTheme.headlineMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                "Have you completed '${goal.label}' ?",
+                style: AppTheme.bodyLarge,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.textSecondary,
+                        side: BorderSide(color: AppTheme.textSecondary.withOpacity(0.3)),
+                        shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusMd),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      child: Text("Not Yet", style: AppTheme.bodyMedium),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accent,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusMd),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showCongratulationsDialog(context, goal);
+                      },
+                      child: Text("Yes!", style: AppTheme.bodyMedium.copyWith(color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close first dialog
-              _showCongratulationsDialog(context, goal); // Show Congrats
-            },
-            child: Text("Yes!"),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -2633,36 +2784,95 @@ class HomePageState extends State<HomePage>
 
     return showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Congratulations!"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-                "You achieved your goal: '${goal.label}'! Keep up the great work!"),
-            SizedBox(height: 12),
-            Text(
-              "+${XPService.XP_GOAL_COMPLETE} XP",
-              style: TextStyle(
-                color: Colors.amber,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-            SizedBox(height: 20),
-            Text(
-              randomQuote,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontStyle: FontStyle.italic),
-            ),
-          ],
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTheme.borderRadiusLg,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("OK"),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Honor badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.accent, width: 1.2),
+                ),
+                child: Text(
+                  "GOAL ACHIEVED",
+                  style: AppTheme.labelLarge.copyWith(
+                    color: AppTheme.accent,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                "You have completed a long-term goal.",
+                style: AppTheme.headlineMedium.copyWith(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 22,
+                  letterSpacing: 0.2,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 18),
+              Text(
+                "This accomplishment stands as a testament to your discipline and perseverance.",
+                style: AppTheme.bodyLarge.copyWith(
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w500,
+                  fontSize: 15,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.09),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  "+${XPService.XP_GOAL_COMPLETE} XP",
+                  style: AppTheme.bodyMedium.copyWith(
+                    color: AppTheme.accent,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 36),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    elevation: 0,
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    "Continue",
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -2905,6 +3115,8 @@ class HomePageState extends State<HomePage>
               // Daily Quote Card
               Center(
                 child: Container(
+                  width: double.infinity,
+                  height: 200,
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: AppTheme.surface,

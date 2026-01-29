@@ -607,19 +607,10 @@ class QuoteService {
       author: "Frank Sinatra",
     ),
     Quote(
-      text:
-          "Success is to be measured not so much by the position that one has reached in life as by the obstacles which he has overcome.",
-      author: "Booker T. Washington",
-    ),
-    Quote(
       text: "Don’t wait. The time will never be just right.",
       author: "Napoleon Hill",
     ),
-    Quote(
-      text:
-          "You cannot swim for new horizons until you have courage to lose sight of the shore.",
-      author: "William Faulkner",
-    ),
+    
     Quote(
       text: "Everything you need is already inside you.",
       author: "Unknown",
@@ -711,11 +702,6 @@ class QuoteService {
     Quote(
       text: "I find that the harder I work, the more luck I seem to have.",
       author: "Thomas Jefferson",
-    ),
-    Quote(
-      text:
-          "Believe in yourself and all that you are. Know that there is something inside you that is greater than any obstacle.",
-      author: "Christian D. Larson",
     ),
     Quote(
       text: "Do what you can with all you have, wherever you are.",
