@@ -390,6 +390,9 @@ class HabitService {
         _habitDescriptionColumnName: description,
       },
     );
+    // Notify listeners that habits have changed
+    DatabaseService.habitsUpdatedNotifier.value =
+        !DatabaseService.habitsUpdatedNotifier.value;
   }
 
   Future<List<Habit>> getHabits() async {
@@ -427,17 +430,24 @@ class HabitService {
       where: "id = ?",
       whereArgs: [id],
     );
+    // Notify listeners that habits have changed
+    DatabaseService.habitsUpdatedNotifier.value =
+        !DatabaseService.habitsUpdatedNotifier.value;
   }
 
-  void updateHabit(int id, String fieldToUpdate, String key) async {
+  Future<void> updateHabit(int id, String fieldToUpdate, String key) async {
     final db = await DatabaseService.instance.database;
 
-    db.update(
+    await db.update(
       _habitTableName,
       {fieldToUpdate: key},
       where: "id = ?",
       whereArgs: [id],
     );
+
+    // Notify listeners that habits have changed
+    DatabaseService.habitsUpdatedNotifier.value =
+        !DatabaseService.habitsUpdatedNotifier.value;
   }
 
   Future<void> resetAllHabits() async {

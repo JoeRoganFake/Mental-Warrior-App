@@ -458,152 +458,199 @@ class HomePageState extends State<HomePage>
                           ),
                         ),
                       ),
-                      // Category Selection Field
+                        // Smarter Category Selection Field
                       Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8.0, vertical: 4.0),
-                        child: InkWell(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8.0, vertical: 4.0),
+                          child: GestureDetector(
                           onTap: () async {
-                            final TextEditingController newCategoryController =
-                                TextEditingController();
+                              final TextEditingController searchController =
+                                  TextEditingController();
+                              final TextEditingController
+                                  newCategoryController =
+                                  TextEditingController();
                             Category? selected;
 
                             await showDialog(
                               context: context,
                               builder: (context) {
                                 return StatefulBuilder(
-                                  builder: (BuildContext context,
-                                      StateSetter dialogSetState) {
+                                    builder: (BuildContext context,
+                                        StateSetter dialogSetState) {
                                     return AlertDialog(
-                                      contentPadding: const EdgeInsets.fromLTRB(
-                                          12, 8, 12, 0),
-                                      backgroundColor: Colors.grey[900],
-                                      title: const Text(
-                                        "Select Category",
-                                        style: TextStyle(
-                                            color: Colors.white, fontSize: 18),
-                                      ),
+                                        backgroundColor: AppTheme.surface,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                AppTheme.borderRadiusLg),
+                                        title: Text("Select Category",
+                                            style: AppTheme.headlineMedium
+                                                .copyWith(fontSize: 18)),
                                       content: SizedBox(
-                                        width: 250,
-                                        height: 250,
+                                          width: 300,
+                                          height: 340,
                                         child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                           children: [
-                                            // New Category Input - More compact
+                                              // Search bar
+                                              TextField(
+                                                controller: searchController,
+                                                style: AppTheme.bodyMedium,
+                                                decoration: InputDecoration(
+                                                  hintText:
+                                                      "Search categories...",
+                                                  // No icon
+                                                  filled: true,
+                                                  fillColor:
+                                                      AppTheme.surfaceLight,
+                                                  contentPadding:
+                                                      const EdgeInsets
+                                                          .symmetric(
+                                                          vertical: 8,
+                                                          horizontal: 12),
+                                                  border: OutlineInputBorder(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                    borderSide: BorderSide(
+                                                        color: AppTheme
+                                                            .surfaceBorder),
+                                                  ),
+                                                ),
+                                                onChanged: (_) =>
+                                                    dialogSetState(() {}),
+                                              ),
+                                              const SizedBox(height: 8),
+                                              // New Category Input
                                             Row(
                                               children: [
                                                 Expanded(
                                                   child: TextField(
-                                                    controller:
-                                                        newCategoryController,
-                                                    style: const TextStyle(
-                                                        color: Colors.white,
-                                                        fontSize: 13),
+                                                      controller:
+                                                          newCategoryController,
+                                                      style:
+                                                          AppTheme.bodyMedium,
                                                     decoration: InputDecoration(
-                                                      hintText: "New category",
-                                                      contentPadding:
-                                                          const EdgeInsets
-                                                              .symmetric(
-                                                              horizontal: 8,
-                                                              vertical: 2),
+                                                        hintText:
+                                                            "Add new category",
+                                                        contentPadding:
+                                                            const EdgeInsets
+                                                                .symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 2),
                                                       isDense: true,
-                                                      hintStyle: TextStyle(
-                                                          color:
-                                                              Colors.grey[400],
-                                                          fontSize: 13),
-                                                      enabledBorder:
-                                                          OutlineInputBorder(
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(4),
-                                                        borderSide: BorderSide(
-                                                            color: Colors
-                                                                .grey[700]!),
+                                                        hintStyle:
+                                                            AppTheme.bodySmall,
+                                                        enabledBorder:
+                                                            OutlineInputBorder(
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(6),
+                                                          borderSide: BorderSide(
+                                                              color: AppTheme
+                                                                  .surfaceBorder),
                                                       ),
                                                     ),
                                                   ),
                                                 ),
-                                                IconButton(
-                                                  padding: EdgeInsets.zero,
-                                                  constraints:
-                                                      const BoxConstraints(),
-                                                  iconSize: 16,
-                                                  icon: const Icon(
-                                                      Icons.add_circle,
-                                                      color: Colors.white),
+                                                  IconButton(
+                                                    icon: const Icon(
+                                                        Icons.add_circle,
+                                                        color: AppTheme.accent),
                                                   onPressed: () async {
-                                                    if (newCategoryController
-                                                        .text
-                                                        .trim()
-                                                        .isNotEmpty) {
-                                                      await _categoryService
-                                                          .addCategory(
-                                                              newCategoryController
-                                                                  .text
-                                                                  .trim());
-                                                      newCategoryController
-                                                          .clear();
+                                                      if (newCategoryController
+                                                          .text
+                                                          .trim()
+                                                          .isNotEmpty) {
+                                                        await _categoryService
+                                                            .addCategory(
+                                                                newCategoryController
+                                                                    .text
+                                                                    .trim());
+                                                        newCategoryController
+                                                            .clear();
                                                       dialogSetState(() {});
                                                     }
                                                   },
                                                 ),
                                               ],
                                             ),
-                                            Divider(
-                                                color: Colors.grey[700],
-                                                height: 10),
-
-                                            // Categories List - Fixed size
+                                              const SizedBox(height: 8),
+                                              Divider(
+                                                  color: AppTheme.surfaceBorder,
+                                                  height: 10),
+                                              // Categories List
                                             Expanded(
-                                              child:
-                                                  FutureBuilder<List<Category>>(
-                                                future: _categoryService
-                                                    .getCategories(),
+                                                child: FutureBuilder<
+                                                    List<Category>>(
+                                                  future: _categoryService
+                                                      .getCategories(),
                                                 builder: (context, snapshot) {
                                                   if (!snapshot.hasData) {
-                                                    return const Center(
-                                                        child: SizedBox(
-                                                            height: 20,
-                                                            width: 20,
-                                                            child:
-                                                                CircularProgressIndicator(
-                                                                    strokeWidth:
-                                                                        2)));
-                                                  }
-
-                                                  final categories =
-                                                      snapshot.data!;
-                                                  return ListView.builder(
-                                                    padding: EdgeInsets.zero,
-                                                    itemCount:
-                                                        categories.length,
-                                                    itemBuilder:
-                                                        (context, index) {
-                                                      final category =
-                                                          categories[index];
-                                                      return ListTile(
-                                                        dense: true,
-                                                        visualDensity:
-                                                            const VisualDensity(
-                                                                horizontal: -4,
-                                                                vertical: -4),
-                                                        contentPadding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                                horizontal:
-                                                                    8.0),
-                                                        title: Text(
-                                                          category.label,
-                                                          style:
-                                                              const TextStyle(
-                                                                  color: Colors
-                                                                      .white,
-                                                                  fontSize: 13),
-                                                        ),
+                                                      return const Center(
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                                  strokeWidth:
+                                                                      2));
+                                                    }
+                                                    final categories =
+                                                        snapshot.data!;
+                                                    final filtered = searchController
+                                                            .text.isEmpty
+                                                        ? categories
+                                                        : categories
+                                                            .where((c) => c
+                                                                .label
+                                                                .toLowerCase()
+                                                                .contains(
+                                                                    searchController
+                                                                        .text
+                                                                        .toLowerCase()))
+                                                            .toList();
+                                                    if (filtered.isEmpty) {
+                                                      return Center(
+                                                          child: Text(
+                                                              "No categories found",
+                                                              style: AppTheme
+                                                                  .bodySmall));
+                                                    }
+                                                    return ListView.separated(
+                                                      itemCount:
+                                                          filtered.length,
+                                                      separatorBuilder:
+                                                          (context, index) =>
+                                                              Divider(
+                                                        color: AppTheme
+                                                            .surfaceBorder,
+                                                        thickness: 1,
+                                                        height: 0,
+                                                      ),
+                                                      itemBuilder:
+                                                          (context, index) {
+                                                        final category =
+                                                            filtered[index];
+                                                        return ListTile(
+                                                          title: Text(
+                                                              category.label,
+                                                              style: AppTheme
+                                                                  .bodyMedium
+                                                                  .copyWith(
+                                                                      color: AppTheme
+                                                                          .textPrimary)),
+                                                          shape: RoundedRectangleBorder(
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                          8)),
                                                         onTap: () {
                                                           selected = category;
-                                                          Navigator.pop(
-                                                              context);
+                                                            Navigator.pop(
+                                                                context);
                                                         },
+                                                          hoverColor: AppTheme
+                                                              .accent
+                                                              .withOpacity(
+                                                                  0.08),
                                                       );
                                                     },
                                                   );
@@ -617,8 +664,7 @@ class HomePageState extends State<HomePage>
                                   },
                                 );
                               },
-                            );
-
+                              );
                             if (selected != null) {
                               modalSetState(() {
                                 selectedCategory = selected;
@@ -626,25 +672,29 @@ class HomePageState extends State<HomePage>
                             }
                           },
                           child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 8.0, horizontal: 12.0),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 10.0, horizontal: 14.0),
                             decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey[700]!),
-                              borderRadius: BorderRadius.circular(8.0),
+                                color: AppTheme.surfaceLight,
+                                border:
+                                    Border.all(color: AppTheme.surfaceBorder),
+                                borderRadius: AppTheme.borderRadiusMd,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.accent.withOpacity(0.08),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.category,
-                                    color: Colors.white, size: 20),
-                                const SizedBox(width: 12),
-                                Text(
-                                  selectedCategory!.label,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
-                                ),
+                                  Text(selectedCategory!.label,
+                                      style: AppTheme.bodyMedium.copyWith(
+                                          color: AppTheme.textPrimary)),
                                 const Spacer(),
-                                const Icon(Icons.arrow_drop_down,
-                                    color: Colors.white),
+                                  Icon(Icons.arrow_drop_down,
+                                      color: AppTheme.accent),
                               ],
                             ),
                           ),
@@ -1600,7 +1650,7 @@ class HomePageState extends State<HomePage>
       barrierDismissible: true,
       builder: (context) {
         return StatefulBuilder(builder: (context, setDialogState) {
-          bool isEditing = add ? true : false;
+          bool isEditing = true;
 
           void enterEditMode() {
             setDialogState(() => isEditing = true);
@@ -1641,8 +1691,15 @@ class HomePageState extends State<HomePage>
                           IconButton(
                             icon: Icon(isEditing ? Icons.close : Icons.edit, color: AppTheme.textSecondary),
                             onPressed: () {
-                              if (isEditing) cancelEdit();
-                              else enterEditMode();
+                              if (isEditing) {
+                                // Revert any changes and close the dialog when canceling an edit
+                                _labelController.text = originalLabel;
+                                _descriptionController.text =
+                                    originalDescription;
+                                Navigator.of(context).pop();
+                              } else {
+                                enterEditMode();
+                              }
                             },
                           ),
                       ],
@@ -1651,7 +1708,7 @@ class HomePageState extends State<HomePage>
                     TextFormField(
                       controller: _labelController,
                       readOnly: !isEditing,
-                      autofocus: add || isEditing,
+                      autofocus: false,
                       onTap: () {
                         if (!isEditing) enterEditMode();
                       },
@@ -1687,6 +1744,7 @@ class HomePageState extends State<HomePage>
                       controller: _descriptionController,
                       maxLines: null,
                       readOnly: !isEditing,
+                      autofocus: false,
                       onTap: () {
                         if (!isEditing) enterEditMode();
                       },
@@ -1720,10 +1778,11 @@ class HomePageState extends State<HomePage>
                           child: OutlinedButton(
                             onPressed: () {
                               if (isEditing && !add) {
-                                // Cancel edits and revert
+                                // Cancel edits, revert, then close the dialog
                                 cancelEdit();
+                                Navigator.of(context).pop();
                               } else {
-                                Navigator.pop(context);
+                                Navigator.of(context).pop();
                               }
                             },
                             child: Text(isEditing && !add ? 'Cancel' : 'Close'),
