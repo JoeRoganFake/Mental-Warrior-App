@@ -49,7 +49,8 @@ class HomePageState extends State<HomePage>
   final BookService _bookServiceLib = BookService();
   final XPService _xpService = XPService();
   Map<int, bool> taskDeletedState = {};
-  Map<int, Stream<Duration>> _goalCountdownStreams = {}; // Cache for goal countdown streams
+  Map<int, Stream<Duration>> _goalCountdownStreams =
+      {}; // Cache for goal countdown streams
   static const String isolateName = 'background_task_port';
   final ReceivePort _receivePort = ReceivePort();
   final QuoteService _quoteService = QuoteService();
@@ -140,51 +141,7 @@ class HomePageState extends State<HomePage>
         },
       ),
       floatingActionButton: _currentIndex == 0
-          ? FloatingActionButton(
-              splashColor: AppTheme.accent,
-              onPressed: () {
-                showMenu(
-                  context: context,
-                  color: AppTheme.surface,
-                  position: RelativeRect.fromLTRB(
-                    MediaQuery.of(context).size.width - 5,
-                    MediaQuery.of(context).size.height - 250,
-                    20,
-                    0,
-                  ),
-                  items: [
-                    PopupMenuItem<String>(
-                      value: 'task',
-                      child: Text('Task', style: AppTheme.bodyMedium),
-                      onTap: () => taskFormDialog(context),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'habit',
-                      child: Text('Habit', style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary)),
-                      onTap: () => habitFormDialog(),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'goal',
-                      child: Text(
-                        'Long Term Goal',
-                        style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
-                      ),
-                      onTap: () => goalFormDialog(),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'book',
-                      child: Text('Book', style: AppTheme.bodyMedium),
-                      onTap: () => bookFormDialog(context),
-                    ),
-                  ],
-                );
-              },
-              backgroundColor: AppTheme.accent,
-              child: const Icon(
-                Icons.add,
-                color: Colors.white,
-              ),
-            )
+          ? _buildCustomFAB(context)
           : null,
       body: MediaQuery.removePadding(
         context: context,
@@ -197,7 +154,8 @@ class HomePageState extends State<HomePage>
               child: child,
             );
           },
-          child: _getCurrentPage(), // Use the method instead of _pages[_currentIndex]
+          child:
+              _getCurrentPage(), // Use the method instead of _pages[_currentIndex]
         ),
       ),
       bottomNavigationBar: Container(
@@ -224,22 +182,30 @@ class HomePageState extends State<HomePage>
           items: [
             BottomNavigationBarItem(
               icon: Icon(Icons.home,
-                  color: _currentIndex == 0 ? AppTheme.accent : AppTheme.textSecondary),
+                  color: _currentIndex == 0
+                      ? AppTheme.accent
+                      : AppTheme.textSecondary),
               label: 'Home',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.self_improvement,
-                  color: _currentIndex == 1 ? AppTheme.accent : AppTheme.textSecondary),
+                  color: _currentIndex == 1
+                      ? AppTheme.accent
+                      : AppTheme.textSecondary),
               label: 'Meditation',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.category,
-                  color: _currentIndex == 2 ? AppTheme.accent : AppTheme.textSecondary),
+                  color: _currentIndex == 2
+                      ? AppTheme.accent
+                      : AppTheme.textSecondary),
               label: 'Tasks',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.fitness_center,
-                  color: _currentIndex == 3 ? AppTheme.accent : AppTheme.textSecondary),
+                  color: _currentIndex == 3
+                      ? AppTheme.accent
+                      : AppTheme.textSecondary),
               label: 'Workout',
             ),
           ],
@@ -316,7 +282,8 @@ class HomePageState extends State<HomePage>
       }
     } else {
       // Reset states for new task
-      selectedCategory = defaultCategory;
+      // Only set default category if selectedCategory is not already set
+      selectedCategory ??= defaultCategory;
       _showDescription = false;
       _showDateTime = false;
       showRepeat = false;
@@ -338,343 +305,684 @@ class HomePageState extends State<HomePage>
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter modalSetState) {
             return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: taskFormKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Header
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                add
-                                    ? "New Task"
-                                    : changeCompletedTask
-                                        ? "Completed Task"
-                                        : "Edit Task",
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).viewInsets.bottom,
+                ),
+                child: SingleChildScrollView(
+                  child: Form(
+                    key: taskFormKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Header
+                        Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  add
+                                      ? "New Task"
+                                      : changeCompletedTask
+                                          ? "Completed Task"
+                                          : "Edit Task",
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
-                            ),
-                            if (!add && changeCompletedTask)
-                              IconButton(
-                                icon:
-                                    const Icon(Icons.undo, color: Colors.blue),
-                                onPressed: () async {
-                                  if (task != null) {
-                                    setState(() {
-                                      _completedTaskService
-                                          .updateCompTaskStatus(
-                                        task.id,
-                                        0,
+                              if (!add && changeCompletedTask)
+                                IconButton(
+                                  icon: const Icon(Icons.undo,
+                                      color: Colors.blue),
+                                  onPressed: () async {
+                                    if (task != null) {
+                                      setState(() {
+                                        _completedTaskService
+                                            .updateCompTaskStatus(
+                                          task.id,
+                                          0,
+                                        );
+                                      });
+
+                                      await Future.delayed(
+                                          const Duration(milliseconds: 250));
+                                      await _taskService.addTask(
+                                        task.label,
+                                        task.deadline,
+                                        task.description,
+                                        task.category,
                                       );
-                                    });
-
-                                    await Future.delayed(
-                                        const Duration(milliseconds: 250));
-                                    await _taskService.addTask(
-                                      task.label,
-                                      task.deadline,
-                                      task.description,
-                                      task.category,
-                                    );
-                                    await _completedTaskService
-                                        .deleteCompTask(task.id);
-
-                                    Navigator.pop(context);
-                                    setState(() {});
-                                  }
-                                },
-                              ),
-                            if (!add)
-                              IconButton(
-                                icon:
-                                    const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () async {
-                                  if (task != null) {
-                                    if (changeCompletedTask) {
                                       await _completedTaskService
                                           .deleteCompTask(task.id);
-                                    } else {
-                                      await _taskService.deleteTask(task.id);
-                                    }
-                                    Navigator.pop(context);
-                                    setState(() {});
-                                  }
-                                },
-                              ),
-                          ],
-                        ),
-                      ),
 
-                      // Label Field
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8.0, vertical: 4.0),
-                        child: TextFormField(
-                          controller: _labelController,
-                          autofocus: add,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            decoration: changeCompletedTask
-                                ? TextDecoration.lineThrough
-                                : TextDecoration.none,
-                            decorationColor: Colors.white,
-                            decorationThickness: 2,
+                                      Navigator.pop(context);
+                                      setState(() {});
+                                    }
+                                  },
+                                ),
+                              if (!add)
+                                IconButton(
+                                  icon: const Icon(Icons.delete,
+                                      color: Colors.red),
+                                  onPressed: () async {
+                                    if (task != null) {
+                                      if (changeCompletedTask) {
+                                        await _completedTaskService
+                                            .deleteCompTask(task.id);
+                                      } else {
+                                        await _taskService.deleteTask(task.id);
+                                      }
+                                      Navigator.pop(context);
+                                      setState(() {});
+                                    }
+                                  },
+                                ),
+                            ],
                           ),
-                          validator: (value) =>
-                              value?.isEmpty ?? true ? "*Required" : null,
-                          decoration: InputDecoration(
-                            hintText: "Label",
-                            hintStyle: TextStyle(
-                                color: Colors.grey[400], fontSize: 14),
-                            prefixIcon: const Icon(
-                              Icons.label,
+                        ),
+
+                        // Label Field
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8.0, vertical: 4.0),
+                          child: TextFormField(
+                            controller: _labelController,
+                            autofocus: add,
+                            style: TextStyle(
                               color: Colors.white,
-                              size: 20,
+                              fontSize: 14,
+                              decoration: changeCompletedTask
+                                  ? TextDecoration.lineThrough
+                                  : TextDecoration.none,
+                              decorationColor: Colors.white,
+                              decorationThickness: 2,
                             ),
-                            contentPadding: EdgeInsets.symmetric(
-                                vertical: 8.0, horizontal: 12.0),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8.0),
-                              borderSide: BorderSide(color: Colors.grey[700]!),
+                            validator: (value) =>
+                                value?.isEmpty ?? true ? "*Required" : null,
+                            decoration: InputDecoration(
+                              hintText: "Label",
+                              hintStyle: TextStyle(
+                                  color: Colors.grey[400], fontSize: 14),
+                              prefixIcon: const Icon(
+                                Icons.label,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                              contentPadding: EdgeInsets.symmetric(
+                                  vertical: 8.0, horizontal: 12.0),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8.0),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8.0),
+                                borderSide:
+                                    BorderSide(color: Colors.grey[700]!),
+                              ),
                             ),
                           ),
                         ),
-                      ),
                         // Smarter Category Selection Field
-                      Padding(
+                        Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8.0, vertical: 4.0),
                           child: GestureDetector(
-                          onTap: () async {
+                            onTap: () async {
                               final TextEditingController searchController =
                                   TextEditingController();
                               final TextEditingController
                                   newCategoryController =
                                   TextEditingController();
-                            Category? selected;
+                              Category? selected;
+                              String? newCategoryError;
 
-                            await showDialog(
-                              context: context,
-                              builder: (context) {
-                                return StatefulBuilder(
+                              await showDialog(
+                                context: context,
+                                builder: (context) {
+                                  return StatefulBuilder(
                                     builder: (BuildContext context,
                                         StateSetter dialogSetState) {
-                                    return AlertDialog(
+                                      return Dialog(
                                         backgroundColor: AppTheme.surface,
+                                        insetPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 20, vertical: 24),
                                         shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                AppTheme.borderRadiusLg),
-                                        title: Text("Select Category",
-                                            style: AppTheme.headlineMedium
-                                                .copyWith(fontSize: 18)),
-                                      content: SizedBox(
-                                          width: 300,
-                                          height: 340,
-                                        child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                          children: [
-                                              // Search bar
-                                              TextField(
-                                                controller: searchController,
-                                                style: AppTheme.bodyMedium,
-                                                decoration: InputDecoration(
-                                                  hintText:
-                                                      "Search categories...",
-                                                  // No icon
-                                                  filled: true,
-                                                  fillColor:
-                                                      AppTheme.surfaceLight,
-                                                  contentPadding:
-                                                      const EdgeInsets
-                                                          .symmetric(
-                                                          vertical: 8,
-                                                          horizontal: 12),
-                                                  border: OutlineInputBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8),
-                                                    borderSide: BorderSide(
-                                                        color: AppTheme
-                                                            .surfaceBorder),
-                                                  ),
-                                                ),
-                                                onChanged: (_) =>
-                                                    dialogSetState(() {}),
-                                              ),
-                                              const SizedBox(height: 8),
-                                              // New Category Input
-                                            Row(
+                                          borderRadius: AppTheme.borderRadiusLg,
+                                          side: BorderSide(
+                                              color: AppTheme.surfaceBorder),
+                                        ),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(16),
+                                          child: SizedBox(
+                                            width: 360,
+                                            height: 440,
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
                                               children: [
-                                                Expanded(
-                                                  child: TextField(
-                                                      controller:
-                                                          newCategoryController,
-                                                      style:
-                                                          AppTheme.bodyMedium,
-                                                    decoration: InputDecoration(
-                                                        hintText:
-                                                            "Add new category",
-                                                        contentPadding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                                horizontal: 8,
-                                                                vertical: 2),
-                                                      isDense: true,
-                                                        hintStyle:
-                                                            AppTheme.bodySmall,
-                                                        enabledBorder:
-                                                            OutlineInputBorder(
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(6),
-                                                          borderSide: BorderSide(
-                                                              color: AppTheme
-                                                                  .surfaceBorder),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        "Select Category",
+                                                        style: AppTheme
+                                                            .headlineSmall,
                                                       ),
                                                     ),
-                                                  ),
+                                                    Material(
+                                                      color:
+                                                          AppTheme.surfaceLight,
+                                                      shape:
+                                                          const CircleBorder(),
+                                                      child: IconButton(
+                                                        icon: const Icon(
+                                                          Icons.close,
+                                                          size: 18,
+                                                          color: AppTheme
+                                                              .textSecondary,
+                                                        ),
+                                                        splashRadius: 18,
+                                                        onPressed: () {
+                                                          Navigator.pop(
+                                                              context);
+                                                        },
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
-                                                  IconButton(
-                                                    icon: const Icon(
-                                                        Icons.add_circle,
-                                                        color: AppTheme.accent),
-                                                  onPressed: () async {
-                                                      if (newCategoryController
-                                                          .text
-                                                          .trim()
-                                                          .isNotEmpty) {
-                                                        await _categoryService
-                                                            .addCategory(
-                                                                newCategoryController
-                                                                    .text
-                                                                    .trim());
-                                                        newCategoryController
-                                                            .clear();
-                                                      dialogSetState(() {});
-                                                    }
-                                                  },
+                                                const SizedBox(height: 12),
+                                                TextField(
+                                                  controller: searchController,
+                                                  style: AppTheme.bodyMedium
+                                                      .copyWith(
+                                                          color: AppTheme
+                                                              .textPrimary),
+                                                  decoration: InputDecoration(
+                                                    hintText:
+                                                        "Search categories...",
+                                                    hintStyle: AppTheme
+                                                        .bodySmall
+                                                        .copyWith(
+                                                            color: AppTheme
+                                                                .textTertiary),
+                                                    prefixIcon: const Icon(
+                                                      Icons.search,
+                                                      size: 18,
+                                                      color:
+                                                          AppTheme.textTertiary,
+                                                    ),
+                                                    filled: true,
+                                                    fillColor:
+                                                        AppTheme.surfaceLight,
+                                                    contentPadding:
+                                                        const EdgeInsets
+                                                            .symmetric(
+                                                            vertical: 10,
+                                                            horizontal: 12),
+                                                    enabledBorder:
+                                                        OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              10),
+                                                      borderSide: BorderSide(
+                                                          color: AppTheme
+                                                              .surfaceBorder),
+                                                    ),
+                                                    focusedBorder:
+                                                        OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              10),
+                                                      borderSide:
+                                                          const BorderSide(
+                                                              color: AppTheme
+                                                                  .accent),
+                                                    ),
+                                                  ),
+                                                  onChanged: (_) =>
+                                                      dialogSetState(() {}),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                Text(
+                                                  "Create new",
+                                                  style: AppTheme.labelMedium
+                                                      .copyWith(
+                                                          color: AppTheme
+                                                              .textTertiary),
+                                                ),
+                                                const SizedBox(height: 6),
+                                                Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                          child: TextField(
+                                                            controller:
+                                                                newCategoryController,
+                                                            style: AppTheme
+                                                                .bodyMedium
+                                                                .copyWith(
+                                                                    color: AppTheme
+                                                                        .textPrimary),
+                                                            decoration:
+                                                                InputDecoration(
+                                                              hintText:
+                                                                  "Add new category",
+                                                              hintStyle: AppTheme
+                                                                  .bodySmall
+                                                                  .copyWith(
+                                                                      color: AppTheme
+                                                                          .textTertiary),
+                                                              contentPadding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          12,
+                                                                      vertical:
+                                                                          10),
+                                                              filled: true,
+                                                              fillColor: AppTheme
+                                                                  .surfaceLight,
+                                                              enabledBorder:
+                                                                  OutlineInputBorder(
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            10),
+                                                                borderSide: BorderSide(
+                                                                    color: newCategoryError !=
+                                                                            null
+                                                                        ? AppTheme
+                                                                            .error
+                                                                        : AppTheme
+                                                                            .surfaceBorder),
+                                                              ),
+                                                              focusedBorder:
+                                                                  OutlineInputBorder(
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            10),
+                                                                borderSide: BorderSide(
+                                                                    color: newCategoryError !=
+                                                                            null
+                                                                        ? AppTheme
+                                                                            .error
+                                                                        : AppTheme
+                                                                            .accent),
+                                                              ),
+                                                            ),
+                                                            onChanged: (_) {
+                                                              if (newCategoryError !=
+                                                                  null) {
+                                                                dialogSetState(
+                                                                    () {
+                                                                  newCategoryError =
+                                                                      null;
+                                                                });
+                                                              }
+                                                            },
+                                                          ),
+                                                        ),
+                                                        SizedBox(
+                                                          width: 8,
+                                                          height:
+                                                              newCategoryError !=
+                                                                      null
+                                                                  ? 56
+                                                                  : 40,
+                                                        ),
+                                                        Material(
+                                                          color:
+                                                              AppTheme.accent,
+                                                          borderRadius: AppTheme
+                                                              .borderRadiusSm,
+                                                          child: InkWell(
+                                                            borderRadius: AppTheme
+                                                                .borderRadiusSm,
+                                                            onTap: () async {
+                                                              final newLabel =
+                                                                  newCategoryController
+                                                                      .text
+                                                                      .trim();
+                                                              if (newLabel
+                                                                  .isEmpty) {
+                                                                dialogSetState(
+                                                                    () {
+                                                                  newCategoryError =
+                                                                      "Required";
+                                                                });
+                                                                return;
+                                                              }
+
+                                                              final exists =
+                                                                  await _categoryService
+                                                                      .categoryExists(
+                                                                          newLabel);
+                                                              if (exists) {
+                                                                dialogSetState(
+                                                                    () {
+                                                                  newCategoryError =
+                                                                      "Category already exists";
+                                                                });
+                                                                return;
+                                                              }
+
+                                                              final added =
+                                                                  await _categoryService
+                                                                      .addCategory(
+                                                                          newLabel);
+                                                              if (!added) {
+                                                                dialogSetState(
+                                                                    () {
+                                                                  newCategoryError =
+                                                                      "Category already exists";
+                                                                });
+                                                                return;
+                                                              }
+
+                                                              newCategoryController
+                                                                  .clear();
+                                                              dialogSetState(
+                                                                  () {
+                                                                newCategoryError =
+                                                                    null;
+                                                              });
+                                                            },
+                                                            child: Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          12,
+                                                                      vertical:
+                                                                          10),
+                                                              child: Row(
+                                                                children: [
+                                                                  const Icon(
+                                                                    Icons.add,
+                                                                    color: Colors
+                                                                        .white,
+                                                                    size: 16,
+                                                                  ),
+                                                                  const SizedBox(
+                                                                      width: 4),
+                                                                  Text(
+                                                                    "Add",
+                                                                    style: AppTheme
+                                                                        .labelLarge
+                                                                        .copyWith(
+                                                                            color:
+                                                                                Colors.white),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    if (newCategoryError !=
+                                                        null) ...[
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        newCategoryError!,
+                                                        style: AppTheme
+                                                            .bodySmall
+                                                            .copyWith(
+                                                                color: AppTheme
+                                                                    .error),
+                                                      ),
+                                                    ],
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 12),
+                                                Divider(
+                                                  color: AppTheme.surfaceBorder,
+                                                  height: 12,
+                                                ),
+                                                Expanded(
+                                                  child: FutureBuilder<
+                                                      List<Category>>(
+                                                    future: _categoryService
+                                                        .getCategories(),
+                                                    builder:
+                                                        (context, snapshot) {
+                                                      if (!snapshot.hasData) {
+                                                        return const Center(
+                                                          child:
+                                                              CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                          ),
+                                                        );
+                                                      }
+                                                      final categories =
+                                                          snapshot.data!;
+                                                      final filtered = searchController
+                                                              .text.isEmpty
+                                                          ? categories
+                                                          : categories
+                                                              .where((c) => c
+                                                                  .label
+                                                                  .toLowerCase()
+                                                                  .contains(
+                                                                      searchController
+                                                                          .text
+                                                                          .toLowerCase()))
+                                                              .toList();
+                                                      if (filtered.isEmpty) {
+                                                        return Center(
+                                                          child: Column(
+                                                            mainAxisSize:
+                                                                MainAxisSize
+                                                                    .min,
+                                                            children: [
+                                                              const Icon(
+                                                                Icons
+                                                                    .folder_off_rounded,
+                                                                color: AppTheme
+                                                                    .textTertiary,
+                                                              ),
+                                                              const SizedBox(
+                                                                  height: 6),
+                                                              Text(
+                                                                "No categories found",
+                                                                style: AppTheme
+                                                                    .bodySmall,
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        );
+                                                      }
+                                                      return ListView.separated(
+                                                        itemCount:
+                                                            filtered.length,
+                                                        separatorBuilder:
+                                                            (context, index) =>
+                                                                const SizedBox(
+                                                                    height: 8),
+                                                        itemBuilder:
+                                                            (context, index) {
+                                                          final category =
+                                                              filtered[index];
+                                                          final isActive =
+                                                              selectedCategory
+                                                                      ?.id ==
+                                                                  category.id;
+                                                          final isDefault =
+                                                              category.isDefault ==
+                                                                  1;
+                                                          return Material(
+                                                            color: isActive
+                                                                ? AppTheme
+                                                                    .accent
+                                                                    .withOpacity(
+                                                                        0.12)
+                                                                : AppTheme
+                                                                    .surfaceLight,
+                                                            borderRadius: AppTheme
+                                                                .borderRadiusSm,
+                                                            child: InkWell(
+                                                              borderRadius: AppTheme
+                                                                  .borderRadiusSm,
+                                                              onTap: () {
+                                                                selected =
+                                                                    category;
+                                                                Navigator.pop(
+                                                                    context);
+                                                              },
+                                                              child: Padding(
+                                                                padding: const EdgeInsets
+                                                                    .symmetric(
+                                                                    horizontal:
+                                                                        12,
+                                                                    vertical:
+                                                                        10),
+                                                                child: Row(
+                                                                  children: [
+                                                                    Expanded(
+                                                                      child:
+                                                                          Text(
+                                                                        category
+                                                                            .label,
+                                                                        style: AppTheme
+                                                                            .titleSmall
+                                                                            .copyWith(color: AppTheme.textPrimary),
+                                                                      ),
+                                                                    ),
+                                                                    if (!isDefault)
+                                                                      GestureDetector(
+                                                                        behavior:
+                                                                            HitTestBehavior.opaque,
+                                                                        onTap:
+                                                                            () async {
+                                                                          final taskService =
+                                                                              TaskService();
+                                                                          final tasks =
+                                                                              await taskService.getTasks();
+                                                                          final tasksInCategory = tasks
+                                                                              .where((t) => t.category == category.label)
+                                                                              .toList();
+
+                                                                          if (!context
+                                                                              .mounted) {
+                                                                            return;
+                                                                          }
+
+                                                                          if (tasksInCategory
+                                                                              .isNotEmpty) {
+                                                                            showDialog(
+                                                                              context: context,
+                                                                              builder: (context) => AlertDialog(
+                                                                                backgroundColor: AppTheme.surface,
+                                                                                shape: RoundedRectangleBorder(
+                                                                                  borderRadius: AppTheme.borderRadiusLg,
+                                                                                ),
+                                                                                title: Text(
+                                                                                  'Delete "${category.label}"?',
+                                                                                  style: AppTheme.headlineSmall,
+                                                                                ),
+                                                                                content: Text(
+                                                                                  'This category has ${tasksInCategory.length} task(s). All tasks will be moved to "Default" category.',
+                                                                                  style: AppTheme.bodyMedium,
+                                                                                ),
+                                                                                actions: [
+                                                                                  TextButton(
+                                                                                    onPressed: () => Navigator.pop(context),
+                                                                                    child: Text(
+                                                                                      'Cancel',
+                                                                                      style: AppTheme.bodyMedium.copyWith(
+                                                                                        color: AppTheme.accent,
+                                                                                      ),
+                                                                                    ),
+                                                                                  ),
+                                                                                  ElevatedButton(
+                                                                                    onPressed: () async {
+                                                                                      for (final task in tasksInCategory) {
+                                                                                        await taskService.updateTaskCategory(
+                                                                                          task.id,
+                                                                                          'Default',
+                                                                                        );
+                                                                                      }
+                                                                                      await _categoryService.deleteCategory(category.id);
+                                                                                      if (!context.mounted) {
+                                                                                        return;
+                                                                                      }
+                                                                                      Navigator.pop(context);
+                                                                                      dialogSetState(() {});
+                                                                                    },
+                                                                                    style: ElevatedButton.styleFrom(
+                                                                                      backgroundColor: AppTheme.error,
+                                                                                    ),
+                                                                                    child: Text(
+                                                                                      'Delete',
+                                                                                      style: AppTheme.labelLarge.copyWith(
+                                                                                        color: Colors.white,
+                                                                                      ),
+                                                                                    ),
+                                                                                  ),
+                                                                                ],
+                                                                              ),
+                                                                            );
+                                                                          } else {
+                                                                            await _categoryService.deleteCategory(category.id);
+                                                                            if (!context.mounted) {
+                                                                              return;
+                                                                            }
+                                                                            dialogSetState(() {});
+                                                                          }
+                                                                        },
+                                                                        child:
+                                                                            Padding(
+                                                                          padding: const EdgeInsets
+                                                                              .all(
+                                                                              4),
+                                                                          child:
+                                                                              Icon(
+                                                                            Icons.close,
+                                                                            size:
+                                                                                14,
+                                                                            color:
+                                                                                AppTheme.textTertiary,
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          );
+                                                        },
+                                                      );
+                                                    },
+                                                  ),
                                                 ),
                                               ],
                                             ),
-                                              const SizedBox(height: 8),
-                                              Divider(
-                                                  color: AppTheme.surfaceBorder,
-                                                  height: 10),
-                                              // Categories List
-                                            Expanded(
-                                                child: FutureBuilder<
-                                                    List<Category>>(
-                                                  future: _categoryService
-                                                      .getCategories(),
-                                                builder: (context, snapshot) {
-                                                  if (!snapshot.hasData) {
-                                                      return const Center(
-                                                          child:
-                                                              CircularProgressIndicator(
-                                                                  strokeWidth:
-                                                                      2));
-                                                    }
-                                                    final categories =
-                                                        snapshot.data!;
-                                                    final filtered = searchController
-                                                            .text.isEmpty
-                                                        ? categories
-                                                        : categories
-                                                            .where((c) => c
-                                                                .label
-                                                                .toLowerCase()
-                                                                .contains(
-                                                                    searchController
-                                                                        .text
-                                                                        .toLowerCase()))
-                                                            .toList();
-                                                    if (filtered.isEmpty) {
-                                                      return Center(
-                                                          child: Text(
-                                                              "No categories found",
-                                                              style: AppTheme
-                                                                  .bodySmall));
-                                                    }
-                                                    return ListView.separated(
-                                                      itemCount:
-                                                          filtered.length,
-                                                      separatorBuilder:
-                                                          (context, index) =>
-                                                              Divider(
-                                                        color: AppTheme
-                                                            .surfaceBorder,
-                                                        thickness: 1,
-                                                        height: 0,
-                                                      ),
-                                                      itemBuilder:
-                                                          (context, index) {
-                                                        final category =
-                                                            filtered[index];
-                                                        return ListTile(
-                                                          title: Text(
-                                                              category.label,
-                                                              style: AppTheme
-                                                                  .bodyMedium
-                                                                  .copyWith(
-                                                                      color: AppTheme
-                                                                          .textPrimary)),
-                                                          shape: RoundedRectangleBorder(
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                          8)),
-                                                        onTap: () {
-                                                          selected = category;
-                                                            Navigator.pop(
-                                                                context);
-                                                        },
-                                                          hoverColor: AppTheme
-                                                              .accent
-                                                              .withOpacity(
-                                                                  0.08),
-                                                      );
-                                                    },
-                                                  );
-                                                },
-                                              ),
-                                            ),
-                                          ],
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                  },
-                                );
-                              },
+                                      );
+                                    },
+                                  );
+                                },
                               );
-                            if (selected != null) {
-                              modalSetState(() {
-                                selectedCategory = selected;
-                              });
-                            }
-                          },
-                          child: Container(
+                              if (selected != null) {
+                                modalSetState(() {
+                                  selectedCategory = selected;
+                                });
+                              }
+                            },
+                            child: Container(
                               padding: const EdgeInsets.symmetric(
                                   vertical: 10.0, horizontal: 14.0),
-                            decoration: BoxDecoration(
+                              decoration: BoxDecoration(
                                 color: AppTheme.surfaceLight,
                                 border:
                                     Border.all(color: AppTheme.surfaceBorder),
@@ -686,400 +994,433 @@ class HomePageState extends State<HomePage>
                                     offset: const Offset(0, 2),
                                   ),
                                 ],
-                            ),
-                            child: Row(
-                              children: [
+                              ),
+                              child: Row(
+                                children: [
                                   Text(selectedCategory!.label,
                                       style: AppTheme.bodyMedium.copyWith(
                                           color: AppTheme.textPrimary)),
-                                const Spacer(),
+                                  const Spacer(),
                                   Icon(Icons.arrow_drop_down,
                                       color: AppTheme.accent),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // Add Description Button (when field is hidden)
-                      if (!_showDescription)
-                        TextButton.icon(
-                          icon: Icon(
-                            Icons.add,
-                            color: Colors.grey[400],
-                          ),
-                          label: Text(
-                            "Add Description",
-                            style: TextStyle(color: Colors.grey[400]),
-                          ),
-                          onPressed: () {
-                            modalSetState(() {
-                              _showDescription = true;
-                            });
-                          },
-                        ),
-
-                      // Description Field with side button (when field is visible)
-                      if (_showDescription)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8.0, vertical: 4.0),
-                                child: TextFormField(
-                                  controller: _descriptionController,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
-                                  maxLines: 2,
-                                  minLines: 1,
-                                  keyboardType: TextInputType.multiline,
-                                  decoration: InputDecoration(
-                                    hintText: "Description",
-                                    hintStyle: TextStyle(
-                                        color: Colors.grey[400], fontSize: 14),
-                                    prefixIcon: const Icon(Icons.description,
-                                        color: Colors.white, size: 20),
-                                    contentPadding: EdgeInsets.symmetric(
-                                        vertical: 8.0, horizontal: 12.0),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8.0),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8.0),
-                                      borderSide:
-                                          BorderSide(color: Colors.grey[700]!),
-                                    ),
-                                  ),
-                                ),
+                                ],
                               ),
                             ),
-                            IconButton(
-                              icon: Icon(
-                                Icons.remove_circle_outline,
-                                color: Colors.grey[400],
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                modalSetState(() {
-                                  _showDescription = false;
-                                  _descriptionController.clear();
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-
-                      if (!_showDateTime)
-                        TextButton.icon(
-                          icon: Icon(
-                            Icons.add,
-                            color: Colors.grey[400],
                           ),
-                          label: Text(
-                            "Add Due Date",
-                            style: TextStyle(color: Colors.grey[400]),
+                        ),
+
+                        // Description Field with animation
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          height: _showDescription ? 70 : 0,
+                          child: _showDescription
+                              ? Row(
+                                  children: [
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8.0, vertical: 4.0),
+                                        child: TextFormField(
+                                          controller: _descriptionController,
+                                          style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14),
+                                          maxLines: 2,
+                                          minLines: 1,
+                                          keyboardType: TextInputType.multiline,
+                                          decoration: InputDecoration(
+                                            hintText: "Description",
+                                            hintStyle: TextStyle(
+                                                color: Colors.grey[400],
+                                                fontSize: 14),
+                                            prefixIcon: const Icon(
+                                                Icons.description,
+                                                color: Colors.white,
+                                                size: 20),
+                                            contentPadding:
+                                                EdgeInsets.symmetric(
+                                                    vertical: 8.0,
+                                                    horizontal: 12.0),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8.0),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8.0),
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey[700]!),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.close,
+                                        color: Colors.grey[400],
+                                      ),
+                                      onPressed: () {
+                                        modalSetState(() {
+                                          _showDescription = false;
+                                          _descriptionController.clear();
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+
+                        // Add Description Button (when field is hidden)
+                        if (!_showDescription)
+                          TextButton.icon(
+                            icon: Icon(
+                              Icons.add,
+                              color: Colors.grey[400],
+                            ),
+                            label: Text(
+                              "Add Description",
+                              style: TextStyle(color: Colors.grey[400]),
+                            ),
+                            onPressed: () {
+                              modalSetState(() {
+                                _showDescription = true;
+                              });
+                            },
                           ),
-                          onPressed: () {
-                            modalSetState(() {
-                              _showDateTime = true;
-                            });
-                          },
+
+                        // DateTime Field with animation
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          height: _showDateTime ? 70 : 0,
+                          child: _showDateTime
+                              ? Row(
+                                  children: [
+                                    Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8.0, vertical: 4.0),
+                                        child: TextFormField(
+                                          controller: _dateController,
+                                          style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14),
+                                          readOnly: true,
+                                          onTap: () async {
+                                            await Functions.dateAndTimePicker(
+                                                context, _dateController);
+                                            modalSetState(() {});
+                                          },
+                                          decoration: InputDecoration(
+                                            hintText: "Due Date",
+                                            hintStyle: TextStyle(
+                                                color: Colors.grey[400],
+                                                fontSize: 14),
+                                            prefixIcon: const Icon(
+                                                Icons.calendar_today,
+                                                color: Colors.white,
+                                                size: 20),
+                                            suffixIcon: _dateController
+                                                    .text.isNotEmpty
+                                                ? IconButton(
+                                                    icon: const Icon(
+                                                        Icons.clear,
+                                                        color: Colors.white,
+                                                        size: 18),
+                                                    onPressed: () =>
+                                                        modalSetState(() {
+                                                      _dateController.clear();
+                                                      showRepeat = false;
+                                                    }),
+                                                  )
+                                                : null,
+                                            contentPadding:
+                                                EdgeInsets.symmetric(
+                                                    vertical: 8.0,
+                                                    horizontal: 12.0),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8.0),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8.0),
+                                              borderSide: BorderSide(
+                                                  color: Colors.grey[700]!),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.close,
+                                        color: Colors.grey[400],
+                                      ),
+                                      onPressed: () {
+                                        modalSetState(() {
+                                          _showDateTime = false;
+                                          _dateController.clear();
+                                          showRepeat = false;
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                )
+                              : const SizedBox.shrink(),
                         ),
 
-                      // DateTime Field with side button (when field is visible)
-                      if (_showDateTime)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8.0, vertical: 4.0),
-                                child: TextFormField(
-                                  controller: _dateController,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 14),
-                                  readOnly: true,
-                                  onTap: () async {
-                                    await Functions.dateAndTimePicker(
-                                        context, _dateController);
-                                    modalSetState(() {});
-                                  },
-                                  decoration: InputDecoration(
-                                    hintText: "Due Date",
-                                    hintStyle: TextStyle(
-                                        color: Colors.grey[400], fontSize: 14),
-                                    prefixIcon: const Icon(Icons.calendar_today,
-                                        color: Colors.white, size: 20),
-                                    suffixIcon: _dateController.text.isNotEmpty
-                                        ? IconButton(
-                                            icon: const Icon(Icons.clear,
-                                                color: Colors.white, size: 18),
-                                            onPressed: () => modalSetState(() {
-                                              _dateController.clear();
-                                              showRepeat =
-                                                  false; // Reset repeat when deadline is cleared
-                                            }),
-                                          )
-                                        : null,
-                                    contentPadding: EdgeInsets.symmetric(
-                                        vertical: 8.0, horizontal: 12.0),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8.0),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8.0),
-                                      borderSide:
-                                          BorderSide(color: Colors.grey[700]!),
-                                    ),
-                                  ),
-                                ),
-                              ),
+                        // Add Due Date Button (when field is hidden)
+                        if (!_showDateTime)
+                          TextButton.icon(
+                            icon: Icon(
+                              Icons.add,
+                              color: Colors.grey[400],
                             ),
-                            IconButton(
-                              icon: Icon(
-                                Icons.remove_circle_outline,
-                                color: Colors.grey[400],
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                modalSetState(() {
-                                  _showDateTime = false;
-                                  _dateController.clear();
-                                  showRepeat =
-                                      false; // Reset repeat when deadline is removed
-                                });
-                              },
+                            label: Text(
+                              "Add Due Date",
+                              style: TextStyle(color: Colors.grey[400]),
                             ),
-                          ],
-                        ),
+                            onPressed: () {
+                              modalSetState(() {
+                                _showDateTime = true;
+                              });
+                            },
+                          ),
 
-                      // Add Repeat button (only shows if a date is selected and has a valid time)
-                      if (_showDateTime &&
-                          _dateController.text.isNotEmpty &&
-                          _dateController.text.contains(":"))
-                        TextButton.icon(
-                          icon: Icon(Icons.repeat,
-                              color:
-                                  showRepeat ? Colors.blue : Colors.grey[400]),
-                          label: Text(
-                            showRepeat
-                                ? "Repeats every $repeatInterval ${repeatFrequency}${repeatInterval > 1 ? 's' : ''}"
-                                : "Add Repeat",
-                            style: TextStyle(
+                        // Add Repeat button (only shows if a date is selected and has a valid time)
+                        if (_showDateTime &&
+                            _dateController.text.isNotEmpty &&
+                            _dateController.text.contains(":"))
+                          TextButton.icon(
+                            icon: Icon(Icons.repeat,
                                 color: showRepeat
                                     ? Colors.blue
                                     : Colors.grey[400]),
-                          ),
-                          onPressed: () {
-                            _showRepeatOptionsDialog(
-                                context,
-                                modalSetState,
-                                repeatFrequency,
-                                repeatInterval,
-                                repeatEndType,
-                                repeatEndDateController,
-                                repeatOccurrencesController, onUpdate:
-                                    (frequency, interval, endType, endDate,
-                                        occurrences) {
-                              modalSetState(() {
-                                showRepeat = true;
-                                repeatFrequency = frequency;
-                                repeatInterval = interval;
-                                repeatEndType = endType;
-                                // The controllers are updated directly
+                            label: Text(
+                              showRepeat
+                                  ? "Repeats every $repeatInterval ${repeatFrequency}${repeatInterval > 1 ? 's' : ''}"
+                                  : "Add Repeat",
+                              style: TextStyle(
+                                  color: showRepeat
+                                      ? Colors.blue
+                                      : Colors.grey[400]),
+                            ),
+                            onPressed: () {
+                              _showRepeatOptionsDialog(
+                                  context,
+                                  modalSetState,
+                                  repeatFrequency,
+                                  repeatInterval,
+                                  repeatEndType,
+                                  repeatEndDateController,
+                                  repeatOccurrencesController, onUpdate:
+                                      (frequency, interval, endType, endDate,
+                                          occurrences) {
+                                modalSetState(() {
+                                  showRepeat = true;
+                                  repeatFrequency = frequency;
+                                  repeatInterval = interval;
+                                  repeatEndType = endType;
+                                  // The controllers are updated directly
+                                });
                               });
-                            });
-                          },
-                          // Add trailing remove button to discard repeat options
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.only(left: 12, right: 0),
+                            },
+                            // Add trailing remove button to discard repeat options
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.only(left: 12, right: 0),
+                            ),
                           ),
-                        ),
 
-                      // Show remove button for repeat options when active
-                      if (showRepeat)
+                        // Show remove button for repeat options when active
+                        if (showRepeat)
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton.icon(
+                                  icon: Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.red[300],
+                                    size: 18,
+                                  ),
+                                  label: Text(
+                                    "Remove Repeat",
+                                    style: TextStyle(color: Colors.red[300]),
+                                  ),
+                                  onPressed: () {
+                                    modalSetState(() {
+                                      // Clear all repeat-related fields
+                                      showRepeat = false;
+                                      repeatFrequency = 'day';
+                                      repeatInterval = 1;
+                                      repeatEndType = 'never';
+                                      repeatEndDateController.clear();
+                                      repeatOccurrencesController.text = '30';
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        // Save Button
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton.icon(
-                                icon: Icon(
-                                  Icons.delete_outline,
-                                  color: Colors.red[300],
-                                  size: 18,
-                                ),
-                                label: Text(
-                                  "Remove Repeat",
-                                  style: TextStyle(color: Colors.red[300]),
-                                ),
-                                onPressed: () {
-                                  modalSetState(() {
-                                    // Clear all repeat-related fields
-                                    showRepeat = false;
-                                    repeatFrequency = 'day';
-                                    repeatInterval = 1;
-                                    repeatEndType = 'never';
-                                    repeatEndDateController.clear();
-                                    repeatOccurrencesController.text = '30';
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
+                          padding: const EdgeInsets.all(8.0),
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              if (taskFormKey.currentState!.validate()) {
+                                Future<void> operation;
+                                if (add) {
+                                  // Clean up the date string before saving
+                                  final String deadline =
+                                      _dateController.text.trim();
+                                  operation = _taskService.addTask(
+                                    _labelController.text,
+                                    deadline,
+                                    _descriptionController.text,
+                                    selectedCategory!.label,
+                                    // Add repeat functionality parameters
+                                    repeatFrequency:
+                                        showRepeat ? repeatFrequency : null,
+                                    repeatInterval:
+                                        showRepeat ? repeatInterval : null,
+                                    repeatEndType:
+                                        showRepeat ? repeatEndType : null,
+                                    repeatEndDate:
+                                        showRepeat && repeatEndType == 'on'
+                                            ? repeatEndDateController.text
+                                            : null,
+                                    repeatOccurrences: showRepeat &&
+                                            repeatEndType == 'after'
+                                        ? int.tryParse(
+                                            repeatOccurrencesController.text)
+                                        : null,
+                                  );
+                                } else if (changeCompletedTask &&
+                                    task != null) {
+                                  operation = Future.wait([
+                                    _completedTaskService.updateCompletedTask(
+                                        task.id,
+                                        "label",
+                                        _labelController.text),
+                                    _completedTaskService.updateCompletedTask(
+                                        task.id,
+                                        "description",
+                                        _descriptionController.text),
+                                    _completedTaskService.updateCompletedTask(
+                                        task.id,
+                                        "deadline",
+                                        _dateController.text),
+                                    _completedTaskService.updateCompletedTask(
+                                        task.id,
+                                        "category",
+                                        selectedCategory!.label),
+                                  ]);
+                                } else if (!add && task != null) {
+                                  // Clean up the date string before saving
+                                  final String deadline =
+                                      _dateController.text.trim();
 
-                      // Save Button
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            if (taskFormKey.currentState!.validate()) {
-                              Future<void> operation;
-                              if (add) {
-                                // Clean up the date string before saving
-                                final String deadline =
-                                    _dateController.text.trim();
-                                operation = _taskService.addTask(
-                                  _labelController.text,
-                                  deadline,
-                                  _descriptionController.text,
-                                  selectedCategory!.label,
-                                  // Add repeat functionality parameters
-                                  repeatFrequency:
-                                      showRepeat ? repeatFrequency : null,
-                                  repeatInterval:
-                                      showRepeat ? repeatInterval : null,
-                                  repeatEndType:
-                                      showRepeat ? repeatEndType : null,
-                                  repeatEndDate:
-                                      showRepeat && repeatEndType == 'on'
-                                          ? repeatEndDateController.text
-                                          : null,
-                                  repeatOccurrences:
-                                      showRepeat && repeatEndType == 'after'
-                                          ? int.tryParse(
-                                              repeatOccurrencesController.text)
-                                          : null,
-                                );
-                              } else if (changeCompletedTask && task != null) {
-                                operation = Future.wait([
-                                  _completedTaskService.updateCompletedTask(
-                                      task.id, "label", _labelController.text),
-                                  _completedTaskService.updateCompletedTask(
-                                      task.id,
-                                      "description",
-                                      _descriptionController.text),
-                                  _completedTaskService.updateCompletedTask(
-                                      task.id,
-                                      "deadline",
-                                      _dateController.text),
-                                  _completedTaskService.updateCompletedTask(
-                                      task.id,
-                                      "category",
-                                      selectedCategory!.label),
-                                ]);
-                              } else if (!add && task != null) {
-                                // Clean up the date string before saving
-                                final String deadline =
-                                    _dateController.text.trim();
-
-                                // Update basic task fields first
-                                await Future.wait([
-                                  _taskService.updateTask(
-                                      task.id, "label", _labelController.text),
-                                  _taskService.updateTask(
-                                      task.id,
-                                      "description",
-                                      _descriptionController.text),
-                                  _taskService.updateTask(
-                                      task.id, "deadline", deadline),
-                                  _taskService.updateTask(task.id, "category",
-                                      selectedCategory!.label),
-                                ]);
-
-                                // Then update repeat fields
-                                if (showRepeat) {
+                                  // Update basic task fields first
                                   await Future.wait([
-                                    _taskService.updateTask(task.id,
-                                        "repeatFrequency", repeatFrequency),
-                                    _taskService.updateTask(task.id,
-                                        "repeatInterval", repeatInterval),
-                                    _taskService.updateTask(task.id,
-                                        "repeatEndType", repeatEndType),
+                                    _taskService.updateTask(task.id, "label",
+                                        _labelController.text),
+                                    _taskService.updateTask(
+                                        task.id,
+                                        "description",
+                                        _descriptionController.text),
+                                    _taskService.updateTask(
+                                        task.id, "deadline", deadline),
+                                    _taskService.updateTask(task.id, "category",
+                                        selectedCategory!.label),
                                   ]);
 
-                                  if (repeatEndType == 'on') {
-                                    await _taskService.updateTask(
-                                        task.id,
-                                        "repeatEndDate",
-                                        repeatEndDateController.text);
-                                    // Clear the occurrences field when using end date
-                                    await _taskService.updateTask(
-                                        task.id, "repeatOccurrences", null);
-                                  } else if (repeatEndType == 'after') {
-                                    await _taskService.updateTask(
-                                        task.id,
-                                        "repeatOccurrences",
-                                        int.tryParse(repeatOccurrencesController
-                                                .text) ??
-                                            30);
-                                    // Clear the end date field when using occurrences
-                                    await _taskService.updateTask(
-                                        task.id, "repeatEndDate", null);
-                                  } else {
-                                    // For 'never' end type, clear both end date and occurrences
+                                  // Then update repeat fields
+                                  if (showRepeat) {
                                     await Future.wait([
+                                      _taskService.updateTask(task.id,
+                                          "repeatFrequency", repeatFrequency),
+                                      _taskService.updateTask(task.id,
+                                          "repeatInterval", repeatInterval),
+                                      _taskService.updateTask(task.id,
+                                          "repeatEndType", repeatEndType),
+                                    ]);
+
+                                    if (repeatEndType == 'on') {
+                                      await _taskService.updateTask(
+                                          task.id,
+                                          "repeatEndDate",
+                                          repeatEndDateController.text);
+                                      // Clear the occurrences field when using end date
+                                      await _taskService.updateTask(
+                                          task.id, "repeatOccurrences", null);
+                                    } else if (repeatEndType == 'after') {
+                                      await _taskService.updateTask(
+                                          task.id,
+                                          "repeatOccurrences",
+                                          int.tryParse(
+                                                  repeatOccurrencesController
+                                                      .text) ??
+                                              30);
+                                      // Clear the end date field when using occurrences
+                                      await _taskService.updateTask(
+                                          task.id, "repeatEndDate", null);
+                                    } else {
+                                      // For 'never' end type, clear both end date and occurrences
+                                      await Future.wait([
+                                        _taskService.updateTask(
+                                            task.id, "repeatEndDate", null),
+                                        _taskService.updateTask(
+                                            task.id, "repeatOccurrences", null),
+                                      ]);
+                                    }
+                                  } else {
+                                    // If repeat is disabled, clear all repeat fields
+                                    await Future.wait([
+                                      _taskService.updateTask(
+                                          task.id, "repeatFrequency", null),
+                                      _taskService.updateTask(
+                                          task.id, "repeatInterval", null),
+                                      _taskService.updateTask(
+                                          task.id, "repeatEndType", null),
                                       _taskService.updateTask(
                                           task.id, "repeatEndDate", null),
                                       _taskService.updateTask(
                                           task.id, "repeatOccurrences", null),
                                     ]);
                                   }
+                                  operation = Future.value();
                                 } else {
-                                  // If repeat is disabled, clear all repeat fields
-                                  await Future.wait([
-                                    _taskService.updateTask(
-                                        task.id, "repeatFrequency", null),
-                                    _taskService.updateTask(
-                                        task.id, "repeatInterval", null),
-                                    _taskService.updateTask(
-                                        task.id, "repeatEndType", null),
-                                    _taskService.updateTask(
-                                        task.id, "repeatEndDate", null),
-                                    _taskService.updateTask(
-                                        task.id, "repeatOccurrences", null),
-                                  ]);
+                                  operation = Future.value();
                                 }
-                                operation = Future.value();
-                              } else {
-                                operation = Future.value();
-                              }
 
-                              await operation;
-                              Navigator.pop(context);
-                              setState(() {});
-                            }
-                          },
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Padding(
-                                padding: EdgeInsets.all(8.0),
-                                child: Icon(Icons.add_task_outlined),
-                              ),
-                              Text(
-                                add ? "Add Task" : "Edit Task",
-                                style: const TextStyle(fontSize: 16),
-                              ),
-                            ],
+                                await operation;
+                                Navigator.pop(context);
+                                setState(() {});
+                              }
+                            },
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Icon(Icons.add_task_outlined),
+                                ),
+                                Text(
+                                  add ? "Add Task" : "Edit Task",
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
                 ));
           },
         );
@@ -1665,7 +2006,8 @@ class HomePageState extends State<HomePage>
 
           return Dialog(
             backgroundColor: AppTheme.surface,
-            shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
+              shape:
+                  RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
               child: Form(
@@ -1679,7 +2021,11 @@ class HomePageState extends State<HomePage>
                       children: [
                         Expanded(
                           child: Text(
-                            add ? "New Habit" : (isEditing ? "Edit Habit" : "Habit Details"),
+                              add
+                                  ? "New Habit"
+                                  : (isEditing
+                                      ? "Edit Habit"
+                                      : "Habit Details"),
                             style: AppTheme.headlineMedium.copyWith(
                               color: AppTheme.accent,
                               fontWeight: FontWeight.bold,
@@ -1687,21 +2033,58 @@ class HomePageState extends State<HomePage>
                             textAlign: TextAlign.center,
                           ),
                         ),
-                        if (!add)
+                          if (!add) ...[
                           IconButton(
-                            icon: Icon(isEditing ? Icons.close : Icons.edit, color: AppTheme.textSecondary),
+                              icon: Icon(isEditing ? Icons.close : Icons.edit,
+                                  color: AppTheme.textSecondary),
                             onPressed: () {
                               if (isEditing) {
                                 // Revert any changes and close the dialog when canceling an edit
                                 _labelController.text = originalLabel;
-                                _descriptionController.text =
-                                    originalDescription;
+                                  _descriptionController.text =
+                                      originalDescription;
                                 Navigator.of(context).pop();
                               } else {
                                 enterEditMode();
                               }
                             },
                           ),
+                            SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline,
+                                  color: Colors.red),
+                              tooltip: 'Delete Habit',
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Delete Habit'),
+                                    content: const Text(
+                                        'Are you sure you want to delete this habit? This action cannot be undone.'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.of(context).pop(true),
+                                        child: const Text('Delete',
+                                            style:
+                                                TextStyle(color: Colors.red)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await _habitService.deleteHabit(habit!.id);
+                                  Navigator.of(context).pop();
+                                  setState(() {});
+                                }
+                              },
+                            ),
+                          ],
                       ],
                     ),
                     const SizedBox(height: 14),
@@ -1718,11 +2101,14 @@ class HomePageState extends State<HomePage>
                         }
                         return null;
                       },
-                      style: AppTheme.bodyLarge.copyWith(color: AppTheme.textPrimary),
+                        style: AppTheme.bodyLarge
+                            .copyWith(color: AppTheme.textPrimary),
                       decoration: InputDecoration(
                         labelText: "Label",
-                        labelStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
-                        prefixIcon: const Icon(Icons.label, color: AppTheme.accent),
+                          labelStyle: AppTheme.bodyMedium
+                              .copyWith(color: AppTheme.textSecondary),
+                          prefixIcon:
+                              const Icon(Icons.label, color: AppTheme.accent),
                         filled: true,
                         fillColor: AppTheme.surfaceLight,
                         enabledBorder: OutlineInputBorder(
@@ -1731,7 +2117,8 @@ class HomePageState extends State<HomePage>
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: AppTheme.borderRadiusMd,
-                          borderSide: BorderSide(color: AppTheme.accent, width: 1.5),
+                            borderSide:
+                                BorderSide(color: AppTheme.accent, width: 1.5),
                         ),
                         errorBorder: OutlineInputBorder(
                           borderRadius: AppTheme.borderRadiusMd,
@@ -1749,11 +2136,14 @@ class HomePageState extends State<HomePage>
                         if (!isEditing) enterEditMode();
                       },
                       keyboardType: TextInputType.multiline,
-                      style: AppTheme.bodyLarge.copyWith(color: AppTheme.textPrimary),
+                        style: AppTheme.bodyLarge
+                            .copyWith(color: AppTheme.textPrimary),
                       decoration: InputDecoration(
                         labelText: "Description",
-                        labelStyle: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
-                        prefixIcon: const Icon(Icons.description, color: AppTheme.accent),
+                          labelStyle: AppTheme.bodyMedium
+                              .copyWith(color: AppTheme.textSecondary),
+                          prefixIcon: const Icon(Icons.description,
+                              color: AppTheme.accent),
                         filled: true,
                         fillColor: AppTheme.surfaceLight,
                         enabledBorder: OutlineInputBorder(
@@ -1762,7 +2152,8 @@ class HomePageState extends State<HomePage>
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: AppTheme.borderRadiusMd,
-                          borderSide: BorderSide(color: AppTheme.accent, width: 1.5),
+                            borderSide:
+                                BorderSide(color: AppTheme.accent, width: 1.5),
                         ),
                         errorBorder: OutlineInputBorder(
                           borderRadius: AppTheme.borderRadiusMd,
@@ -1788,7 +2179,9 @@ class HomePageState extends State<HomePage>
                             child: Text(isEditing && !add ? 'Cancel' : 'Close'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppTheme.textSecondary,
-                              side: BorderSide(color: AppTheme.textSecondary.withOpacity(0.12)),
+                                side: BorderSide(
+                                    color: AppTheme.textSecondary
+                                        .withOpacity(0.12)),
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                           ),
@@ -1812,8 +2205,12 @@ class HomePageState extends State<HomePage>
                                   Navigator.pop(context);
                                   setState(() {});
                                 } else {
-                                  _habitService.updateHabit(habit!.id, "label", _labelController.text);
-                                  _habitService.updateHabit(habit.id, "description", _descriptionController.text);
+                                    _habitService.updateHabit(habit!.id,
+                                        "label", _labelController.text);
+                                    _habitService.updateHabit(
+                                        habit.id,
+                                        "description",
+                                        _descriptionController.text);
                                   Navigator.pop(context);
                                   setState(() {});
                                 }
@@ -1825,17 +2222,22 @@ class HomePageState extends State<HomePage>
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             child: Text(
-                              add ? 'Add Habit' : (isEditing ? 'Save Changes' : 'Edit'),
-                              style: AppTheme.bodyMedium.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                                add
+                                    ? 'Add Habit'
+                                    : (isEditing ? 'Save Changes' : 'Edit'),
+                                style: AppTheme.bodyMedium.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold),
                             ),
                           ),
                         ),
                       ],
                     ),
-                  ],
+
+                    ],
+                  ),
                 ),
-              ),
-            ),
+              )
           );
         });
       },
@@ -2183,149 +2585,162 @@ class HomePageState extends State<HomePage>
                                   if (value == false) {
                                     // Task is being unchecked - subtract XP
                                     await _xpService.subtractTaskXP();
-                              } else if (value == true) {
-                                // Check if this task has repeating functionality
-                                String? nextDeadlineStr;
-                                if (task.repeatFrequency != null &&
-                                    task.repeatInterval != null) {
-                                  // Calculate the next occurrence date based on repeat settings
-                                  DateTime nextDeadline =
-                                      _calculateNextDeadline(task);
-                                  nextDeadlineStr =
-                                      _formatDateTime(nextDeadline);
-                                }
-
-                                // First, add the task to completed_tasks with next deadline info
-                                await _completedTaskService.addCompletedTask(
-                                  task.label,
-                                  task.deadline,
-                                  task.description,
-                                  task.category,
-                                  nextDeadline: nextDeadlineStr,
-                                );
-
-                                // Before deleting the original task, check if it has repeat functionality
-                                if (task.repeatFrequency != null &&
-                                    task.repeatInterval != null) {
-                                  // Calculate the next occurrence date based on repeat settings
-                                  DateTime nextDeadline =
-                                      _calculateNextDeadline(task);
-
-                                  // Check if we should create another occurrence based on end conditions
-                                  bool shouldCreateNextOccurrence = true;
-
-                                  // If "on" end type, check if next deadline is after the end date
-                                  if (task.repeatEndType == 'on' &&
-                                      task.repeatEndDate != null) {
-                                    DateTime endDate =
-                                        _parseDateTime(task.repeatEndDate!);
-                                    shouldCreateNextOccurrence = nextDeadline
-                                            .isBefore(endDate) ||
-                                        nextDeadline.isAtSameMomentAs(endDate);
-                                  }
-                                  // If "after" end type, we need to update the occurrence count
-                                  else if (task.repeatEndType == 'after' &&
-                                      task.repeatOccurrences != null) {
-                                    // Get count of occurrences needed to re-create this task
-                                    int remainingOccurrences =
-                                        task.repeatOccurrences! - 1;
-                                    if (remainingOccurrences <= 0) {
-                                      shouldCreateNextOccurrence = false;
-                                    } else {
-                                      // Create a new task with updated occurrence count
-                                      await _taskService.addTask(
-                                        task.label,
-                                        _formatDateTime(nextDeadline),
-                                        task.description,
-                                        task.category,
-                                        repeatFrequency: task.repeatFrequency,
-                                        repeatInterval: task.repeatInterval,
-                                        repeatEndType: task.repeatEndType,
-                                        repeatEndDate: task.repeatEndDate,
-                                        repeatOccurrences:
-                                            remainingOccurrences, // Decrement occurrences
-                                      );
-                                      // Skip the standard task creation below since we've already created it with updated occurrence count
-                                      shouldCreateNextOccurrence = false;
+                                  } else if (value == true) {
+                                    // Check if this task has repeating functionality
+                                    String? nextDeadlineStr;
+                                    if (task.repeatFrequency != null &&
+                                        task.repeatInterval != null) {
+                                      // Calculate the next occurrence date based on repeat settings
+                                      DateTime nextDeadline =
+                                          _calculateNextDeadline(task);
+                                      nextDeadlineStr =
+                                          _formatDateTime(nextDeadline);
                                     }
-                                  }
 
-                                  // Create the next occurrence if needed (for 'never' end type or 'on' date that hasn't been reached)
-                                  if (shouldCreateNextOccurrence) {
-                                    // Format the next deadline
-                                    String nextDeadlineStr =
-                                        _formatDateTime(nextDeadline);
+                                    // First, add the task to completed_tasks with next deadline info
+                                    await _completedTaskService
+                                        .addCompletedTask(
+                                      task.label,
+                                      task.deadline,
+                                      task.description,
+                                      task.category,
+                                      nextDeadline: nextDeadlineStr,
+                                    );
 
-                                    // Get all current tasks to check for duplicates
-                                    List<Task> currentTasks =
-                                        await _taskService.getTasks();
+                                    // Before deleting the original task, check if it has repeat functionality
+                                    if (task.repeatFrequency != null &&
+                                        task.repeatInterval != null) {
+                                      // Calculate the next occurrence date based on repeat settings
+                                      DateTime nextDeadline =
+                                          _calculateNextDeadline(task);
 
-                                    // Also get all pending tasks to check for duplicates
-                                    final pendingTaskService =
-                                        PendingTaskService();
-                                    List<Task> pendingTasks =
-                                        await pendingTaskService
-                                            .getPendingTasks();
+                                      // Check if we should create another occurrence based on end conditions
+                                      bool shouldCreateNextOccurrence = true;
 
-                                    // Check if a task with the same label and deadline already exists
-                                    bool duplicateExists = currentTasks.any(
-                                            (existingTask) =>
+                                      // If "on" end type, check if next deadline is after the end date
+                                      if (task.repeatEndType == 'on' &&
+                                          task.repeatEndDate != null) {
+                                        DateTime endDate =
+                                            _parseDateTime(task.repeatEndDate!);
+                                        shouldCreateNextOccurrence =
+                                            nextDeadline.isBefore(endDate) ||
+                                                nextDeadline
+                                                    .isAtSameMomentAs(endDate);
+                                      }
+                                      // If "after" end type, we need to update the occurrence count
+                                      else if (task.repeatEndType == 'after' &&
+                                          task.repeatOccurrences != null) {
+                                        // Get count of occurrences needed to re-create this task
+                                        int remainingOccurrences =
+                                            task.repeatOccurrences! - 1;
+                                        if (remainingOccurrences <= 0) {
+                                          shouldCreateNextOccurrence = false;
+                                        } else {
+                                          // Create a new task with updated occurrence count
+                                          await _taskService.addTask(
+                                            task.label,
+                                            _formatDateTime(nextDeadline),
+                                            task.description,
+                                            task.category,
+                                            repeatFrequency:
+                                                task.repeatFrequency,
+                                            repeatInterval: task.repeatInterval,
+                                            repeatEndType: task.repeatEndType,
+                                            repeatEndDate: task.repeatEndDate,
+                                            repeatOccurrences:
+                                                remainingOccurrences, // Decrement occurrences
+                                          );
+                                          // Skip the standard task creation below since we've already created it with updated occurrence count
+                                          shouldCreateNextOccurrence = false;
+                                        }
+                                      }
+
+                                      // Create the next occurrence if needed (for 'never' end type or 'on' date that hasn't been reached)
+                                      if (shouldCreateNextOccurrence) {
+                                        // Format the next deadline
+                                        String nextDeadlineStr =
+                                            _formatDateTime(nextDeadline);
+
+                                        // Get all current tasks to check for duplicates
+                                        List<Task> currentTasks =
+                                            await _taskService.getTasks();
+
+                                        // Also get all pending tasks to check for duplicates
+                                        final pendingTaskService =
+                                            PendingTaskService();
+                                        List<Task> pendingTasks =
+                                            await pendingTaskService
+                                                .getPendingTasks();
+
+                                        // Check if a task with the same label and deadline already exists
+                                        bool duplicateExists = currentTasks.any(
+                                                (existingTask) =>
+                                                    existingTask.label ==
+                                                        task.label &&
+                                                    existingTask.deadline ==
+                                                        nextDeadlineStr) ||
+                                            pendingTasks.any((existingTask) =>
                                                 existingTask.label ==
                                                     task.label &&
                                                 existingTask.deadline ==
-                                                    nextDeadlineStr) ||
-                                        pendingTasks.any((existingTask) =>
-                                            existingTask.label == task.label &&
-                                            existingTask.deadline ==
-                                                nextDeadlineStr);
+                                                    nextDeadlineStr);
 
-                                    // Only create the new task if it doesn't already exist
-                                    if (!duplicateExists) {
-                                      // ALWAYS add to pending tasks instead of active tasks
-                                      await pendingTaskService.addPendingTask(
-                                        task.label,
-                                        nextDeadlineStr,
-                                        task.description,
-                                        task.category,
-                                        repeatFrequency: task.repeatFrequency,
-                                        repeatInterval: task.repeatInterval,
-                                        repeatEndType: task.repeatEndType,
-                                        repeatEndDate: task.repeatEndDate,
-                                        repeatOccurrences:
-                                            task.repeatOccurrences,
-                                      );
+                                        // Only create the new task if it doesn't already exist
+                                        if (!duplicateExists) {
+                                          // ALWAYS add to pending tasks instead of active tasks
+                                          await pendingTaskService
+                                              .addPendingTask(
+                                            task.label,
+                                            nextDeadlineStr,
+                                            task.description,
+                                            task.category,
+                                            repeatFrequency:
+                                                task.repeatFrequency,
+                                            repeatInterval: task.repeatInterval,
+                                            repeatEndType: task.repeatEndType,
+                                            repeatEndDate: task.repeatEndDate,
+                                            repeatOccurrences:
+                                                task.repeatOccurrences,
+                                          );
+                                        }
+                                      }
                                     }
+
+                                    // Delete the original task
+                                    await _taskService.deleteTask(task.id);
+
+                                    // Award XP for completing the task
+                                    final xpResult =
+                                        await _xpService.addTaskXP();
+
+                                    // Show XP gain bubble
+                                    showXPGainBubble(
+                                        context, xpResult['xpGained']);
+
+                                    // Show level up animation if leveled up
+                                    if (xpResult['didLevelUp'] == true) {
+                                      Future.delayed(
+                                          const Duration(milliseconds: 300),
+                                          () {
+                                        showLevelUpAnimation(
+                                          context,
+                                          newLevel: xpResult['newLevel'],
+                                          newRank: xpResult['userXP'].rank,
+                                          xpGained: xpResult['xpGained'],
+                                        );
+                                      });
+                                    }
+
+                                    // Check for pending tasks to activate after task completion
+                                    final pendingTaskService =
+                                        PendingTaskService();
+                                    await pendingTaskService.checkForDueTasks();
                                   }
-                                }
-
-                                // Delete the original task
-                                await _taskService.deleteTask(task.id);
-
-                                // Award XP for completing the task
-                                final xpResult = await _xpService.addTaskXP();
-
-                                // Show XP gain bubble
-                                showXPGainBubble(context, xpResult['xpGained']);
-
-                                // Show level up animation if leveled up
-                                if (xpResult['didLevelUp'] == true) {
-                                  Future.delayed(
-                                      const Duration(milliseconds: 300), () {
-                                    showLevelUpAnimation(
-                                      context,
-                                      newLevel: xpResult['newLevel'],
-                                      newRank: xpResult['userXP'].rank,
-                                      xpGained: xpResult['xpGained'],
-                                    );
-                                  });
-                                }
-                              }
-                              setState(() {});
-                            },
-                          ),
-                        )
-                    )
-                      ], 
+                                  setState(() {});
+                                },
+                              ),
+                            ))
+                      ],
                     ),
                   ),
                   onTap: () {
@@ -2514,40 +2929,41 @@ class HomePageState extends State<HomePage>
 
         // Clean up streams for deleted goals
         final currentGoalIds = goals.map((g) => g.id).toSet();
-        _goalCountdownStreams.removeWhere((id, _) => !currentGoalIds.contains(id));
+        _goalCountdownStreams
+            .removeWhere((id, _) => !currentGoalIds.contains(id));
 
         return Column(
           children: goals.map((goal) {
-              DateTime deadline;
+            DateTime deadline;
 
-              try {
-                deadline = DateTime.parse(goal.deadline.trim());
-              } catch (e) {
-                return Text("Raw deadline string: ${goal.deadline}");
-              }
+            try {
+              deadline = DateTime.parse(goal.deadline.trim());
+            } catch (e) {
+              return Text("Raw deadline string: ${goal.deadline}");
+            }
 
-              // Get or create cached stream for this goal
-              if (!_goalCountdownStreams.containsKey(goal.id)) {
-                _goalCountdownStreams[goal.id] = Stream.periodic(
-                  Duration(seconds: 1),
-                  (_) => deadline.difference(DateTime.now()),
-                ).asBroadcastStream();
-              }
+            // Get or create cached stream for this goal
+            if (!_goalCountdownStreams.containsKey(goal.id)) {
+              _goalCountdownStreams[goal.id] = Stream.periodic(
+                Duration(seconds: 1),
+                (_) => deadline.difference(DateTime.now()),
+              ).asBroadcastStream();
+            }
 
-              return GestureDetector(
-                onLongPress: () {
-                  _goalService.deleteGoal(goal.id);
-                  setState(() {});
-                },
-                onTap: () {
-                  _showAchievementDialog(context, goal);
-                },
-                child: Container(
+            return GestureDetector(
+              onLongPress: () {
+                _goalService.deleteGoal(goal.id);
+                setState(() {});
+              },
+              onTap: () {
+                _showAchievementDialog(context, goal);
+              },
+              child: Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 width: double.infinity,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  decoration: BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppTheme.background,
                   borderRadius: AppTheme.borderRadiusLg,
                   boxShadow: [
@@ -2557,14 +2973,14 @@ class HomePageState extends State<HomePage>
                       offset: const Offset(0, 4),
                     ),
                   ],
-                    border: Border.all(
+                  border: Border.all(
                     color: AppTheme.warning.withOpacity(0.08),
                     width: 1.5,
-                    ),
                   ),
-                  child: Column(
+                ),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
+                  children: [
                     Text(
                       goal.label,
                       textAlign: TextAlign.center,
@@ -2574,8 +2990,8 @@ class HomePageState extends State<HomePage>
                         letterSpacing: 0.3,
                       ),
                     ),
-                      const SizedBox(height: 12),
-                      StreamBuilder(
+                    const SizedBox(height: 12),
+                    StreamBuilder(
                       stream: _goalCountdownStreams[goal.id],
                       builder: (context, snapshot) {
                         if (!snapshot.hasData) return Text("Loading...");
@@ -2608,137 +3024,141 @@ class HomePageState extends State<HomePage>
                         );
                       },
                     ),
-                    ],
-                  ),
+                  ],
                 ),
-              );
-            }).toList(),
-          );
-        },
-      );
+              ),
+            );
+          }).toList(),
+        );
+      },
+    );
   }
 
   Widget _bookList() {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 50),
-      child: FutureBuilder<List<Book>>(
-        future: _bookServiceLib.getBooks(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
+        padding: const EdgeInsets.only(bottom: 50),
+        child: FutureBuilder<List<Book>>(
+          future: _bookServiceLib.getBooks(),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            }
 
-          final books = snapshot.data;
+            final books = snapshot.data;
 
-          if (books == null || books.isEmpty) {
-            return const SizedBox.shrink();
-          }
+            if (books == null || books.isEmpty) {
+              return const SizedBox.shrink();
+            }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Center(
-                child: Text(
-                  "Reading Progress",
-                  style: AppTheme.headlineMedium.copyWith(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.3,
-                    color: AppTheme.textSecondary,
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Center(
+                  child: Text(
+                    "Reading Progress",
+                    style: AppTheme.headlineMedium.copyWith(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                      color: AppTheme.textSecondary,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Column(
-                children: books.map((book) {
-                  return GestureDetector(
-                    onTap: () => _showUpdateBookDialog(context, book),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 12.0),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                        decoration: BoxDecoration(
-                          borderRadius: AppTheme.borderRadiusLg,
-                          color: AppTheme.surface.withOpacity(0.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
-                              blurRadius: 12,
-                              offset: const Offset(0, 3),
+                const SizedBox(height: 12),
+                Column(
+                  children: books.map((book) {
+                    return GestureDetector(
+                      onTap: () => _showUpdateBookDialog(context, book),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 12.0),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            borderRadius: AppTheme.borderRadiusLg,
+                            color: AppTheme.surface.withOpacity(0.5),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.15),
+                                blurRadius: 12,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                            border: Border.all(
+                              color: AppTheme.textSecondary.withOpacity(0.15),
+                              width: 1.5,
                             ),
-                          ],
-                          border: Border.all(
-                            color: AppTheme.textSecondary.withOpacity(0.15),
-                            width: 1.5,
                           ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              book.label,
-                              style: AppTheme.bodyMedium.copyWith(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.textPrimary,
-                              ),
-                              softWrap: false,
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Page ${book.currentPage} of ${book.totalPages}',
-                              style: AppTheme.bodyMedium.copyWith(
-                                fontSize: 11,
-                                color: AppTheme.textSecondary.withOpacity(0.6),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(6),
-                              child: Container(
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.textSecondary.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(6),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                book.label,
+                                style: AppTheme.bodyMedium.copyWith(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
                                 ),
-                                child: FractionallySizedBox(
-                                  widthFactor: book.progress,
-                                  alignment: Alignment.centerLeft,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.textSecondary.withOpacity(0.7),
-                                      borderRadius: BorderRadius.circular(6),
+                                softWrap: false,
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Page ${book.currentPage} of ${book.totalPages}',
+                                style: AppTheme.bodyMedium.copyWith(
+                                  fontSize: 11,
+                                  color:
+                                      AppTheme.textSecondary.withOpacity(0.6),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Container(
+                                  height: 6,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        AppTheme.textSecondary.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: FractionallySizedBox(
+                                    widthFactor: book.progress,
+                                    alignment: Alignment.centerLeft,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.textSecondary
+                                            .withOpacity(0.7),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                "${(book.progress * 100).toStringAsFixed(0)}%",
-                                style: AppTheme.bodyMedium.copyWith(
-                                  fontSize: 12,
-                                  color: AppTheme.textSecondary.withOpacity(0.8),
-                                  fontWeight: FontWeight.w600,
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  "${(book.progress * 100).toStringAsFixed(0)}%",
+                                  style: AppTheme.bodyMedium.copyWith(
+                                    fontSize: 12,
+                                    color:
+                                        AppTheme.textSecondary.withOpacity(0.8),
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          );
-        },
+                    );
+                  }).toList(),
+                ),
+              ],
+            );
+          },
         ));
   }
 
@@ -2773,8 +3193,10 @@ class HomePageState extends State<HomePage>
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.textSecondary,
-                        side: BorderSide(color: AppTheme.textSecondary.withOpacity(0.3)),
-                        shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusMd),
+                        side: BorderSide(
+                            color: AppTheme.textSecondary.withOpacity(0.3)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: AppTheme.borderRadiusMd),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: () => Navigator.pop(context),
@@ -2787,7 +3209,8 @@ class HomePageState extends State<HomePage>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.accent,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusMd),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: AppTheme.borderRadiusMd),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         elevation: 0,
                       ),
@@ -2795,7 +3218,9 @@ class HomePageState extends State<HomePage>
                         Navigator.pop(context);
                         _showCongratulationsDialog(context, goal);
                       },
-                      child: Text("Yes!", style: AppTheme.bodyMedium.copyWith(color: Colors.white)),
+                      child: Text("Yes!",
+                          style: AppTheme.bodyMedium
+                              .copyWith(color: Colors.white)),
                     ),
                   ),
                 ],
@@ -2857,7 +3282,8 @@ class HomePageState extends State<HomePage>
             children: [
               // Honor badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 8),
                 decoration: BoxDecoration(
                   color: AppTheme.accent.withOpacity(0.10),
                   borderRadius: BorderRadius.circular(12),
@@ -2895,7 +3321,8 @@ class HomePageState extends State<HomePage>
               ),
               const SizedBox(height: 32),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 22, vertical: 12),
                 decoration: BoxDecoration(
                   color: AppTheme.accent.withOpacity(0.09),
                   borderRadius: BorderRadius.circular(10),
@@ -2932,8 +3359,7 @@ class HomePageState extends State<HomePage>
             ],
           ),
         ),
-      ),
-    );
+            ));
   }
 
   Future<dynamic> _showUpdateBookDialog(BuildContext context, Book book) {
@@ -3116,6 +3542,107 @@ class HomePageState extends State<HomePage>
     }
   }
 
+  /// Custom styled FAB that matches the app's design system
+  Widget _buildCustomFAB(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          showMenu(
+            context: context,
+            color: AppTheme.surface,
+            position: RelativeRect.fromLTRB(
+              MediaQuery.of(context).size.width - 180,
+              MediaQuery.of(context).size.height - 289,
+              75,
+              0,
+            ),
+            items: [
+              PopupMenuItem<String>(
+                value: 'task',
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline,
+                        color: AppTheme.textSecondary, size: 20),
+                    const SizedBox(width: 12),
+                    Text('Task', style: AppTheme.bodyMedium),
+                  ],
+                ),
+                onTap: () => taskFormDialog(context),
+              ),
+              PopupMenuItem<String>(
+                value: 'habit',
+                child: Row(
+                  children: [
+                    Icon(Icons.repeat_rounded,
+                        color: AppTheme.textSecondary, size: 20),
+                    const SizedBox(width: 12),
+                    Text('Habit', style: AppTheme.bodyMedium),
+                  ],
+                ),
+                onTap: () => habitFormDialog(),
+              ),
+              PopupMenuItem<String>(
+                value: 'goal',
+                child: Row(
+                  children: [
+                    Icon(Icons.flag_rounded,
+                        color: AppTheme.textSecondary, size: 20),
+                    const SizedBox(width: 12),
+                    Text('Long Term Goal', style: AppTheme.bodyMedium),
+                  ],
+                ),
+                onTap: () => goalFormDialog(),
+              ),
+              PopupMenuItem<String>(
+                value: 'book',
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_stories,
+                        color: AppTheme.textSecondary, size: 20),
+                    const SizedBox(width: 12),
+                    Text('Book', style: AppTheme.bodyMedium),
+                  ],
+                ),
+                onTap: () => bookFormDialog(context),
+              ),
+            ],
+          );
+        },
+        borderRadius: BorderRadius.circular(100),
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            border: Border.all(
+              color: AppTheme.accent.withOpacity(0.6),
+              width: 2,
+            ),
+            borderRadius: BorderRadius.circular(100),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.accent.withOpacity(0.15),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.add_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHomePage() {
     return ListView(
       padding: EdgeInsets.zero,
@@ -3164,7 +3691,7 @@ class HomePageState extends State<HomePage>
             ],
           ),
         ),
-        
+
         // Content area
         Padding(
           padding: const EdgeInsets.all(20),
@@ -3190,7 +3717,8 @@ class HomePageState extends State<HomePage>
                       ? Center(
                           child: Padding(
                             padding: const EdgeInsets.all(20),
-                            child: CircularProgressIndicator(color: AppTheme.accent),
+                            child: CircularProgressIndicator(
+                                color: AppTheme.accent),
                           ),
                         )
                       : Column(
@@ -3221,9 +3749,9 @@ class HomePageState extends State<HomePage>
                         ),
                 ),
               ),
-              
+
               const SizedBox(height: 40),
-              
+
               // Goals Section
               FutureBuilder(
                 future: _goalService.getGoals(),
@@ -3252,7 +3780,7 @@ class HomePageState extends State<HomePage>
                   );
                 },
               ),
-              
+
               // Tasks and Habits Grid
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3266,9 +3794,9 @@ class HomePageState extends State<HomePage>
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 50),
-              
+
               // Books Section
               _bookList(),
             ],

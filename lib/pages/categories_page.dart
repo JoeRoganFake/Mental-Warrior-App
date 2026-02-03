@@ -3,6 +3,7 @@ import 'package:mental_warior/models/tasks.dart';
 import 'package:mental_warior/models/categories.dart';
 import 'package:mental_warior/pages/home.dart';
 import 'package:mental_warior/services/database_services.dart';
+
 import 'package:mental_warior/widgets/xp_gain_bubble.dart';
 import 'package:mental_warior/widgets/level_up_animation.dart';
 import 'package:mental_warior/utils/app_theme.dart';
@@ -15,94 +16,62 @@ class CategoriesPage extends StatefulWidget {
 }
 
 class _CategoriesPageState extends State<CategoriesPage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   final TaskService _taskService = TaskService();
   final CategoryService _categoryService = CategoryService();
-  final XPService _xpService = XPService();
   TabController? _tabController;
   List<Category> _categories = [];
   bool _isLoading = true;
+  bool _isInitialized = false;
 
-  final TextEditingController _labelController = TextEditingController();
-  final TextEditingController _descriptionController = TextEditingController();
-  final TextEditingController _dateController = TextEditingController();
+  // Dialog controllers - lazy initialization
+  TextEditingController? _labelController;
+  TextEditingController? _descriptionController;
+  TextEditingController? _dateController;
+  TextEditingController? _repeatEndDateController;
+  TextEditingController? _repeatOccurrencesController;
 
   bool _showDescription = false;
   bool _showDateTime = false;
-
-  // Add new fields for repeat functionality
   bool _showRepeat = false;
   String _repeatFrequency = 'day';
   int _repeatInterval = 1;
   String _repeatEndType = 'never';
-  final TextEditingController _repeatEndDateController =
-      TextEditingController();
-  final TextEditingController _repeatOccurrencesController =
-      TextEditingController();
 
-  // Add this field to track the currently selected category
   Category? _currentCategory;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _loadCategories();
+    _initializePageAsync();
+  }
+
+  // Async initialization to prevent blocking UI
+  Future<void> _initializePageAsync() async {
+    await Future.microtask(() => _loadCategories());
   }
 
   Future<void> _loadCategories() async {
     if (!mounted) return;
 
     try {
-      // Don't set loading state immediately - avoids flickering UI
       final categories = await _categoryService.getCategories();
-
       if (!mounted) return;
 
-      // Create a virtual "All Tasks" category that will show all tasks
       final allTasksCategory =
           Category(id: -1, label: "All Tasks", isDefault: 0);
-
-      // Add the "All Tasks" category at the beginning of the list
       final updatedCategories = [allTasksCategory, ...categories];
 
-      // Only update the UI if categories actually changed
-      if (_categories.length != updatedCategories.length ||
-          !_categories
-              .every((cat) => updatedCategories.any((c) => c.id == cat.id))) {
-        // Save current index if possible
-        int currentIndex = _tabController?.index ?? 0;
-        if (currentIndex >= updatedCategories.length) {
-          currentIndex =
-              updatedCategories.isEmpty ? 0 : updatedCategories.length - 1;
-        }
+      // Only rebuild if categories actually changed
+      if (!_categoriesEqual(_categories, updatedCategories)) {
+        await _updateTabController(updatedCategories);
+      }
 
-        // Dispose old controller properly
-        _tabController?.dispose();
-
-        final newController = TabController(
-          length: updatedCategories.length,
-          vsync: this,
-          initialIndex: currentIndex,
-        );
-
-        // Add this listener to keep track of the current category
-        newController.addListener(() {
-          if (!newController.indexIsChanging &&
-              mounted &&
-              _categories.isNotEmpty) {
-            setState(() {
-              _currentCategory = _categories[newController.index];
-            });
-          }
-        });
-
+      if (mounted && _isLoading) {
         setState(() {
-          _categories = updatedCategories;
-          _tabController = newController;
-          // Set initial category based on current index
-          _currentCategory = updatedCategories.isNotEmpty
-              ? updatedCategories[currentIndex]
-              : null;
           _isLoading = false;
         });
       }
@@ -113,1198 +82,677 @@ class _CategoriesPageState extends State<CategoriesPage>
           _categories = [];
         });
       }
-      print('Error loading categories: $e');
+      debugPrint('Error loading categories: $e');
+    }
+  }
+
+  bool _categoriesEqual(List<Category> list1, List<Category> list2) {
+    if (list1.length != list2.length) return false;
+    for (int i = 0; i < list1.length; i++) {
+      if (list1[i].id != list2[i].id || list1[i].label != list2[i].label) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _updateTabController(List<Category> updatedCategories) async {
+    int currentIndex = _tabController?.index ?? 0;
+    if (currentIndex >= updatedCategories.length) {
+      currentIndex =
+          updatedCategories.isEmpty ? 0 : updatedCategories.length - 1;
+    }
+
+    _tabController?.removeListener(_tabControllerListener);
+    _tabController?.dispose();
+
+    final newController = TabController(
+      length: updatedCategories.length,
+      vsync: this,
+      initialIndex: currentIndex,
+    );
+
+    newController.addListener(_tabControllerListener);
+
+    if (mounted) {
+      setState(() {
+        _categories = updatedCategories;
+        _tabController = newController;
+        _currentCategory = updatedCategories.isNotEmpty
+            ? updatedCategories[currentIndex]
+            : null;
+        _isInitialized = true;
+      });
+    }
+  }
+
+  void _tabControllerListener() {
+    if (_tabController != null &&
+        !_tabController!.indexIsChanging &&
+        mounted &&
+        _categories.isNotEmpty) {
+      final newCategory = _categories[_tabController!.index];
+      if (_currentCategory?.id != newCategory.id) {
+        setState(() {
+          _currentCategory = newCategory;
+        });
+      }
     }
   }
 
   Future<void> _deleteCategory(Category category) async {
     if (category.isDefault == 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cannot delete default category'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      _showErrorSnackBar('Cannot delete default category');
       return;
     }
 
-    final bool? confirm = await showDialog<bool>(
+    final bool? confirm = await _showDeleteConfirmDialog(category);
+    if (confirm == true && mounted) {
+      // Show loading indicator
+      _showLoadingDialog('Deleting category...');
+
+      try {
+        await _categoryService.deleteCategory(category.id);
+        await _loadCategories();
+        if (mounted && context.mounted)
+          Navigator.of(context).pop(); // Close loading dialog
+      } catch (e) {
+        if (mounted && context.mounted)
+          Navigator.of(context).pop(); // Close loading dialog
+        _showErrorSnackBar('Error deleting category');
+      }
+    }
+  }
+
+  void _showLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        content: Row(
+          children: [
+            CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(AppTheme.accent)),
+            const SizedBox(width: 16),
+            Text(message, style: AppTheme.bodyMedium),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message,
+            style: AppTheme.bodyMedium.copyWith(color: Colors.white)),
+        backgroundColor: AppTheme.error,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<bool?> _showDeleteConfirmDialog(Category category) {
+    return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Category?'),
-        content: Text('Are you sure you want to delete "${category.label}"?'),
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
+        title: Text('Delete Category?', style: AppTheme.headlineMedium),
+        content: Text(
+          'Are you sure you want to delete "${category.label}"?',
+          style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: Text('Cancel',
+                style: AppTheme.bodyMedium.copyWith(color: AppTheme.accent)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: Text(
+              'Delete',
+              style: AppTheme.bodyMedium.copyWith(
+                color: AppTheme.error,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
     );
-
-    if (confirm == true && mounted) {
-      await _categoryService.deleteCategory(category.id);
-      // Reload categories and update TabController
-      await _loadCategories();
-    }
   }
 
   @override
   void dispose() {
-    _labelController.dispose();
-    _descriptionController.dispose();
-    _dateController.dispose();
+    _tabController?.removeListener(_tabControllerListener);
     _tabController?.dispose();
+    _labelController?.dispose();
+    _descriptionController?.dispose();
+    _dateController?.dispose();
+    _repeatEndDateController?.dispose();
+    _repeatOccurrencesController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+
+    return _buildBody();
+  }
+
+  Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return _buildLoadingState();
     }
 
     if (_categories.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Padding(
-            padding: EdgeInsets.only(top: 16.0),
-            child: Text(
-              "Categories",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          toolbarHeight: 80,
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black87,
-          elevation: 0,
-        ),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.category_outlined,
-                size: 80,
-                color: Colors.grey[300],
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                "No categories found",
-                style: TextStyle(fontSize: 18),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.refresh),
-                label: const Text("Refresh"),
-                onPressed: _loadCategories,
-                style: ElevatedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+      return _buildEmptyState();
     }
 
+    return _buildMainContent();
+  }
+
+  Widget _buildLoadingState() {
     return Scaffold(
-      resizeToAvoidBottomInset: false, // Prevent keyboard from pushing widgets
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Check if _currentCategory is null, use the first category if it is
-          Category categoryToUse = _currentCategory ?? _categories.first;
-          _showAddTaskDialog(context, categoryToUse);
-        },
-        backgroundColor: Colors.blue,
-        child: const Icon(Icons.add),
-      ),
-      appBar: AppBar(
-        title: Padding(
-          padding: const EdgeInsets.only(right: 16.0, top: 50.0),
-          child: Row(
-            children: [
-              const Text(
-                "Tasks",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const Spacer(),
-              // Add Category button moved to title row for better visibility
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                onPressed: () => _showAddCategoryDialog(context),
-                tooltip: 'Add Category',
-              ),
-            ],
-          ),
-        ),
-        toolbarHeight: 80,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabAlignment: TabAlignment.center,
-          labelColor: Colors.blue,
-          unselectedLabelColor: Colors.grey,
-          labelStyle: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 15,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontWeight: FontWeight.normal,
-            fontSize: 14,
-          ),
-          indicatorColor: Colors.blue,
-          indicatorWeight: 3,
-          tabs: _categories.map((category) {
-            return GestureDetector(
-              onLongPress: () async {
-                await _deleteCategory(category);
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12.0),
-                constraints: const BoxConstraints(minWidth: 100),
-                child: Text(
-                  category.label,
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            );
-          }).toList(),
+      backgroundColor: AppTheme.background,
+      appBar: _buildAppBar(showTabs: false),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(AppTheme.accent)),
+            const SizedBox(height: 16),
+            Text('Loading categories...',
+                style: AppTheme.bodyMedium
+                    .copyWith(color: AppTheme.textSecondary)),
+          ],
         ),
       ),
-      body: NotificationListener<OverscrollIndicatorNotification>(
-        // Prevent the glow effect on overscroll to make refresh more obvious
-        onNotification: (OverscrollIndicatorNotification notification) {
-          notification.disallowIndicator();
-          return true;
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: TabBarView(
-            controller: _tabController,
-            // Make tab swiping require very deliberate gesture with high resistance
-            physics: const PageScrollPhysics().applyTo(
-              const ClampingScrollPhysics().applyTo(
-                ScrollPhysics(parent: const ClampingScrollPhysics()),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Scaffold(
+      backgroundColor: AppTheme.background,
+      appBar: _buildAppBar(showTabs: false),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.category_outlined,
+                size: 80, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
+            const SizedBox(height: 16),
+            Text('No categories found',
+                style: AppTheme.bodyMedium
+                    .copyWith(color: AppTheme.textSecondary)),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.refresh),
+              label: const Text('Refresh'),
+              onPressed: _loadCategories,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.accent,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               ),
             ),
-            children: [
-              ..._categories
-                  .map((category) => CategoryTasksView(category: category)),
-            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMainContent() {
+    return Scaffold(
+      backgroundColor: AppTheme.background,
+      resizeToAvoidBottomInset: false,
+      appBar: _buildAppBar(showTabs: true),
+      body: TabBarView(
+        controller: _tabController,
+        physics:
+            const PageScrollPhysics().applyTo(const ClampingScrollPhysics()),
+        children: _categories
+            .map(
+              (category) => OptimizedCategoryTasksView(
+                key: ValueKey(category.id),
+                category: category,
+              ),
+            )
+            .toList(),
+      ),
+      floatingActionButton: _isInitialized ? _buildFAB() : null,
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar({required bool showTabs}) {
+    return AppBar(
+      backgroundColor: AppTheme.background,
+      elevation: 0,
+      toolbarHeight: 100,
+      title: Padding(
+        padding: const EdgeInsets.only(top: 24.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Tasks', style: AppTheme.displayMedium),
+            IconButton(
+              icon: Icon(Icons.add_circle_outline, color: AppTheme.accent),
+              onPressed: () => _showAddCategoryDialog(context),
+              tooltip: 'Add Category',
+            ),
+          ],
+        ),
+      ),
+      bottom: showTabs
+          ? TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabAlignment: TabAlignment.center,
+              labelColor: AppTheme.accent,
+              unselectedLabelColor: AppTheme.textSecondary,
+              labelStyle:
+                  AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600),
+              unselectedLabelStyle: AppTheme.bodyMedium,
+              indicatorColor: AppTheme.accent,
+              indicatorWeight: 2,
+              dividerColor: AppTheme.surfaceBorder,
+              tabs: _categories
+                  .map((category) => GestureDetector(
+                        onLongPress: () => _deleteCategory(category),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 12.0, horizontal: 8),
+                          constraints: const BoxConstraints(minWidth: 80),
+                          child:
+                              Text(category.label, textAlign: TextAlign.center),
+                        ),
+                      ))
+                  .toList(),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildFAB() {
+    return AnimatedScale(
+      scale: _isInitialized ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.elasticOut,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () {
+            Category categoryToUse = _currentCategory ??
+                (_categories.isNotEmpty
+                    ? _categories.first
+                    : Category(id: -1, label: "General", isDefault: 0));
+            _showAddTaskDialog(context, categoryToUse);
+          },
+          borderRadius: BorderRadius.circular(100),
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              border: Border.all(
+                  color: AppTheme.accent.withValues(alpha: 0.6), width: 2),
+              borderRadius: BorderRadius.circular(100),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.accent.withValues(alpha: 0.15),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
           ),
         ),
       ),
     );
   }
 
-  Future<void> _showAddTaskDialog(
-      BuildContext context, Category category) async {
-    _labelController.clear();
-    _descriptionController.clear();
-    _dateController.clear();
-    _showDescription = false;
-    _showDateTime = false;
-
-    // Reset repeat functionality variables
-    _showRepeat = false;
-    _repeatFrequency = 'day';
-    _repeatInterval = 1;
-    _repeatEndType = 'never';
-    _repeatEndDateController.clear();
-    _repeatOccurrencesController.text = '30';
-
-    final GlobalKey<FormState> taskFormKey = GlobalKey<FormState>();
-
-    return showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.grey[900],
-      useSafeArea: true,
-      isDismissible: true,
-      enableDrag: false, // Disable dragging
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter modalSetState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: Form(
-                key: taskFormKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Text(
-                        "New Task",
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16.0, vertical: 8.0),
-                      child: TextFormField(
-                        controller: _labelController,
-                        autofocus: true,
-                        style: const TextStyle(color: Colors.white),
-                        validator: (value) =>
-                            value?.isEmpty ?? true ? "Required" : null,
-                        decoration: InputDecoration(
-                          hintText: "Task name",
-                          hintStyle: TextStyle(color: Colors.grey[400]),
-                          prefixIcon:
-                              const Icon(Icons.task, color: Colors.white),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                            borderSide: BorderSide(color: Colors.grey[700]!),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (!_showDescription)
-                      TextButton.icon(
-                        icon: Icon(Icons.add, color: Colors.grey[400]),
-                        label: Text("Add Description",
-                            style: TextStyle(color: Colors.grey[400])),
-                        onPressed: () {
-                          modalSetState(() {
-                            _showDescription = true;
-                          });
-                        },
-                      ),
-                    if (_showDescription)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: _descriptionController,
-                                style: const TextStyle(color: Colors.white),
-                                maxLines: 3,
-                                minLines: 1,
-                                decoration: InputDecoration(
-                                  hintText: "Description",
-                                  hintStyle: TextStyle(color: Colors.grey[400]),
-                                  prefixIcon: const Icon(Icons.description,
-                                      color: Colors.white),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8.0),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8.0),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey[700]!),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.remove_circle,
-                                  color: Colors.grey[400]),
-                              onPressed: () {
-                                modalSetState(() {
-                                  _showDescription = false;
-                                  _descriptionController.clear();
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    if (!_showDateTime)
-                      TextButton.icon(
-                        icon: Icon(Icons.add, color: Colors.grey[400]),
-                        label: Text("Add Due Date",
-                            style: TextStyle(color: Colors.grey[400])),
-                        onPressed: () {
-                          modalSetState(() {
-                            _showDateTime = true;
-                          });
-                        },
-                      ),
-                    if (_showDateTime)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: _dateController,
-                                style: const TextStyle(color: Colors.white),
-                                readOnly: true,
-                                onTap: () async {
-                                  DateTime? date = await showDatePicker(
-                                    context: context,
-                                    initialDate: DateTime.now(),
-                                    firstDate: DateTime.now(),
-                                    lastDate: DateTime(2100),
-                                  );
-
-                                  if (date != null) {
-                                    TimeOfDay? time = await showTimePicker(
-                                      context: context,
-                                      initialTime: TimeOfDay.now(),
-                                    );
-
-                                    if (time != null) {
-                                      modalSetState(() {
-                                        _dateController.text =
-                                            "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} "
-                                            "${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
-                                      });
-                                    }
-                                  }
-                                },
-                                decoration: InputDecoration(
-                                  hintText: "Due Date",
-                                  hintStyle: TextStyle(color: Colors.grey[400]),
-                                  prefixIcon: const Icon(Icons.calendar_today,
-                                      color: Colors.white),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8.0),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8.0),
-                                    borderSide:
-                                        BorderSide(color: Colors.grey[700]!),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.remove_circle,
-                                  color: Colors.grey[400]),
-                              onPressed: () {
-                                modalSetState(() {
-                                  _showDateTime = false;
-                                  _dateController.clear();
-                                  // Reset repeat options if date is removed
-                                  _showRepeat = false;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    // Add Repeat button (only shows if a date is selected and has a valid time)
-                    if (_showDateTime &&
-                        _dateController.text.isNotEmpty &&
-                        _dateController.text.contains(":"))
-                      TextButton.icon(
-                        icon: Icon(Icons.repeat, color: Colors.grey[400]),
-                        label: Text(
-                          _showRepeat
-                              ? "Repeats every $_repeatInterval $_repeatFrequency${_repeatInterval > 1 ? 's' : ''}"
-                              : "Add Repeat",
-                          style: TextStyle(
-                              color:
-                                  _showRepeat ? Colors.blue : Colors.grey[400]),
-                        ),
-                        onPressed: () {
-                          _showRepeatOptionsDialog(context, modalSetState);
-                        },
-                        // Add trailing remove button to discard repeat options
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.only(left: 12, right: 0),
-                        ),
-                      ),
-
-                    // Show remove button for repeat options when active
-                    if (_showRepeat)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton.icon(
-                              icon: Icon(
-                                Icons.delete_outline,
-                                color: Colors.red[300],
-                                size: 18,
-                              ),
-                              label: Text(
-                                "Remove Repeat",
-                                style: TextStyle(color: Colors.red[300]),
-                              ),
-                              onPressed: () {
-                                modalSetState(() {
-                                  // Clear all repeat-related fields
-                                  _showRepeat = false;
-                                  _repeatFrequency = 'day';
-                                  _repeatInterval = 1;
-                                  _repeatEndType = 'never';
-                                  _repeatEndDateController.clear();
-                                  _repeatOccurrencesController.text = '30';
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          if (taskFormKey.currentState!.validate()) {
-                            // Get the CURRENT category at the moment the user presses "Add Task"
-                            final currentIndex = _tabController!.index;
-                            final currentCategory = _categories[currentIndex];
-
-                            await _taskService.addTask(
-                              _labelController.text,
-                              _dateController.text,
-                              _descriptionController.text,
-                              currentCategory.label,
-                              // Add repeat functionality parameters
-                              repeatFrequency:
-                                  _showRepeat ? _repeatFrequency : null,
-                              repeatInterval:
-                                  _showRepeat ? _repeatInterval : null,
-                              repeatEndType:
-                                  _showRepeat ? _repeatEndType : null,
-                              repeatEndDate:
-                                  _showRepeat && _repeatEndType == 'on'
-                                      ? _repeatEndDateController.text
-                                      : null,
-                              repeatOccurrences:
-                                  _showRepeat && _repeatEndType == 'after'
-                                      ? int.tryParse(
-                                          _repeatOccurrencesController.text)
-                                      : null,
-                            );
-
-                            Navigator.pop(context);
-                            // The CategoryTasksView will update automatically via the listener
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 50),
-                        ),
-                        child: const Text("Add Task"),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // Method to show the repeat options dialog
-  Future<void> _showRepeatOptionsDialog(
-      BuildContext context, StateSetter parentSetState) async {
-    // Make a copy of the current values to restore if user cancels
-    final String oldFrequency = _repeatFrequency;
-    final int oldInterval = _repeatInterval;
-    final String oldEndType = _repeatEndType;
-    final String oldEndDate = _repeatEndDateController.text;
-    final String oldOccurrences = _repeatOccurrencesController.text;
-
-    // Always ensure the end date is set to a reasonable value if not already set
-    if (_repeatEndType == 'on' &&
-        _repeatEndDateController.text.isEmpty &&
-        _dateController.text.isNotEmpty) {
-      try {
-        final datePart = _dateController.text.split(" ")[0];
-        final parts = datePart.split("-");
-        final startDate = DateTime(
-          int.parse(parts[0]),
-          int.parse(parts[1]),
-          int.parse(parts[2]),
-        );
-        final endDate = startDate.add(Duration(days: 30));
-        _repeatEndDateController.text =
-            "${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}";
-      } catch (e) {
-        print("Error setting default end date: $e");
-      }
-    }
-
-    return showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        // This refreshes the dialog with the latest date/time values from the modal bottom sheet
-        String timeValue = _dateController.text.isNotEmpty &&
-                _dateController.text.contains(":")
-            ? _dateController.text.split(" ")[1]
-            : "12:00";
-
-        String dateValue = _dateController.text.isNotEmpty &&
-                _dateController.text.contains(" ")
-            ? _dateController.text.split(" ")[0].replaceAll('-', '/')
-            : DateTime.now().toString().split(" ")[0].replaceAll('-', '/');
-
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setState) {
-            return AlertDialog(
-              backgroundColor: Colors.grey[900],
-              contentPadding: const EdgeInsets.symmetric(vertical: 16.0),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16.0),
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Text(
-                        'Repeats every',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16.0, vertical: 8.0),
-                      child: Row(
-                        children: [
-                          // Interval input
-                          SizedBox(
-                            width: 50,
-                            child: TextFormField(
-                              initialValue: _repeatInterval.toString(),
-                              keyboardType: TextInputType.number,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(color: Colors.white),
-                              decoration: InputDecoration(
-                                contentPadding: EdgeInsets.symmetric(
-                                    vertical: 8.0, horizontal: 8.0),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey[700]!),
-                                ),
-                              ),
-                              onChanged: (value) {
-                                setState(() {
-                                  _repeatInterval = int.tryParse(value) ?? 1;
-                                  if (_repeatInterval < 1) _repeatInterval = 1;
-                                });
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          // Frequency dropdown
-                          Expanded(
-                            child: Container(
-                              padding: EdgeInsets.symmetric(horizontal: 10.0),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.grey[700]!),
-                                borderRadius: BorderRadius.circular(8.0),
-                              ),
-                              child: DropdownButton<String>(
-                                value: _repeatFrequency,
-                                isExpanded: true,
-                                dropdownColor: Colors.grey[800],
-                                style: const TextStyle(color: Colors.white),
-                                icon: Icon(Icons.arrow_drop_down,
-                                    color: Colors.white),
-                                underline: Container(),
-                                items: [
-                                  DropdownMenuItem(
-                                      value: 'day', child: Text('day')),
-                                  DropdownMenuItem(
-                                      value: 'week', child: Text('week')),
-                                  DropdownMenuItem(
-                                      value: 'month', child: Text('month')),
-                                  DropdownMenuItem(
-                                      value: 'year', child: Text('year')),
-                                ],
-                                onChanged: (value) {
-                                  if (value != null) {
-                                    setState(() {
-                                      _repeatFrequency = value;
-                                    });
-                                  }
-                                },
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Set time field - Show time from date selection and allow editing
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16.0, vertical: 8.0),
-                      child: TextFormField(
-                        initialValue: timeValue, // Use the refreshed time value
-                        readOnly: true,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: "Set time",
-                          hintStyle: TextStyle(color: Colors.grey[600]),
-                          prefixIcon:
-                              Icon(Icons.access_time, color: Colors.white),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                            borderSide: BorderSide(color: Colors.grey[700]!),
-                          ),
-                        ),
-                        onTap: () async {
-                          // Get current time from date string or use current time as fallback
-                          TimeOfDay initialTime;
-                          if (_dateController.text.isNotEmpty &&
-                              _dateController.text.contains(":")) {
-                            final timePart = _dateController.text.split(" ")[1];
-                            final parts = timePart.split(":");
-                            initialTime = TimeOfDay(
-                              hour: int.parse(parts[0]),
-                              minute: int.parse(parts[1]),
-                            );
-                          } else {
-                            initialTime = TimeOfDay.now();
-                          }
-
-                          // Show time picker
-                          final TimeOfDay? selectedTime = await showTimePicker(
-                            context: context,
-                            initialTime: initialTime,
-                          );
-
-                          if (selectedTime != null) {
-                            // Parse existing date from the date controller
-                            String currentDateStr = "";
-                            if (_dateController.text.isNotEmpty &&
-                                _dateController.text.contains(" ")) {
-                              currentDateStr =
-                                  _dateController.text.split(" ")[0];
-                            } else {
-                              // If no date, use today's date
-                              final now = DateTime.now();
-                              currentDateStr =
-                                  "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
-                            }
-
-                            // Update the date controller with new time
-                            String newTimeStr =
-                                "${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}";
-
-                            // Update both the original date controller and the current display
-                            parentSetState(() {
-                              _dateController.text =
-                                  "$currentDateStr $newTimeStr";
-                            });
-
-                            // Force dialog to rebuild with new values
-                            Navigator.of(context).pop();
-                            _showRepeatOptionsDialog(context, parentSetState);
-                          }
-                        },
-                      ),
-                    ),
-                    // Starts field - Make it editable
-                    Padding(
-                      padding: const EdgeInsets.only(
-                          left: 16.0, right: 16.0, top: 16.0, bottom: 8.0),
-                      child: Text(
-                        'Starts',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: TextFormField(
-                        initialValue: dateValue, // Use the refreshed date value
-                        readOnly: true,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          prefixIcon:
-                              Icon(Icons.calendar_today, color: Colors.white),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8.0),
-                            borderSide: BorderSide(color: Colors.grey[700]!),
-                          ),
-                        ),
-                        onTap: () async {
-                          // Get current date from date string or use current date + 30 days as fallback
-                          DateTime initialDate;
-                          if (_dateController.text.isNotEmpty) {
-                            final datePart = _dateController.text.split(" ")[0];
-                            final parts = datePart.split("-");
-                            initialDate = DateTime(
-                              int.parse(parts[0]),
-                              int.parse(parts[1]),
-                              int.parse(parts[2]),
-                            );
-                          } else {
-                            initialDate = DateTime.now();
-                          }
-
-                          // Show date picker
-                          final DateTime? selectedDate = await showDatePicker(
-                            context: context,
-                            initialDate: initialDate,
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime(2100),
-                          );
-
-                          if (selectedDate != null) {
-                            // Get current time from date string or use current time as fallback
-                            TimeOfDay initialTime;
-                            if (_dateController.text.isNotEmpty &&
-                                _dateController.text.contains(":")) {
-                              final timePart =
-                                  _dateController.text.split(" ")[1];
-                              final parts = timePart.split(":");
-                              initialTime = TimeOfDay(
-                                hour: int.parse(parts[0]),
-                                minute: int.parse(parts[1]),
-                              );
-                            } else {
-                              initialTime = TimeOfDay.now();
-                            }
-
-                            // Format the new date string
-                            String newDateStr =
-                                "${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}";
-                            String newTimeStr =
-                                "${initialTime.hour.toString().padLeft(2, '0')}:${initialTime.minute.toString().padLeft(2, '0')}";
-
-                            // Update both the original date controller and the current display
-                            parentSetState(() {
-                              _dateController.text = "$newDateStr $newTimeStr";
-                            });
-
-                            // Force dialog to rebuild with new values
-                            Navigator.of(context).pop();
-                            _showRepeatOptionsDialog(context, parentSetState);
-                          }
-                        },
-                      ),
-                    ),
-                    // Ends section
-                    Padding(
-                      padding: const EdgeInsets.only(
-                          left: 16.0, right: 16.0, top: 16.0, bottom: 8.0),
-                      child: Text(
-                        'Ends',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                    ),
-
-                    // Never radio option
-                    RadioListTile<String>(
-                        title: Text('Never',
-                            style: TextStyle(color: Colors.white)),
-                        value: 'never',
-                        groupValue: _repeatEndType,
-                        activeColor: Colors.blue,
-                        onChanged: (value) {
-                          setState(() {
-                            _repeatEndType = value!;
-                          });
-                        }),
-
-                    // On specific date radio option
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Row(
-                        children: [
-                          Radio<String>(
-                            value: 'on',
-                            groupValue: _repeatEndType,
-                            activeColor: Colors.blue,
-                            onChanged: (value) {
-                              setState(() {
-                                _repeatEndType = value!;
-
-                                // Auto-set reasonable end date if not set
-                                if (_repeatEndDateController.text.isEmpty &&
-                                    _dateController.text.isNotEmpty) {
-                                  try {
-                                    final datePart =
-                                        _dateController.text.split(" ")[0];
-                                    final parts = datePart.split("-");
-                                    final startDate = DateTime(
-                                      int.parse(parts[0]),
-                                      int.parse(parts[1]),
-                                      int.parse(parts[2]),
-                                    );
-                                    final endDate =
-                                        startDate.add(Duration(days: 30));
-                                    _repeatEndDateController.text =
-                                        "${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}";
-                                  } catch (e) {
-                                    print("Error setting default end date: $e");
-                                  }
-                                }
-                              });
-                            },
-                          ),
-                          Text('On', style: TextStyle(color: Colors.white)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextFormField(
-                              controller: _repeatEndDateController,
-                              readOnly: true,
-                              enabled: _repeatEndType == 'on',
-                              style: TextStyle(
-                                color: _repeatEndType == 'on'
-                                    ? Colors.white
-                                    : Colors.grey[600],
-                              ),
-                              decoration: InputDecoration(
-                                hintText: "End date",
-                                hintStyle: TextStyle(color: Colors.grey[600]),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey[700]!),
-                                ),
-                              ),
-                              onTap: () async {
-                                if (_repeatEndType == 'on') {
-                                  // Get current date from date string or use current date + 30 days as fallback
-                                  DateTime initialDate;
-                                  if (_dateController.text.isNotEmpty) {
-                                    final datePart =
-                                        _dateController.text.split(" ")[0];
-                                    final parts = datePart.split("-");
-                                    initialDate = DateTime(
-                                      int.parse(parts[0]),
-                                      int.parse(parts[1]),
-                                      int.parse(parts[2]),
-                                    ).add(Duration(
-                                        days: 30)); // Default to 30 days ahead
-                                  } else {
-                                    initialDate =
-                                        DateTime.now().add(Duration(days: 30));
-                                  }
-
-                                  DateTime? date = await showDatePicker(
-                                    context: context,
-                                    initialDate: initialDate,
-                                    firstDate: DateTime.now(),
-                                    lastDate: DateTime(2100),
-                                  );
-
-                                  if (date != null) {
-                                    setState(() {
-                                      // Format the end date properly
-                                      _repeatEndDateController.text =
-                                          "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-                                    });
-                                  }
-                                }
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // After X occurrences radio option
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                      child: Row(
-                        children: [
-                          Radio<String>(
-                            value: 'after',
-                            groupValue: _repeatEndType,
-                            activeColor: Colors.blue,
-                            onChanged: (value) {
-                              setState(() {
-                                _repeatEndType = value!;
-                                if (_repeatOccurrencesController.text.isEmpty) {
-                                  _repeatOccurrencesController.text = '30';
-                                }
-                              });
-                            },
-                          ),
-                          Text('After', style: TextStyle(color: Colors.white)),
-                          const SizedBox(width: 8),
-                          SizedBox(
-                            width: 60,
-                            child: TextFormField(
-                              controller: _repeatOccurrencesController,
-                              enabled: _repeatEndType == 'after',
-                              keyboardType: TextInputType.number,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: _repeatEndType == 'after'
-                                    ? Colors.white
-                                    : Colors.grey[600],
-                              ),
-                              decoration: InputDecoration(
-                                contentPadding: EdgeInsets.symmetric(
-                                    vertical: 8.0, horizontal: 8.0),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8.0),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey[700]!),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text('occurrences',
-                              style: TextStyle(color: Colors.white)),
-                        ],
-                      ),
-                    ),
-
-                    // Buttons
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16.0, vertical: 16.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          TextButton(
-                            onPressed: () {
-                              // Restore previous values
-                              _repeatFrequency = oldFrequency;
-                              _repeatInterval = oldInterval;
-                              _repeatEndType = oldEndType;
-                              _repeatEndDateController.text = oldEndDate;
-                              _repeatOccurrencesController.text =
-                                  oldOccurrences;
-                              Navigator.of(context).pop();
-                            },
-                            child: Text('Cancel',
-                                style: TextStyle(color: Colors.grey[300])),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: () {
-                              // Enable repeat in the parent dialog
-                              parentSetState(() {
-                                _showRepeat = true;
-                              });
-                              Navigator.of(context).pop();
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue[300],
-                            ),
-                            child: Text('Done'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // Method to add a new category
-  Future<void> _showAddCategoryDialog(BuildContext context) async {
-    _labelController.clear();
+  void _showAddCategoryDialog(BuildContext context) {
+    final TextEditingController categoryController = TextEditingController();
     final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Add Category'),
+        backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
+        title: Text('New Category',
+            style: AppTheme.headlineMedium.copyWith(color: AppTheme.accent)),
         content: Form(
           key: formKey,
           child: TextFormField(
-            controller: _labelController,
+            controller: categoryController,
             autofocus: true,
-            validator: (value) => value?.isEmpty ?? true ? "Required" : null,
             decoration: InputDecoration(
-              hintText: "Category name",
-              prefixIcon: const Icon(Icons.category),
+              hintText: 'Category name',
+              hintStyle: TextStyle(color: AppTheme.textSecondary),
+              filled: true,
+              fillColor: AppTheme.surfaceLight,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8.0),
+                borderRadius: AppTheme.borderRadiusMd,
+                borderSide: BorderSide(color: AppTheme.surfaceBorder),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8.0),
-                borderSide: BorderSide(color: Colors.grey[700]!),
+                borderRadius: AppTheme.borderRadiusMd,
+                borderSide: BorderSide(color: AppTheme.surfaceBorder),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: AppTheme.borderRadiusMd,
+                borderSide: BorderSide(color: AppTheme.accent, width: 2),
               ),
             ),
+            style: AppTheme.bodyMedium.copyWith(color: AppTheme.textPrimary),
+            validator: (value) =>
+                value?.isEmpty ?? true ? 'Category name is required' : null,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('Cancel',
+                style: AppTheme.bodyMedium
+                    .copyWith(color: AppTheme.textSecondary)),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.accent,
+              foregroundColor: Colors.white,
+              shape:
+                  RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusMd),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              elevation: 0,
+            ),
             onPressed: () async {
-              if (formKey.currentState!.validate()) {
-                await _categoryService.addCategory(_labelController.text);
+              if (formKey.currentState?.validate() ?? false) {
                 Navigator.pop(context);
-                // Reload categories to reflect new category
-                _loadCategories();
+                _showLoadingDialog('Adding category...');
+                try {
+                  await _categoryService.addCategory(categoryController.text);
+                  await _loadCategories();
+                  if (mounted && context.mounted)
+                    Navigator.of(context).pop(); // Close loading dialog
+                } catch (e) {
+                  if (mounted && context.mounted)
+                    Navigator.of(context).pop(); // Close loading dialog
+                  _showErrorSnackBar('Error adding category');
+                }
               }
             },
-            child: const Text('Add'),
+            child: Text('Add',
+                style: AppTheme.labelLarge.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                )),
           ),
         ],
       ),
     );
   }
+
+  // Simplified task dialog - using lazy initialization
+  Future<void> _showAddTaskDialog(
+      BuildContext context, Category category) async {
+    // Set selected category - if current tab is "All Tasks", use default category
+    Category? defaultCategory;
+    try {
+      defaultCategory = await _categoryService.getDefaultCategory();
+    } catch (e) {
+      defaultCategory = Category(id: 0, label: "Default", isDefault: 1);
+    }
+    
+    final categoryToUse = category.id == -1 ? defaultCategory : category;
+    
+    // Use the home page's task dialog
+    final homePageState = HomePage.of(context);
+    if (homePageState != null && mounted) {
+      // Set the selected category in HomePage state before showing dialog
+      homePageState.selectedCategory = categoryToUse;
+      
+      await homePageState.taskFormDialog(
+        context,
+        task: null,
+        add: true,
+        changeCompletedTask: false,
+      );
+      
+      // Trigger refresh after dialog closes
+      TaskService.tasksUpdatedNotifier.value =
+          !TaskService.tasksUpdatedNotifier.value;
+    }
+  }
 }
 
-class CategoryTasksView extends StatefulWidget {
+// Optimized CategoryTasksView with better performance
+class OptimizedCategoryTasksView extends StatefulWidget {
   final Category category;
 
-  const CategoryTasksView({
+  const OptimizedCategoryTasksView({
     super.key,
     required this.category,
   });
 
   @override
-  State<CategoryTasksView> createState() => _CategoryTasksViewState();
+  State<OptimizedCategoryTasksView> createState() =>
+      _OptimizedCategoryTasksViewState();
 }
 
-class _CategoryTasksViewState extends State<CategoryTasksView> {
+class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
+    with AutomaticKeepAliveClientMixin {
   final TaskService _taskService = TaskService();
   final CompletedTaskService _completedTaskService = CompletedTaskService();
   final XPService _xpService = XPService();
+  
   List<Task> _tasks = [];
   List<Task> _completedTasks = [];
+  List<Task> _visibleCompletedTasks = []; // Only visible completed tasks
   bool _isLoading = true;
   bool _isExpanded = false;
-  Map<String, List<Task>> _categorizedTasks = {};
+  bool _isProcessingTask = false;
+  bool _isLoadingMoreCompleted = false;
+
+  // Pagination for completed tasks
+  static const int _completedTasksPageSize = 20;
+  int _currentCompletedPage = 0;
+  bool _hasMoreCompletedTasks = true;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _loadTasks();
-    _loadCompletedTasks();
-
-    // Listen for changes to tasks
+    _loadDataAsync();
     TaskService.tasksUpdatedNotifier.addListener(_refreshTasks);
+  }
+
+  Future<void> _loadDataAsync() async {
+    await Future.wait([_loadTasks(), _loadCompletedTasks()]);
   }
 
   void _refreshTasks() {
     if (mounted) {
-      _loadTasks();
-      _loadCompletedTasks();
+      _loadDataAsync();
     }
   }
 
   @override
   void dispose() {
-    // Remove listener to prevent memory leaks
     TaskService.tasksUpdatedNotifier.removeListener(_refreshTasks);
     super.dispose();
   }
 
   Future<void> _loadTasks() async {
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
       final allTasks = await _taskService.getTasks();
 
-      if (widget.category.id == -1) {
-        // For "All Tasks" category, group tasks by their categories
-        _categorizedTasks = {};
+      final filteredTasks = widget.category.id == -1
+          ? allTasks
+          : allTasks
+              .where((task) => task.category == widget.category.label)
+              .toList();
 
-        // First add all tasks to their respective category groups
-        for (var task in allTasks) {
-          if (!_categorizedTasks.containsKey(task.category)) {
-            _categorizedTasks[task.category] = [];
-          }
-          _categorizedTasks[task.category]!.add(task);
-        }
-
-        _tasks = allTasks;
-      } else {
-        // For specific categories, only show tasks from that category
-        _tasks = allTasks
-            .where((task) => task.category == widget.category.label)
-            .toList();
-
-        // Reset categorized tasks for specific categories
-        _categorizedTasks = {};
+      if (mounted) {
+        setState(() {
+          _tasks = filteredTasks;
+          _isLoading = false;
+        });
       }
-
-      setState(() {
-        _isLoading = false;
-      });
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      print('Error loading tasks: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+      debugPrint('Error loading tasks: $e');
     }
   }
 
-  Future<void> _loadCompletedTasks() async {
+  Future<void> _loadCompletedTasks({bool loadMore = false}) async {
+    if (_isLoadingMoreCompleted) return;
+    
     try {
-      final allCompletedTasks = await _completedTaskService.getCompletedTasks();
-
-      if (widget.category.id == -1) {
-        // For "All Tasks" category, show all completed tasks
-        _completedTasks = allCompletedTasks;
-      } else {
-        // For specific categories, filter completed tasks by category
-        _completedTasks = allCompletedTasks
-            .where((task) => task.category == widget.category.label)
-            .toList();
+      if (loadMore) {
+        setState(() {
+          _isLoadingMoreCompleted = true;
+        });
       }
 
-      setState(() {});
+      final allCompletedTasks = await _completedTaskService.getCompletedTasks();
+
+      final filteredTasks = widget.category.id == -1
+          ? allCompletedTasks
+          : allCompletedTasks
+              .where((task) => task.category == widget.category.label)
+              .toList();
+
+      if (mounted) {
+        setState(() {
+          _completedTasks = filteredTasks;
+
+          if (!loadMore) {
+            // Reset pagination when loading fresh data
+            _currentCompletedPage = 0;
+            _visibleCompletedTasks = [];
+          }
+          
+          // Calculate pagination
+          final startIndex = _currentCompletedPage * _completedTasksPageSize;
+          final endIndex = (startIndex + _completedTasksPageSize)
+              .clamp(0, _completedTasks.length);
+
+          if (loadMore && startIndex < _completedTasks.length) {
+            // Add more tasks to visible list
+            _visibleCompletedTasks
+                .addAll(_completedTasks.sublist(startIndex, endIndex));
+            _currentCompletedPage++;
+          } else if (!loadMore) {
+            // Initial load
+            _visibleCompletedTasks =
+                _completedTasks.take(_completedTasksPageSize).toList();
+            if (_completedTasks.isNotEmpty) {
+              _currentCompletedPage = 1;
+            }
+          }
+
+          _hasMoreCompletedTasks =
+              _visibleCompletedTasks.length < _completedTasks.length;
+          _isLoadingMoreCompleted = false;
+        });
+      }
     } catch (e) {
-      print('Error loading completed tasks: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingMoreCompleted = false;
+        });
+      }
+      debugPrint('Error loading completed tasks: $e');
     }
   }
 
   Future<void> _markTaskCompleted(Task task) async {
-    // Before deleting the original task, check if it has repeat functionality
+    if (_isProcessingTask) return;
+
+    setState(() {
+      _isProcessingTask = true;
+    });
+
+    try {
+      // Show optimistic UI update
+      setState(() {
+        _tasks.removeWhere((t) => t.id == task.id);
+      });
+
+      // Background processing
+      await _processTaskCompletion(task);
+
+      // Award XP and show animations
+      final xpResult = await _xpService.addTaskXP();
+
+      if (mounted) {
+        showXPGainBubble(context, xpResult['xpGained']);
+
+        if (xpResult['didLevelUp'] == true) {
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted) {
+              showLevelUpAnimation(
+                context,
+                newLevel: xpResult['newLevel'],
+                newRank: xpResult['userXP'].rank,
+                xpGained: xpResult['xpGained'],
+              );
+            }
+          });
+        }
+      }
+
+      // Reload data to ensure consistency
+      await _loadDataAsync();
+    } catch (e) {
+      // Revert optimistic update on error
+      await _loadTasks();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error completing task: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingTask = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _processTaskCompletion(Task task) async {
+    // Process repeat functionality
     String? nextDeadlineStr;
     if (task.repeatFrequency != null && task.repeatInterval != null) {
-      // Calculate the next occurrence date based on repeat settings
-      DateTime nextDeadline = _calculateNextDeadline(task);
+      final nextDeadline = _calculateNextDeadline(task);
       nextDeadlineStr = _formatDateTime(nextDeadline);
     }
 
-    // First, add the task to completed_tasks with next deadline info
+    // Add to completed tasks
     await _completedTaskService.addCompletedTask(
       task.label,
       task.deadline,
@@ -1313,203 +761,128 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
       nextDeadline: nextDeadlineStr,
     );
 
-    // Before deleting the original task, check if it has repeat functionality
+    // Handle repeat tasks
     if (task.repeatFrequency != null && task.repeatInterval != null) {
-      // Calculate the next occurrence date based on repeat settings
-      DateTime nextDeadline = _calculateNextDeadline(task);
-
-      // Check if we should create another occurrence based on end conditions
-      bool shouldCreateNextOccurrence = true;
-
-      // If "on" end type, check if next deadline is after the end date
-      if (task.repeatEndType == 'on' && task.repeatEndDate != null) {
-        DateTime endDate = _parseDateTime(task.repeatEndDate!);
-        shouldCreateNextOccurrence = nextDeadline.isBefore(endDate) ||
-            nextDeadline.isAtSameMomentAs(endDate);
-      }
-      // If "after" end type, we need to update the occurrence count
-      else if (task.repeatEndType == 'after' &&
-          task.repeatOccurrences != null) {
-        // Get count of occurrences needed to re-create this task
-        int remainingOccurrences = task.repeatOccurrences! - 1;
-        if (remainingOccurrences <= 0) {
-          shouldCreateNextOccurrence = false;
-        } else {
-          // Create a pending task with updated occurrence count instead of an active task
-          if (shouldCreateNextOccurrence) {
-            // Create a PendingTaskService instance
-            final pendingTaskService = PendingTaskService();
-
-            await pendingTaskService.addPendingTask(
-              task.label,
-              _formatDateTime(nextDeadline),
-              task.description,
-              task.category,
-              repeatFrequency: task.repeatFrequency,
-              repeatInterval: task.repeatInterval,
-              repeatEndType: task.repeatEndType,
-              repeatEndDate: task.repeatEndDate,
-              repeatOccurrences: remainingOccurrences, // Decrement occurrences
-            );
-          }
-          // Skip the standard task creation below since we've already created it as a pending task
-          shouldCreateNextOccurrence = false;
-        }
-      }
-
-      // Create the next occurrence if needed (for 'never' end type or 'on' date that hasn't been reached)
-      if (shouldCreateNextOccurrence && task.repeatEndType != 'after') {
-        // Format the next deadline
-        String nextDeadlineStr = _formatDateTime(nextDeadline);
-
-        // Get all pending tasks to check for duplicates
-        final pendingTaskService = PendingTaskService();
-        List<Task> pendingTasks = await pendingTaskService.getPendingTasks();
-
-        // Also check active tasks for duplicates
-        List<Task> currentTasks = await _taskService.getTasks();
-
-        // Check if a task with the same label and deadline already exists in either list
-        bool duplicateExists = currentTasks.any((existingTask) =>
-                existingTask.label == task.label &&
-                existingTask.deadline == nextDeadlineStr) ||
-            pendingTasks.any((existingTask) =>
-                existingTask.label == task.label &&
-                existingTask.deadline == nextDeadlineStr);
-
-        // Only create the new pending task if it doesn't already exist
-        if (!duplicateExists) {
-          // ALWAYS add to pending tasks instead of active tasks
-          await pendingTaskService.addPendingTask(
-            task.label,
-            nextDeadlineStr,
-            task.description,
-            task.category,
-            repeatFrequency: task.repeatFrequency,
-            repeatInterval: task.repeatInterval,
-            repeatEndType: task.repeatEndType,
-            repeatEndDate: task.repeatEndDate,
-            repeatOccurrences: task.repeatOccurrences,
-          );
-        }
-      }
+      await _handleRepeatTask(task);
     }
 
-    // Delete the original task
+    // Delete original task
     await _taskService.deleteTask(task.id);
-
-    // Award XP for completing the task
-    final xpResult = await _xpService.addTaskXP();
-
-    if (mounted) {
-      // Show XP gain bubble
-      showXPGainBubble(context, xpResult['xpGained']);
-
-      // Show level up animation if leveled up
-      if (xpResult['didLevelUp'] == true) {
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            showLevelUpAnimation(
-              context,
-              newLevel: xpResult['newLevel'],
-              newRank: xpResult['userXP'].rank,
-              xpGained: xpResult['xpGained'],
-            );
-          }
-        });
-      }
-    }
-
-    // Check for any pending tasks that might now be due
+    
+    // Check for due pending tasks
     final pendingTaskService = PendingTaskService();
     await pendingTaskService.checkForDueTasks();
-
-    // Refresh both task lists
-    _loadTasks();
-    _loadCompletedTasks();
   }
 
-  // Helper method to calculate the next deadline based on repeat settings
-  DateTime _calculateNextDeadline(Task task) {
-    // Parse the current deadline
-    DateTime currentDeadline = _parseDateTime(task.deadline);
-    int interval = task.repeatInterval ?? 1;
+  Future<void> _handleRepeatTask(Task task) async {
+    final nextDeadline = _calculateNextDeadline(task);
+    bool shouldCreateNext = true;
 
-    // Calculate next deadline based on frequency
-    DateTime nextDeadline;
+    // Check end conditions
+    if (task.repeatEndType == 'on' && task.repeatEndDate != null) {
+      final endDate = _parseDateTime(task.repeatEndDate!);
+      shouldCreateNext = nextDeadline.isBefore(endDate) ||
+          nextDeadline.isAtSameMomentAs(endDate);
+    } else if (task.repeatEndType == 'after' &&
+        task.repeatOccurrences != null) {
+      final remaining = task.repeatOccurrences! - 1;
+      shouldCreateNext = remaining > 0;
+    }
+
+    if (shouldCreateNext) {
+      final pendingTaskService = PendingTaskService();
+      final nextDeadlineStr = _formatDateTime(nextDeadline);
+      
+      // Check for duplicates
+      final [pendingTasks, currentTasks] = await Future.wait([
+        pendingTaskService.getPendingTasks(),
+        _taskService.getTasks(),
+      ]);
+
+      final duplicateExists = [...currentTasks, ...pendingTasks].any(
+          (existingTask) =>
+              existingTask.label == task.label &&
+              existingTask.deadline == nextDeadlineStr);
+
+      if (!duplicateExists) {
+        await pendingTaskService.addPendingTask(
+          task.label,
+          nextDeadlineStr,
+          task.description,
+          task.category,
+          repeatFrequency: task.repeatFrequency,
+          repeatInterval: task.repeatInterval,
+          repeatEndType: task.repeatEndType,
+          repeatEndDate: task.repeatEndDate,
+          repeatOccurrences: task.repeatEndType == 'after'
+              ? (task.repeatOccurrences! - 1)
+              : task.repeatOccurrences,
+        );
+      }
+    }
+  }
+
+  DateTime _calculateNextDeadline(Task task) {
+    final currentDeadline = _parseDateTime(task.deadline);
+    final interval = task.repeatInterval ?? 1;
+
     switch (task.repeatFrequency) {
       case 'day':
-        nextDeadline = currentDeadline.add(Duration(days: interval));
-        break;
+        return currentDeadline.add(Duration(days: interval));
       case 'week':
-        nextDeadline = currentDeadline.add(Duration(days: 7 * interval));
-        break;
+        return currentDeadline.add(Duration(days: 7 * interval));
       case 'month':
-        // Add months by calculating days (approximate)
-        int year = currentDeadline.year;
-        int month = currentDeadline.month + interval;
-        int day = currentDeadline.day;
+        var year = currentDeadline.year;
+        var month = currentDeadline.month + interval;
+        var day = currentDeadline.day;
 
-        // Handle month overflow
         while (month > 12) {
           month -= 12;
           year++;
         }
 
-        // Handle day validity for the month (e.g., Feb 30 -> Feb 28/29)
-        int daysInMonth = DateTime(year, month + 1, 0).day;
-        if (day > daysInMonth) {
-          day = daysInMonth;
-        }
+        final daysInMonth = DateTime(year, month + 1, 0).day;
+        if (day > daysInMonth) day = daysInMonth;
 
-        nextDeadline = DateTime(
+        return DateTime(
             year, month, day, currentDeadline.hour, currentDeadline.minute);
-        break;
       case 'year':
-        // Add years
-        nextDeadline = DateTime(
-            currentDeadline.year + interval,
-            currentDeadline.month,
-            currentDeadline.day,
-            currentDeadline.hour,
-            currentDeadline.minute);
-        break;
+        return DateTime(
+          currentDeadline.year + interval,
+          currentDeadline.month,
+          currentDeadline.day,
+          currentDeadline.hour,
+          currentDeadline.minute,
+        );
       default:
-        // Default to daily if something goes wrong
-        nextDeadline = currentDeadline.add(Duration(days: interval));
+        return currentDeadline.add(Duration(days: interval));
     }
-
-    return nextDeadline;
   }
 
-  // Helper method to parse date string into DateTime
   DateTime _parseDateTime(String dateString) {
     try {
-      if (dateString.isEmpty) {
-        return DateTime.now(); // Default to now if empty
-      }
-
-      List<String> parts = dateString.split(' ');
-      String datePart = parts[0];
-      String timePart = parts.length > 1 ? parts[1] : "00:00";
-
-      List<String> dateParts = datePart.split('-');
-      List<String> timeParts = timePart.split(':');
-
+      if (dateString.isEmpty) return DateTime.now();
+      
+      final parts = dateString.split(' ');
+      final datePart = parts[0];
+      final timePart = parts.length > 1 ? parts[1] : '00:00';
+      
+      final dateParts = datePart.split('-');
+      final timeParts = timePart.split(':');
+      
       return DateTime(
-        int.parse(dateParts[0]), // year
-        int.parse(dateParts[1]), // month
-        int.parse(dateParts[2]), // day
-        int.parse(timeParts[0]), // hour
-        int.parse(timeParts[1]), // minute
+        int.parse(dateParts[0]),
+        int.parse(dateParts[1]),
+        int.parse(dateParts[2]),
+        int.parse(timeParts[0]),
+        int.parse(timeParts[1]),
       );
     } catch (e) {
-      print("Error parsing date: $e for string: $dateString");
-      return DateTime.now(); // Default to now if parsing fails
+      debugPrint('Error parsing date: $e for string: $dateString');
+      return DateTime.now();
     }
   }
 
-  // Helper method to format DateTime back to string format used by the app
   String _formatDateTime(DateTime dateTime) {
     return "${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} "
         "${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}";
@@ -1517,107 +890,99 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+    
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(),
       );
     }
 
-    if (_tasks.isEmpty && _completedTasks.isEmpty) {
-      return SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: Container(
-          height: MediaQuery.of(context).size.height -
-              180, // Adjust height to account for app bar
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min, // Use min instead of center
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.task_alt,
-                  size: 80,
-                  color: Colors.grey[300],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  "No tasks in ${widget.category.label}",
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.grey[600],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "Add a new task to this category",
-                  style: TextStyle(color: Colors.grey[500]),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
+    if (_tasks.isEmpty && _visibleCompletedTasks.isEmpty) {
+      return _buildEmptyState();
     }
 
     return RefreshIndicator(
-      onRefresh: () async {
-        await _loadTasks();
-        await _loadCompletedTasks();
-      },
-      edgeOffset: 0.0,
-      displacement: 40.0,
-      color: Colors.blue,
-      backgroundColor: Colors.white,
-      strokeWidth: 3.0,
+      onRefresh: _loadDataAsync,
       child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: ClampingScrollPhysics(),
-        ),
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
-          // Active tasks list - for both specific categories and "All Tasks"
           if (_tasks.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
-              child: Text(
-                "Active Tasks",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey[800],
-                ),
-              ),
-            ),
-            ..._tasks.map((task) => Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: TaskCard(
-                    task: task,
-                    onTaskCompleted: () {
-                      _markTaskCompleted(task);
-                    },
-                    onRefresh: _loadTasks,
-                  ),
-                )),
+            _buildSectionHeader('Active Tasks'),
+            ..._buildTaskList(),
           ],
-
-          // Completed tasks section - only show if there are completed tasks
-          if (_completedTasks.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 16, bottom: 8),
-              child: _buildCompletedTasksList(),
-            ),
+          if (_visibleCompletedTasks.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildCompletedTasksSection(),
+          ],
         ],
       ),
     );
   }
 
-  // Helper method to build tasks grouped by category for the "All Tasks" view
+  Widget _buildEmptyState() {
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height - 180,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.task_alt,
+                  size: 80, color: Colors.grey.withValues(alpha: 0.3)),
+              const SizedBox(height: 16),
+              Text(
+                'No tasks in ${widget.category.label}',
+                style: TextStyle(
+                    fontSize: 18, color: Colors.grey.withValues(alpha: 0.6)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Add a new task to this category',
+                style: TextStyle(color: Colors.grey[500]),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-  Widget _buildCompletedTasksList() {
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: Colors.grey[800],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildTaskList() {
+    return _tasks
+        .map((task) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: OptimizedTaskCard(
+                key: ValueKey(task.id),
+                task: task,
+                onTaskCompleted: () => _markTaskCompleted(task),
+                isProcessing: _isProcessingTask,
+              ),
+            ))
+        .toList();
+  }
+
+  Widget _buildCompletedTasksSection() {
     return ExpansionPanelList(
+      elevation: 0,
       expansionCallback: (int index, bool isExpanded) {
         setState(() {
           _isExpanded = !_isExpanded;
@@ -1626,10 +991,9 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
       children: [
         ExpansionPanel(
           isExpanded: _isExpanded,
-          headerBuilder: (context, isExpanded) => Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Text(
-              "Completed Tasks (${_completedTasks.length})",
+          headerBuilder: (context, isExpanded) => ListTile(
+            title: Text(
+              'Completed Tasks',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -1638,12 +1002,46 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
             ),
           ),
           body: Column(
-            children: _completedTasks
-                .map((task) => _buildCompletedTaskItem(task))
-                .toList(),
+            children: [
+              ..._visibleCompletedTasks.map(_buildCompletedTaskItem).toList(),
+              if (_hasMoreCompletedTasks) _buildLoadMoreButton(),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildLoadMoreButton() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      width: double.infinity,
+      child: _isLoadingMoreCompleted
+          ? const Center(
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            )
+          : ElevatedButton.icon(
+              onPressed: () => _loadCompletedTasks(loadMore: true),
+              icon: const Icon(Icons.expand_more, size: 18),
+              label: const Text(
+                'Load More',
+                style: TextStyle(fontSize: 14),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.grey[200],
+                foregroundColor: Colors.grey[700],
+                elevation: 0,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
     );
   }
 
@@ -1659,7 +1057,7 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
       direction: DismissDirection.endToStart,
       onDismissed: (_) async {
         await _completedTaskService.deleteCompTask(task.id);
-        _loadCompletedTasks();
+        _loadCompletedTasks(); // Reload fresh data after deletion
       },
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1672,40 +1070,219 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
         ),
         subtitle: task.deadline.isNotEmpty
             ? Text(
-                task.nextDeadline != null && task.nextDeadline!.isNotEmpty
-                    ? "Next due: ${task.nextDeadline}"
-                    : "Completed on: ${task.deadline}",
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
+                task.nextDeadline?.isNotEmpty == true
+                    ? 'Next due: ${task.nextDeadline}'
+                    : 'Completed on: ${task.deadline}',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
               )
             : null,
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (task.nextDeadline != null && task.nextDeadline!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Icon(
-                  Icons.event_repeat,
-                  color: Colors.blue[300],
-                  size: 20,
-                ),
-              ),
+            if (task.nextDeadline?.isNotEmpty == true)
+              Icon(Icons.event_repeat, color: Colors.blue[300], size: 20),
             IconButton(
               icon: Icon(Icons.restore, color: Colors.blue[700]),
-              onPressed: () => _restoreCompletedTask(task),
+              onPressed: () => _restoreTask(task),
               tooltip: 'Restore task',
             ),
           ],
         ),
-        onTap: () => _showCompletedTaskDetails(context, task),
       ),
     );
   }
 
-  void _showCompletedTaskDetails(BuildContext context, Task task) {
+  Future<void> _restoreTask(Task task) async {
+    try {
+      // Show optimistic update
+      setState(() {
+        _visibleCompletedTasks.removeWhere((t) => t.id == task.id);
+        _completedTasks.removeWhere((t) => t.id == task.id);
+      });
+
+      await _taskService.addTask(
+          task.label, task.deadline, task.description, task.category);
+      await _completedTaskService.deleteCompTask(task.id);
+      await _xpService.subtractTaskXP();
+      
+      // Reload all data to ensure consistency
+      await _loadDataAsync();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Task "${task.label}" restored'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      // Revert optimistic update on error
+      await _loadCompletedTasks();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error restoring task: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+}
+
+// Optimized TaskCard with better performance
+class OptimizedTaskCard extends StatelessWidget {
+  final Task task;
+  final VoidCallback onTaskCompleted;
+  final bool isProcessing;
+
+  const OptimizedTaskCard({
+    super.key,
+    required this.task,
+    required this.onTaskCompleted,
+    this.isProcessing = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: isProcessing ? 0.5 : 1.0,
+      duration: const Duration(milliseconds: 200),
+      child: GestureDetector(
+        onTap: isProcessing ? null : () => _showTaskDetails(context),
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 80),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: AppTheme.borderRadiusLg,
+            color: AppTheme.surface.withOpacity(0.6),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.textSecondary.withOpacity(0.05),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+            border: Border.all(
+              color: AppTheme.textSecondary.withOpacity(0.08),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Checkbox on the left
+              if (isProcessing)
+                const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2.5),
+                )
+              else
+                GestureDetector(
+                  onTap: onTaskCompleted,
+                  child: Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppTheme.accent.withOpacity(0.5),
+                        width: 2.5,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.check,
+                      size: 18,
+                      color: Colors.transparent,
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 14),
+              // Task content - expanded
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      task.label,
+                      style: AppTheme.bodyLarge.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                        fontSize: 16,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (task.description.isNotEmpty ||
+                        task.deadline.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      _buildSubtitle(),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubtitle() {
+    List<String> subtitleParts = [];
+
+    if (task.deadline.isNotEmpty) {
+      try {
+        // Format deadline more elegantly
+        final parts = task.deadline.split(' ');
+        if (parts.isNotEmpty) {
+          final datePart = parts[0];
+          final dateFormatted = datePart.replaceAll('-', '/');
+          if (parts.length > 1) {
+            final timePart = parts[1];
+            subtitleParts.add('$dateFormatted at $timePart');
+          } else {
+            subtitleParts.add(dateFormatted);
+          }
+        }
+      } catch (e) {
+        subtitleParts.add(task.deadline);
+      }
+    }
+
+    if (task.description.isNotEmpty) {
+      subtitleParts.add(task.description);
+    }
+
+    return Text(
+      subtitleParts.join(' • '),
+      style: AppTheme.bodySmall.copyWith(
+        color: AppTheme.textSecondary,
+        fontSize: 13,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  void _showTaskDetails(BuildContext context) {
+    // Use the existing task details dialog or fallback
+    final homePageState = HomePage.of(context);
+    if (homePageState != null) {
+      homePageState.taskFormDialog(context, task: task, add: false);
+    } else {
+      _showFallbackDialog(context);
+    }
+  }
+
+  void _showFallbackDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -1715,29 +1292,20 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (task.description.isNotEmpty) ...[
-              const Text(
-                "Description:",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+              const Text('Description:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               Text(task.description),
               const SizedBox(height: 16),
             ],
             if (task.deadline.isNotEmpty) ...[
-              const Text(
-                "Completed on:",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+              const Text('Deadline:',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               Text(task.deadline),
               const SizedBox(height: 16),
             ],
-            if (task.nextDeadline != null && task.nextDeadline!.isNotEmpty) ...[
-              const Text(
-                "Next due:",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              Text(task.nextDeadline!),
-              const SizedBox(height: 16),
-            ],
+            const Text('Category:',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            Text(task.category),
           ],
         ),
         actions: [
@@ -1748,215 +1316,12 @@ class _CategoryTasksViewState extends State<CategoryTasksView> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _restoreCompletedTask(task);
+              onTaskCompleted();
             },
-            child: const Text('Restore'),
+            child: const Text('Mark Complete'),
           ),
         ],
       ),
     );
-  }
-
-  Future<void> _restoreCompletedTask(Task task) async {
-    // Add the task back to the active tasks
-    await _taskService.addTask(
-      task.label,
-      task.deadline,
-      task.description,
-      task.category,
-    );
-
-    // Remove from completed tasks
-    await _completedTaskService.deleteCompTask(task.id);
-
-    // Subtract XP since task is being uncompleted
-    await _xpService.subtractTaskXP();
-
-    // Refresh both lists
-    _loadTasks();
-    _loadCompletedTasks();
-
-    // Show a confirmation
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Task "${task.label}" restored'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-}
-
-class TaskCard extends StatelessWidget {
-  final Task task;
-  final VoidCallback onTaskCompleted;
-  final VoidCallback onRefresh;
-
-  const TaskCard({
-    super.key,
-    required this.task,
-    required this.onTaskCompleted,
-    required this.onRefresh,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          _showTaskDetailsDialog(context);
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      task.label,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  Checkbox(
-                    value: task.status == 1,
-                    onChanged: (value) {
-                      if (value == true) {
-                        onTaskCompleted();
-                      }
-                    },
-                  ),
-                ],
-              ),
-              // Display the category name with a tag-like style
-              Container(
-                margin: EdgeInsets.only(top: 4, bottom: 4),
-                padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                ),
-                child: Text(
-                  task.category,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.blue[800],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              if (task.description.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  task.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                  ),
-                ),
-              ],
-              if (task.deadline.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.calendar_today,
-                      size: 16,
-                      color: Colors.blue[800],
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      task.deadline,
-                      style: TextStyle(
-                        color: Colors.blue[800],
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showTaskDetailsDialog(BuildContext context) {
-    // Import the HomePage class to access its taskFormDialog method
-    final homePageState = HomePage.of(context);
-    if (homePageState != null) {
-      // Use the taskFormDialog from HomePage
-      homePageState.taskFormDialog(context, task: task, add: false);
-    } else {
-      // Fallback to the original dialog if HomePage is not found
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(task.label),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (task.description.isNotEmpty) ...[
-                const Text(
-                  "Description:",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(task.description),
-                const SizedBox(height: 16),
-              ],
-              if (task.deadline.isNotEmpty) ...[
-                const Text(
-                  "Deadline:",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(task.deadline),
-                const SizedBox(height: 16),
-              ],
-              const Text(
-                "Status:",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              Text(task.status == 1 ? "Completed" : "Pending"),
-              const SizedBox(height: 16),
-              const Text(
-                "Category:",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              Text(task.category),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Close'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                onTaskCompleted();
-              },
-              child: const Text('Mark Complete'),
-            ),
-          ],
-        ),
-      );
-    }
   }
 }

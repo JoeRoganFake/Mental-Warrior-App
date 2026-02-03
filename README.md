@@ -2,6 +2,10 @@
 
 A new Flutter project.
 
+## UI References
+
+- Category selection popup: `docs/ui/category_selection_popup.md`
+
 ## Getting Started
 
 This project is a starting point for a Flutter application.

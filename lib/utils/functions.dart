@@ -71,17 +71,19 @@ class Functions {
           ),
         );
       } else if (deadline.isAtSameMomentAs(today)) {
-        return const Text(
-          "Today",
-          style: TextStyle(
+        String timeStr = parts.length > 1 ? " ${parts[1]}" : "";
+        return Text(
+          "Today$timeStr",
+          style: const TextStyle(
             color: Colors.blue,
             fontSize: 11,
           ),
         );
       } else if (deadline.isAtSameMomentAs(tomorrow)) {
-        return const Text(
-          "Tomorrow",
-          style: TextStyle(
+        String timeStr = parts.length > 1 ? " ${parts[1]}" : "";
+        return Text(
+          "Tomorrow$timeStr",
+          style: const TextStyle(
             color: Colors.orange,
             fontSize: 11,
           ),

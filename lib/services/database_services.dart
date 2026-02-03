@@ -273,6 +273,17 @@ class TaskService {
     );
     tasksUpdatedNotifier.value = !tasksUpdatedNotifier.value;
   }
+
+  Future<void> updateTaskCategory(int id, String newCategory) async {
+    final db = await DatabaseService.instance.database;
+    await db.update(
+      _taskTableName,
+      {_taskCategoryColumnName: newCategory},
+      where: "id = ?",
+      whereArgs: [id],
+    );
+    tasksUpdatedNotifier.value = !tasksUpdatedNotifier.value;
+  }
 }
 
 class CompletedTaskService {
@@ -700,15 +711,43 @@ class CategoryService {
     );
   }
 
-  Future addCategory(String label) async {
+  Future<bool> categoryExists(String label) async {
     final db = await DatabaseService.instance.database;
-    await db.insert(
+    final normalized = label.trim().toLowerCase();
+    if (normalized.isEmpty) return false;
+
+    final data = await db.query(
       _categoryTableName,
-      {
-        _categoryLabelColumnName: label,
-        _categoryIsDefaultColumnName: 0,
-      },
+      columns: [_categoryIdColumnName],
+      where: 'LOWER($_categoryLabelColumnName) = ?',
+      whereArgs: [normalized],
+      limit: 1,
     );
+
+    return data.isNotEmpty;
+  }
+
+  Future<bool> addCategory(String label) async {
+    final db = await DatabaseService.instance.database;
+    final normalized = label.trim();
+    if (normalized.isEmpty) return false;
+
+    final exists = await categoryExists(normalized);
+    if (exists) return false;
+
+    try {
+      await db.insert(
+        _categoryTableName,
+        {
+          _categoryLabelColumnName: normalized,
+          _categoryIsDefaultColumnName: 0,
+        },
+        conflictAlgorithm: ConflictAlgorithm.abort,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<List<Category>> getCategories() async {
@@ -863,7 +902,7 @@ class PendingTaskService {
     await db.delete(_pendingTaskTableName, where: "id = ?", whereArgs: [id]);
   }
 
-  // Check for pending tasks that are due today (on the actual day of the deadline)
+  // Check for pending tasks that are due within 2 days (activate 2 days before deadline)
   Future<void> checkForDueTasks() async {
     final TaskService taskService = TaskService();
 
@@ -883,13 +922,18 @@ class PendingTaskService {
         final taskDate = DateTime(
             int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
 
-        // Only activate tasks that are due today (exactly on the deadline date)
-        // This ensures tasks appear only on the day they're due, not a day before
-        if (taskDate.year == today.year &&
-            taskDate.month == today.month &&
-            taskDate.day == today.day) {
+        // Calculate the activation date (2 days before the deadline)
+        final activationDate = taskDate.subtract(Duration(days: 2));
+
+        // Activate tasks if today is on or after the activation date (2 days before deadline)
+        if (today.year >= activationDate.year &&
+            today.month >= activationDate.month &&
+            today.day >= activationDate.day &&
+            today.year <= taskDate.year &&
+            today.month <= taskDate.month &&
+            today.day <= taskDate.day) {
           print(
-              "📅 Activating task '${task.label}' due today on ${task.deadline}");
+              "📅 Activating task '${task.label}' scheduled for ${task.deadline} (activation: ${activationDate.year}-${activationDate.month.toString().padLeft(2, '0')}-${activationDate.day.toString().padLeft(2, '0')})");
 
           // Add to active tasks
           await taskService.addTask(
@@ -922,7 +966,7 @@ class PendingTaskService {
 class WorkoutService {
   static final ValueNotifier<bool> workoutsUpdatedNotifier =
       ValueNotifier(false);
-  
+
   // Add a ValueNotifier to track temporary workouts
   static final ValueNotifier<Map<int, dynamic>> tempWorkoutsNotifier =
       ValueNotifier({});
@@ -1153,7 +1197,7 @@ class WorkoutService {
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
     return workoutId;
   }
-  
+
   // Create a temporary workout that's not saved to database yet
   int createTemporaryWorkout(String name, String date, int duration) {
     // Generate a unique negative ID to avoid conflicts with database IDs
@@ -1252,7 +1296,7 @@ class WorkoutService {
       // First, check if this exercise has any valid sets
       bool hasValidSets = false;
       List<Map<String, dynamic>> validSets = [];
-      
+
       for (final set in exercise['sets']) {
         final double weight = (set['weight'] ?? 0.0).toDouble();
         final int reps = (set['reps'] ?? 0);
@@ -1281,11 +1325,11 @@ class WorkoutService {
           final int reps = (set['reps'] ?? 0);
           final bool completed = set['completed'] ?? false;
           final String setType = set['setType'] ?? 'normal';
-          
+
           final setId = await addSet(
               exerciseId, set['setNumber'], weight, reps, set['restTime'],
               setType: setType);
-          
+
           // If the set was completed in the temporary workout, mark it as completed
           // This will trigger the proper PR calculation
           if (completed) {
@@ -1309,7 +1353,7 @@ class WorkoutService {
   // Discard a temporary workout
   Future<void> discardTemporaryWorkout(int tempId) async {
     print('🗑️ Attempting to discard temporary workout with ID: $tempId');
-    
+
     final tempWorkouts = tempWorkoutsNotifier.value;
     final activeWorkout = activeWorkoutNotifier.value;
 
@@ -1362,7 +1406,7 @@ class WorkoutService {
     } else {
       print('⚠️ Workout not found in temp workouts');
     }
-    
+
     // If this is/was a temporary workout OR has saved data, we need to clear everything
     if (isActiveWorkout || wasTemporaryWorkout || hasSavedData) {
       print(
@@ -1410,6 +1454,7 @@ class WorkoutService {
   bool isTemporaryWorkout(int workoutId) {
     return workoutId < 0;
   }
+
   // Add a new exercise to a workout
   Future<int> addExercise(int workoutId, String name, String equipment,
       {String? notes, String? supersetGroup}) async {
@@ -1468,9 +1513,10 @@ class WorkoutService {
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
     return exerciseId;
   }
+
   // Add a new set to an exercise
-  Future<int> addSet(int exerciseId, int setNumber, double weight, int reps,
-      int restTime,
+  Future<int> addSet(
+      int exerciseId, int setNumber, double weight, int reps, int restTime,
       {String setType = 'normal'}) async {
     // Handle temporary workouts
     if (exerciseId < 0) {
@@ -1543,8 +1589,7 @@ class WorkoutService {
 
     // Clean the exercise name to ensure consistent comparison
     // Remove both API_ID and CUSTOM markers
-    final String cleanExerciseName =
-        exerciseName
+    final String cleanExerciseName = exerciseName
         .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
         .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
         .trim();
@@ -1574,8 +1619,7 @@ class WorkoutService {
 
     for (final row in result) {
       final String dbExerciseName = row['name'] as String;
-      final String cleanDbExerciseName =
-          dbExerciseName
+      final String cleanDbExerciseName = dbExerciseName
           .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
           .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
           .trim();
@@ -1625,8 +1669,7 @@ class WorkoutService {
 
     // Clean the exercise name to ensure consistent comparison
     // Remove both API_ID and CUSTOM markers
-    final String cleanExerciseName =
-        exerciseName
+    final String cleanExerciseName = exerciseName
         .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
         .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
         .trim();
@@ -1646,8 +1689,7 @@ class WorkoutService {
     List<Map<String, dynamic>> exerciseSets = [];
     for (final row in result) {
       final String dbExerciseName = row['name'] as String;
-      final String cleanDbExerciseName =
-          dbExerciseName
+      final String cleanDbExerciseName = dbExerciseName
           .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
           .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
           .trim();
@@ -1674,7 +1716,7 @@ class WorkoutService {
     // Find the set with maximum volume (only one PR per exercise)
     double maxVolume = 0.0;
     int? maxSetId;
-    
+
     for (final set in exerciseSets) {
       final int setId = set['id'] as int;
       final double volume = set['volume'] as double;
@@ -1705,9 +1747,9 @@ class WorkoutService {
   // Update set completion status
   Future<void> updateSetStatus(int setId, bool completed) async {
     final db = await DatabaseService.instance.database;
-    
+
     String? exerciseName;
-    
+
     // If completing the set, get the exercise name for PR recalculation
     if (completed) {
       final setResult = await db.rawQuery('''
@@ -1732,7 +1774,7 @@ class WorkoutService {
     if (!completed) {
       updateData[_setIsPRColumnName] = 0;
     }
-    
+
     await db.update(
       _setTableName,
       updateData,
@@ -1818,8 +1860,7 @@ class WorkoutService {
   }
 
   // Add updateExercise method to WorkoutService
-  Future<void> updateExercise(
-      int exerciseId, String name, String equipment,
+  Future<void> updateExercise(int exerciseId, String name, String equipment,
       {String? notes, String? supersetGroup}) async {
     final db = await DatabaseService.instance.database;
     await db.update(
@@ -1942,7 +1983,8 @@ class WorkoutService {
   // Get the total count of completed workouts
   Future<int> getWorkoutCount() async {
     final db = await DatabaseService.instance.database;
-    final result = await db.rawQuery('SELECT COUNT(*) as count FROM $_workoutTableName');
+    final result =
+        await db.rawQuery('SELECT COUNT(*) as count FROM $_workoutTableName');
     return (result.first['count'] as int?) ?? 0;
   }
 
@@ -1955,7 +1997,7 @@ class WorkoutService {
       whereArgs: [workoutId],
     );
     workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
-    
+
     // If this is the currently active workout, clear it and stop the foreground service
     final activeWorkout = activeWorkoutNotifier.value;
     if (activeWorkout != null && activeWorkout['id'] == workoutId) {
@@ -1965,6 +2007,7 @@ class WorkoutService {
       WorkoutForegroundService.clearSavedWorkoutData();
     }
   }
+
   // Delete an exercise and all its sets
   Future<void> deleteExercise(int exerciseId) async {
     // Handle temporary exercises (negative IDs)
@@ -2065,7 +2108,7 @@ class WorkoutService {
   Future<void> restoreSavedWorkout(Map<String, dynamic> savedData) async {
     try {
       print('🔄 Restoring saved workout...');
-      
+
       final startTime = savedData['start_time'] as DateTime;
       final workoutName = savedData['workout_name'] as String;
 
@@ -2180,15 +2223,13 @@ class WorkoutService {
   }
 
   // Get the most recent exercise history for a given exercise name
-  Future<List<ExerciseSet>?> getRecentExerciseHistory(
-      String exerciseName,
+  Future<List<ExerciseSet>?> getRecentExerciseHistory(String exerciseName,
       {int? excludeWorkoutId}) async {
     try {
       final workouts = await getWorkouts();
 
       // Clean the exercise name to remove API ID and CUSTOM markers
-      final String cleanExerciseName =
-          exerciseName
+      final String cleanExerciseName = exerciseName
           .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
           .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
           .trim();
@@ -2230,8 +2271,7 @@ class WorkoutService {
         for (int j = 0; j < workout.exercises.length; j++) {
           final exercise = workout.exercises[j];
           // Clean the database exercise name for comparison
-          final String cleanDbExerciseName =
-              exercise.name
+          final String cleanDbExerciseName = exercise.name
               .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
               .replaceAll(RegExp(r'##CUSTOM:[^#]+##'), '')
               .trim();
@@ -2239,11 +2279,10 @@ class WorkoutService {
           print('🔍   Exercise ${j + 1}: "$cleanDbExerciseName"');
           print('🔍     Finished: ${exercise.finished}');
           print('🔍     Total Sets: ${exercise.sets.length}');
-          
+
           // Check for exact match (case insensitive)
           if (cleanDbExerciseName.toLowerCase() ==
               cleanExerciseName.toLowerCase()) {
-            
             print('🔍     ✅ EXERCISE NAME MATCH!');
 
             // Check if this exercise has any completed sets
@@ -2599,7 +2638,7 @@ class CustomExerciseService {
         $_exerciseHiddenColumnName INTEGER DEFAULT 0
       )
     ''');
-    
+
     // Migration: Add hidden column to existing tables
     try {
       await db.execute('''
@@ -2640,14 +2679,15 @@ class CustomExerciseService {
   }
 
   // Get all custom exercises
-  Future<List<Map<String, dynamic>>> getCustomExercises({bool includeHidden = true}) async {
+  Future<List<Map<String, dynamic>>> getCustomExercises(
+      {bool includeHidden = true}) async {
     final db = await DatabaseService.instance.database;
-    
+
     String? whereClause;
     if (!includeHidden) {
       whereClause = '$_exerciseHiddenColumnName = 0';
     }
-    
+
     final data = await db.query(
       _customExerciseTableName,
       where: whereClause,
@@ -2680,7 +2720,7 @@ class CustomExerciseService {
   // Get only hidden custom exercises
   Future<List<Map<String, dynamic>>> getHiddenCustomExercises() async {
     final db = await DatabaseService.instance.database;
-    
+
     final data = await db.query(
       _customExerciseTableName,
       where: '$_exerciseHiddenColumnName = 1',
@@ -2701,8 +2741,7 @@ class CustomExerciseService {
         'type': exerciseMap[_exerciseTypeColumnName],
         'description': exerciseMap[_exerciseDescriptionColumnName],
         'secondaryMuscles': secondaryMuscles,
-        'apiId':
-            'custom_${exerciseMap[_exerciseIdColumnName]}',
+        'apiId': 'custom_${exerciseMap[_exerciseIdColumnName]}',
         'isCustom': true,
         'createdAt': exerciseMap[_exerciseCreatedAtColumnName],
         'hidden': true,
@@ -3136,7 +3175,8 @@ class ExercisePlateConfigService {
   final String _plateConfigTableName = "exercise_plate_configs";
   final String _idColumnName = "id";
   final String _exerciseNameColumnName = "exercise_name";
-  final String _weightColumnName = "weight"; // The total weight this config represents
+  final String _weightColumnName =
+      "weight"; // The total weight this config represents
   final String _barTypeColumnName = "bar_type";
   final String _plateCountsColumnName = "plate_counts"; // JSON string
   final String _unitColumnName = "unit"; // "kg" or "lbs"
@@ -3178,7 +3218,7 @@ class ExercisePlateConfigService {
     final unit = (useLbs ?? false) ? 'lbs' : 'kg';
 
     List<Map<String, Object?>> result;
-    
+
     if (weight != null) {
       // Get config for specific weight and unit
       result = await db.query(
@@ -3210,8 +3250,7 @@ class ExercisePlateConfigService {
   }
 
   // Set or update plate config for an exercise at a specific weight
-  Future<void> setPlateConfig(
-      String exerciseName, double weight,
+  Future<void> setPlateConfig(String exerciseName, double weight,
       String barType, String plateCountsJson, bool useLbs) async {
     final db = await DatabaseService.instance.database;
     final cleanName = _cleanExerciseName(exerciseName);
@@ -3615,8 +3654,7 @@ class TemplateService {
   }
 
   // Create a new template
-  Future<int> createTemplate(
-      String name, List<TemplateExercise> exercises,
+  Future<int> createTemplate(String name, List<TemplateExercise> exercises,
       {int? folderId}) async {
     await ensureTablesExist();
     final db = await DatabaseService.instance.database;

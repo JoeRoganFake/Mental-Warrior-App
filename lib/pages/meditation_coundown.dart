@@ -28,7 +28,7 @@ class MeditationCountdownScreen extends StatefulWidget {
 }
 
 class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   late int remainingSeconds;
   Timer? uiTimer;
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -38,6 +38,8 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
   bool isPaused = false;
   bool isTerminateDialogOpen = false;
   bool _alarmPlayed = false;
+  late AnimationController _progressController;
+  late Animation<double> _progressAnimation;
 
   @override
   void initState() {
@@ -46,11 +48,26 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
     WidgetsBinding.instance.addObserver(this);
     remainingSeconds = widget.duration * 60;
 
+    // Initialize animation controller
+    _progressController = AnimationController(
+      duration: Duration(seconds: widget.duration * 60),
+      vsync: this,
+    );
+
+    _progressAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _progressController,
+      curve: Curves.linear,
+    ));
+
     // Delay initialization to allow UI rendering
     Future.delayed(Duration(milliseconds: 100), () {
       _initForegroundTask();
       _startUITimer();
       _initializeNotifications();
+      _progressController.forward(); // Start the smooth animation
     });
   }
 
@@ -104,7 +121,7 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
 
   void _startUITimer() {
     _updateUITimer();
-    uiTimer = Timer.periodic(Duration(seconds: 1), (timer) async {
+    uiTimer = Timer.periodic(Duration(milliseconds: 100), (timer) async {
       await _updateUITimer();
     });
   }
@@ -112,7 +129,7 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
   Future<void> _updateUITimer() async {
     if (isPaused) return;
 
-    // Fetch the remaining time asynchronously
+    // Fetch the remaining time asynchronously with fractional seconds
     final time =
         await FlutterForegroundTask.getData<int>(key: 'remainingSeconds') ??
             remainingSeconds;
@@ -135,6 +152,7 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
   @override
   void dispose() {
     uiTimer?.cancel();
+    _progressController.dispose();
     stopForegroundTask();
     WidgetsBinding.instance.removeObserver(this);
     _audioPlayer.dispose();
@@ -176,6 +194,7 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
 
   void pauseTimer() async {
     await FlutterForegroundTask.saveData(key: 'isPaused', value: true);
+    _progressController.stop(); // Pause the animation
     setState(() {
       isPaused = true;
     });
@@ -183,6 +202,7 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
 
   void resumeTimer() async {
     await FlutterForegroundTask.saveData(key: 'isPaused', value: false);
+    _progressController.forward(); // Resume the animation
     setState(() {
       isPaused = false;
     });
@@ -373,91 +393,103 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
         ),
         body: Container(
           decoration: AppTheme.gradientBackground(),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Meditation mode indicator
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.accent.withOpacity(0.15),
-                    borderRadius: AppTheme.borderRadiusFull,
-                    border: Border.all(color: AppTheme.accent.withOpacity(0.3)),
-                  ),
-                  child: Text(
-                    widget.mode.toUpperCase(),
-                    style: AppTheme.labelMedium.copyWith(
-                      color: AppTheme.accent,
-                      letterSpacing: 1.5,
+            child: SafeArea(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Meditation mode indicator
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accent.withOpacity(0.15),
+                        borderRadius: AppTheme.borderRadiusFull,
+                        border:
+                            Border.all(color: AppTheme.accent.withOpacity(0.3)),
+                      ),
+                      child: Text(
+                        widget.mode.toUpperCase(),
+                        style: AppTheme.labelMedium.copyWith(
+                          color: AppTheme.accent,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
 
-                const SizedBox(height: 48),
+                    const SizedBox(height: 48),
 
-                // Timer circle
-                RepaintBoundary(
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Glow effect
-                      Container(
-                        width: 280,
-                        height: 280,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.accent.withOpacity(0.2),
-                              blurRadius: 60,
-                              spreadRadius: 10,
+                    // Timer circle
+                    Center(
+                      child: RepaintBoundary(
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // Glow effect
+                            Container(
+                              width: 340,
+                              height: 340,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.accent.withOpacity(0.2),
+                                    blurRadius: 60,
+                                    spreadRadius: 10,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Progress ring
+                            SizedBox(
+                              width: 320,
+                              height: 320,
+                              child: AnimatedBuilder(
+                                animation: _progressAnimation,
+                                builder: (context, child) {
+                                  return CircularProgressIndicator(
+                                    backgroundColor: AppTheme.surfaceBorder,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        AppTheme.accent),
+                                    value: _progressAnimation.value,
+                                    strokeWidth: 10,
+                                    strokeCap: StrokeCap.round,
+                                  );
+                                },
+                              ),
+                            ),
+                            // Time display
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
+                                  style: AppTheme.displayLarge.copyWith(
+                                    fontSize: 64,
+                                    fontWeight: FontWeight.w300,
+                                    letterSpacing: 2,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  remainingSeconds > 0
+                                      ? "remaining"
+                                      : "complete",
+                                  style: AppTheme.bodySmall.copyWith(
+                                    color: AppTheme.textTertiary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ),
-                      // Progress ring
-                      SizedBox(
-                        width: 260,
-                        height: 260,
-                        child: CircularProgressIndicator(
-                          backgroundColor: AppTheme.surfaceBorder,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(AppTheme.accent),
-                          value: remainingSeconds / (widget.duration * 60),
-                          strokeWidth: 8,
-                          strokeCap: StrokeCap.round,
-                        ),
-                      ),
-                      // Time display
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
-                            style: AppTheme.displayLarge.copyWith(
-                              fontSize: 56,
-                              fontWeight: FontWeight.w300,
-                              letterSpacing: 2,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            remainingSeconds > 0 ? "remaining" : "complete",
-                            style: AppTheme.bodySmall.copyWith(
-                              color: AppTheme.textTertiary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 64),
+                    ),
 
-                // Control buttons
+                    const SizedBox(height: 64),
+
+                    // Control buttons
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -496,7 +528,7 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
           ),
         ),
       ),
-    );
+        ));
   }
 
   Widget _buildControlButton({
