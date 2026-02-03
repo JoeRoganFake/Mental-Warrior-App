@@ -2,6 +2,8 @@
 class Task {
   final int status, id;
   final String label, description, deadline, category;
+  final int
+      importance; // 1 = Very Low, 2 = Low, 3 = Medium, 4 = High, 5 = Very High
   // For repeating tasks - all nullable since not all tasks repeat
   final String?
       repeatFrequency; // day, week, month, year - defaults to 'day' if repeat is enabled
@@ -22,6 +24,7 @@ class Task {
     required this.status,
     required this.label,
     required this.category,
+    this.importance = 3, // Default to medium importance (middle of 5 levels)
     this.repeatFrequency,
     this.repeatInterval,
     this.repeatEndType,

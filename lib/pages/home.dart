@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -49,7 +48,7 @@ class HomePageState extends State<HomePage>
   final BookService _bookServiceLib = BookService();
   final XPService _xpService = XPService();
   Map<int, bool> taskDeletedState = {};
-  Map<int, Stream<Duration>> _goalCountdownStreams =
+  final Map<int, Stream<Duration>> _goalCountdownStreams =
       {}; // Cache for goal countdown streams
   static const String isolateName = 'background_task_port';
   final ReceivePort _receivePort = ReceivePort();
@@ -233,6 +232,7 @@ class HomePageState extends State<HomePage>
         TextEditingController();
     final TextEditingController repeatOccurrencesController =
         TextEditingController();
+    int taskImportance = 3; // Default to medium importance (middle of 5 levels)
 
     try {
       defaultCategory = await _categoryService.getDefaultCategory();
@@ -246,6 +246,7 @@ class HomePageState extends State<HomePage>
       _labelController.text = task.label;
       _descriptionController.text = task.description;
       _dateController.text = task.deadline;
+      taskImportance = task.importance;
 
       // Show fields if they have content
       _showDescription = task.description.isNotEmpty;
@@ -378,6 +379,10 @@ class HomePageState extends State<HomePage>
                                         await _taskService.deleteTask(task.id);
                                       }
                                       Navigator.pop(context);
+                                      // Trigger refresh across all pages
+                                      TaskService.tasksUpdatedNotifier.value =
+                                          !TaskService
+                                              .tasksUpdatedNotifier.value;
                                       setState(() {});
                                     }
                                   },
@@ -1009,6 +1014,101 @@ class HomePageState extends State<HomePage>
                           ),
                         ),
 
+                        // Importance Slider
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8.0, vertical: 4.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    "Importance",
+                                    style: TextStyle(
+                                      color: Colors.grey[400],
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1A1A1A),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: const Color(0xFFE8E8E8)
+                                            .withOpacity(0.5),
+                                        width: 1,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(0xFFE8E8E8)
+                                              .withOpacity(0.12),
+                                          blurRadius: 6,
+                                          spreadRadius: 0,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          _getImportanceIcon(taskImportance),
+                                          color: const Color(0xFFE8E8E8)
+                                              .withOpacity(0.8),
+                                          size: 16,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          _getImportanceLabel(taskImportance),
+                                          style: TextStyle(
+                                            color: const Color(0xFFE8E8E8)
+                                                .withOpacity(0.85),
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              SliderTheme(
+                                data: SliderThemeData(
+                                  activeTrackColor:
+                                      const Color(0xFFE8E8E8).withOpacity(0.7),
+                                  inactiveTrackColor: Colors.grey[800],
+                                  thumbColor: const Color(0xFFE8E8E8),
+                                  overlayColor:
+                                      const Color(0xFFE8E8E8).withOpacity(0.1),
+                                  trackHeight: 4,
+                                  thumbShape: const RoundSliderThumbShape(
+                                    enabledThumbRadius: 10,
+                                  ),
+                                ),
+                                child: Slider(
+                                  value: taskImportance.toDouble(),
+                                  min: 1,
+                                  max: 5,
+                                  divisions: 4,
+                                  onChanged: (double value) {
+                                    modalSetState(() {
+                                      taskImportance = value.round();
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
                         // Description Field with animation
                         AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
@@ -1283,6 +1383,7 @@ class HomePageState extends State<HomePage>
                                     deadline,
                                     _descriptionController.text,
                                     selectedCategory!.label,
+                                    importance: taskImportance,
                                     // Add repeat functionality parameters
                                     repeatFrequency:
                                         showRepeat ? repeatFrequency : null,
@@ -1337,6 +1438,8 @@ class HomePageState extends State<HomePage>
                                         task.id, "deadline", deadline),
                                     _taskService.updateTask(task.id, "category",
                                         selectedCategory!.label),
+                                    _taskService.updateTask(
+                                        task.id, "importance", taskImportance),
                                   ]);
 
                                   // Then update repeat fields
@@ -2474,8 +2577,31 @@ class HomePageState extends State<HomePage>
               ),
             );
           }
+
+          // Filter tasks for today and remaining tasks
+          final today = DateTime.now();
+          final todayStr =
+              "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+
+          final tasksForToday = snapshot.data!
+              .where((task) => task.deadline.startsWith(todayStr))
+              .toList();
+
+          final tasksRemaining = snapshot.data!
+              .where((task) => !task.deadline.startsWith(todayStr))
+              .toList();
+
+          // Combine: today tasks first (all of them), then remaining tasks to fill up to 15
+          final displayTasks = [
+            ...tasksForToday,
+            ...tasksRemaining.take(15 - tasksForToday.length),
+          ];
+
+          final hasMoreTasks = snapshot.data!.length > displayTasks.length;
+
           return Column(
-            children: snapshot.data!.map<Widget>((task) {
+            children: [
+              ...displayTasks.map<Widget>((task) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 6.0),
                 child: GestureDetector(
@@ -2563,6 +2689,36 @@ class HomePageState extends State<HomePage>
                             ],
                           ),
                         ),
+                          // Importance badge
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A1A1A),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color:
+                                      const Color(0xFFE8E8E8).withOpacity(0.5),
+                                  width: 1,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFE8E8E8)
+                                        .withOpacity(0.12),
+                                    blurRadius: 4,
+                                    spreadRadius: 0,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                _getImportanceIcon(task.importance),
+                                color: const Color(0xFFE8E8E8).withOpacity(0.8),
+                                size: 14,
+                              ),
+                            ),
+                          ),
                         Padding(
                             padding: const EdgeInsets.only(left: 8),
                             child: SizedBox(
@@ -2752,6 +2908,50 @@ class HomePageState extends State<HomePage>
                 ),
               );
             }).toList(),
+              if (hasMoreTasks)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        setState(() {
+                          _currentIndex = 2; // Switch to Tasks/Categories page
+                        });
+                      },
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.accent,
+                        side: BorderSide(
+                          color: AppTheme.accent.withOpacity(0.3),
+                          width: 1.5,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'View All Tasks',
+                            style: AppTheme.bodyMedium.copyWith(
+                              color: AppTheme.accent,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            color: AppTheme.accent,
+                            size: 16,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           );
         });
   }
@@ -3253,18 +3453,8 @@ class HomePageState extends State<HomePage>
     }
 
     setState(() {});
-    List<String> quotes = [
-      "Success is not final, failure is not fatal: It is the courage to continue that counts. – Winston Churchill",
-      "The only limit to our realization of tomorrow is our doubts of today. – Franklin D. Roosevelt",
-      "Dream big and dare to fail. – Norman Vaughan",
-      "Believe you can, and you're halfway there. – Theodore Roosevelt",
-      "What you get by achieving your goals is not as important as what you become by achieving them. – Zig Ziglar",
-      "Don’t watch the clock; do what it does. Keep going. – Sam Levenson",
-      "Act as if what you do makes a difference. It does. – William James"
-    ];
 
-    String randomQuote =
-        quotes[Random().nextInt(quotes.length)]; // Pick a random quote
+// Pick a random quote
 
     return showDialog(
       context: context,
@@ -3932,6 +4122,45 @@ class HomePageState extends State<HomePage>
   String _formatDateTime(DateTime dateTime) {
     return "${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} "
         "${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}";
+  }
+
+  // Helper methods for 5-level importance system
+  String _getImportanceLabel(int importance) {
+    switch (importance) {
+      case 1:
+        return 'Very Low';
+      case 2:
+        return 'Low';
+      case 3:
+        return 'Medium';
+      case 4:
+        return 'High';
+      case 5:
+        return 'Very High';
+      default:
+        return 'Medium';
+    }
+  }
+
+  Color _getImportanceColor(int importance) {
+    return Colors.black;
+  }
+
+  IconData _getImportanceIcon(int importance) {
+    switch (importance) {
+      case 1:
+        return Icons.battery_1_bar_rounded;
+      case 2:
+        return Icons.battery_2_bar_rounded;
+      case 3:
+        return Icons.battery_3_bar_rounded;
+      case 4:
+        return Icons.battery_4_bar_rounded;
+      case 5:
+        return Icons.battery_full_rounded;
+      default:
+        return Icons.battery_full_rounded;
+    }
   }
 
   @override

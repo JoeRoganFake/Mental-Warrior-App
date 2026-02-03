@@ -17,7 +17,6 @@ class CategoriesPage extends StatefulWidget {
 
 class _CategoriesPageState extends State<CategoriesPage>
     with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
-  final TaskService _taskService = TaskService();
   final CategoryService _categoryService = CategoryService();
   TabController? _tabController;
   List<Category> _categories = [];
@@ -31,12 +30,6 @@ class _CategoriesPageState extends State<CategoriesPage>
   TextEditingController? _repeatEndDateController;
   TextEditingController? _repeatOccurrencesController;
 
-  bool _showDescription = false;
-  bool _showDateTime = false;
-  bool _showRepeat = false;
-  String _repeatFrequency = 'day';
-  int _repeatInterval = 1;
-  String _repeatEndType = 'never';
 
   Category? _currentCategory;
 
@@ -314,20 +307,29 @@ class _CategoriesPageState extends State<CategoriesPage>
       backgroundColor: AppTheme.background,
       resizeToAvoidBottomInset: false,
       appBar: _buildAppBar(showTabs: true),
-      body: TabBarView(
-        controller: _tabController,
-        physics:
-            const PageScrollPhysics().applyTo(const ClampingScrollPhysics()),
-        children: _categories
-            .map(
-              (category) => OptimizedCategoryTasksView(
-                key: ValueKey(category.id),
-                category: category,
-              ),
-            )
-            .toList(),
+      body: Stack(
+        children: [
+          TabBarView(
+            controller: _tabController,
+            physics: const PageScrollPhysics()
+                .applyTo(const ClampingScrollPhysics()),
+            children: _categories
+                .map(
+                  (category) => OptimizedCategoryTasksView(
+                    key: ValueKey(category.id),
+                    category: category,
+                  ),
+                )
+                .toList(),
+          ),
+          if (_isInitialized)
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: _buildFAB(),
+            ),
+        ],
       ),
-      floatingActionButton: _isInitialized ? _buildFAB() : null,
     );
   }
 
@@ -336,16 +338,34 @@ class _CategoriesPageState extends State<CategoriesPage>
       backgroundColor: AppTheme.background,
       elevation: 0,
       toolbarHeight: 100,
+      flexibleSpace: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppTheme.accent.withOpacity(0.15),
+              AppTheme.background,
+            ],
+          ),
+        ),
+      ),
       title: Padding(
-        padding: const EdgeInsets.only(top: 24.0),
+        padding: const EdgeInsets.only(top: 8.0),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Tasks', style: AppTheme.displayMedium),
-            IconButton(
-              icon: Icon(Icons.add_circle_outline, color: AppTheme.accent),
-              onPressed: () => _showAddCategoryDialog(context),
-              tooltip: 'Add Category',
+            Padding(
+              padding: const EdgeInsets.only(top: 48, left: 11.0),
+              child: Text('Tasks', style: AppTheme.displayMedium),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 48.0, left: 4.0),
+              child: IconButton(
+                icon: Icon(Icons.add_circle_outline, color: AppTheme.accent),
+                onPressed: () => _showAddCategoryDialog(context),
+                tooltip: 'Add Category',
+              ),
             ),
           ],
         ),
@@ -557,13 +577,16 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
     with AutomaticKeepAliveClientMixin {
   final TaskService _taskService = TaskService();
   final CompletedTaskService _completedTaskService = CompletedTaskService();
+  final PendingTaskService _pendingTaskService = PendingTaskService();
   final XPService _xpService = XPService();
   
   List<Task> _tasks = [];
   List<Task> _completedTasks = [];
   List<Task> _visibleCompletedTasks = []; // Only visible completed tasks
+  List<Task> _pendingTasks = []; // Future tasks to be activated
   bool _isLoading = true;
-  bool _isExpanded = false;
+  bool _isExpandedCompleted = false;
+  bool _isExpandedPending = false;
   bool _isProcessingTask = false;
   bool _isLoadingMoreCompleted = false;
 
@@ -583,7 +606,8 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
   }
 
   Future<void> _loadDataAsync() async {
-    await Future.wait([_loadTasks(), _loadCompletedTasks()]);
+    await Future.wait(
+        [_loadTasks(), _loadCompletedTasks(), _loadPendingTasks()]);
   }
 
   void _refreshTasks() {
@@ -686,6 +710,26 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
     }
   }
 
+  Future<void> _loadPendingTasks() async {
+    try {
+      final allPendingTasks = await _pendingTaskService.getPendingTasks();
+
+      final filteredTasks = widget.category.id == -1
+          ? allPendingTasks
+          : allPendingTasks
+              .where((task) => task.category == widget.category.label)
+              .toList();
+
+      if (mounted) {
+        setState(() {
+          _pendingTasks = filteredTasks;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading pending tasks: $e');
+    }
+  }
+
   Future<void> _markTaskCompleted(Task task) async {
     if (_isProcessingTask) return;
 
@@ -694,7 +738,7 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
     });
 
     try {
-      // Show optimistic UI update
+      // Show optimistic UI update - remove from active tasks
       setState(() {
         _tasks.removeWhere((t) => t.id == task.id);
       });
@@ -722,8 +766,8 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
         }
       }
 
-      // Reload data to ensure consistency
-      await _loadDataAsync();
+      // Reload completed tasks to show the newly completed task
+      await _loadCompletedTasks();
     } catch (e) {
       // Revert optimistic update on error
       await _loadTasks();
@@ -810,6 +854,7 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
           nextDeadlineStr,
           task.description,
           task.category,
+          importance: task.importance,
           repeatFrequency: task.repeatFrequency,
           repeatInterval: task.repeatInterval,
           repeatEndType: task.repeatEndType,
@@ -898,7 +943,9 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
       );
     }
 
-    if (_tasks.isEmpty && _visibleCompletedTasks.isEmpty) {
+    if (_tasks.isEmpty &&
+        _visibleCompletedTasks.isEmpty &&
+        _pendingTasks.isEmpty) {
       return _buildEmptyState();
     }
 
@@ -912,9 +959,15 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
             _buildSectionHeader('Active Tasks'),
             ..._buildTaskList(),
           ],
-          if (_visibleCompletedTasks.isNotEmpty) ...[
+          if (_visibleCompletedTasks.isNotEmpty ||
+              _pendingTasks.isNotEmpty) ...[
             const SizedBox(height: 16),
-            _buildCompletedTasksSection(),
+            if (_visibleCompletedTasks.isNotEmpty)
+              _buildCompletedTasksSection(),
+            if (_pendingTasks.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _buildPendingTasksSection(),
+            ],
           ],
         ],
       ),
@@ -981,34 +1034,268 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
   }
 
   Widget _buildCompletedTasksSection() {
-    return ExpansionPanelList(
-      elevation: 0,
-      expansionCallback: (int index, bool isExpanded) {
-        setState(() {
-          _isExpanded = !_isExpanded;
-        });
-      },
-      children: [
-        ExpansionPanel(
-          isExpanded: _isExpanded,
-          headerBuilder: (context, isExpanded) => ListTile(
-            title: Text(
-              'Completed Tasks',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey[800],
-              ),
-            ),
-          ),
-          body: Column(
-            children: [
-              ..._visibleCompletedTasks.map(_buildCompletedTaskItem).toList(),
-              if (_hasMoreCompletedTasks) _buildLoadMoreButton(),
-            ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: AppTheme.borderRadiusLg,
+          color: AppTheme.surface.withOpacity(0.4),
+          border: Border.all(
+            color: Colors.green.withValues(alpha: 0.1),
+            width: 1,
           ),
         ),
-      ],
+        child: Column(
+          children: [
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isExpandedCompleted = !_isExpandedCompleted;
+                });
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: _isExpandedCompleted
+                      ? const BorderRadius.vertical(top: Radius.circular(20))
+                      : AppTheme.borderRadiusLg,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.check_circle,
+                          color: Colors.green.withValues(alpha: 0.5),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Completed Tasks',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            Text(
+                              '${_completedTasks.length} completed',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppTheme.textSecondary
+                                    .withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Icon(
+                      _isExpandedCompleted
+                          ? Icons.expand_less
+                          : Icons.expand_more,
+                      color: AppTheme.textSecondary.withValues(alpha: 0.5),
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_isExpandedCompleted) ...[
+              Divider(
+                height: 1,
+                color: Colors.green.withValues(alpha: 0.1),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Column(
+                  children: [
+                    ..._visibleCompletedTasks
+                        .map(_buildCompletedTaskItem)
+                        .toList(),
+                    if (_hasMoreCompletedTasks) _buildLoadMoreButton(),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPendingTasksSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: AppTheme.borderRadiusLg,
+          color: AppTheme.surface.withOpacity(0.4),
+          border: Border.all(
+            color: AppTheme.accent.withValues(alpha: 0.1),
+            width: 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isExpandedPending = !_isExpandedPending;
+                });
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: _isExpandedPending
+                      ? const BorderRadius.vertical(top: Radius.circular(20))
+                      : AppTheme.borderRadiusLg,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.schedule,
+                          color: AppTheme.accent.withValues(alpha: 0.5),
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Scheduled Tasks',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            Text(
+                              '${_pendingTasks.length} pending',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: AppTheme.textSecondary
+                                    .withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Icon(
+                      _isExpandedPending
+                          ? Icons.expand_less
+                          : Icons.expand_more,
+                      color: AppTheme.textSecondary.withValues(alpha: 0.5),
+                      size: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_isExpandedPending) ...[
+              Divider(
+                height: 1,
+                color: AppTheme.accent.withValues(alpha: 0.1),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+                child: Column(
+                  children: _pendingTasks
+                      .map((task) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                borderRadius: AppTheme.borderRadiusMd,
+                                border: Border.all(
+                                  color:
+                                      AppTheme.textSecondary.withOpacity(0.05),
+                                  width: 1,
+                                ),
+                                color: AppTheme.surfaceLight.withOpacity(0.3),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.schedule_outlined,
+                                        size: 16,
+                                        color: AppTheme.textSecondary
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          task.label,
+                                          style: AppTheme.bodyMedium.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.textPrimary,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (task.description.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      task.description,
+                                      style: AppTheme.bodySmall.copyWith(
+                                        color: AppTheme.textSecondary
+                                            .withValues(alpha: 0.6),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.access_time,
+                                        size: 12,
+                                        color: AppTheme.textSecondary
+                                            .withValues(alpha: 0.5),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Task Due: ${task.deadline.split(' ')[0]}',
+                                          style: AppTheme.bodySmall.copyWith(
+                                            color: AppTheme.textSecondary
+                                                .withValues(alpha: 0.6),
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ))
+                      .toList(),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1056,8 +1343,38 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
       ),
       direction: DismissDirection.endToStart,
       onDismissed: (_) async {
-        await _completedTaskService.deleteCompTask(task.id);
-        _loadCompletedTasks(); // Reload fresh data after deletion
+        try {
+          // Remove from UI immediately
+          setState(() {
+            _visibleCompletedTasks.removeWhere((t) => t.id == task.id);
+            _completedTasks.removeWhere((t) => t.id == task.id);
+          });
+
+          // Delete from database
+          await _completedTaskService.deleteCompTask(task.id);
+          
+          // Show success message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Task "${task.label}" deleted'),
+                duration: const Duration(seconds: 2),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        } catch (e) {
+          // Revert on error
+          await _loadCompletedTasks();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error deleting task: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
       },
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1210,15 +1527,48 @@ class OptimizedTaskCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      task.label,
-                      style: AppTheme.bodyLarge.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
-                        fontSize: 16,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            task.label,
+                            style: AppTheme.bodyLarge.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                              fontSize: 16,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Importance indicator
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1A1A1A),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: const Color(0xFFE8E8E8).withOpacity(0.6),
+                              width: 1,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color:
+                                    const Color(0xFFE8E8E8).withOpacity(0.15),
+                                blurRadius: 4,
+                                spreadRadius: 0,
+                              ),
+                            ],
+                          ),
+                          child: Icon(
+                            _getImportanceIcon(task.importance),
+                            size: 14,
+                            color: const Color(0xFFE8E8E8).withOpacity(0.8),
+                          ),
+                        ),
+                      ],
                     ),
                     if (task.description.isNotEmpty ||
                         task.deadline.isNotEmpty) ...[
@@ -1323,5 +1673,26 @@ class OptimizedTaskCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Color _getImportanceColor(int importance) {
+    return Colors.black;
+  }
+
+  IconData _getImportanceIcon(int importance) {
+    switch (importance) {
+      case 1:
+        return Icons.battery_1_bar_rounded;
+      case 2:
+        return Icons.battery_2_bar_rounded;
+      case 3:
+        return Icons.battery_3_bar_rounded;
+      case 4:
+        return Icons.battery_4_bar_rounded;
+      case 5:
+        return Icons.battery_full_rounded;
+      default:
+        return Icons.battery_full_rounded;
+    }
   }
 }

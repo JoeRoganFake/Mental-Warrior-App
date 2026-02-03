@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mental_warior/models/user_xp.dart';
 import 'package:mental_warior/services/database_services.dart';
-import 'package:mental_warior/utils/app_theme.dart';
 
 class XPBar extends StatelessWidget {
   final bool compact;

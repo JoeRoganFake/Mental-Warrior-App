@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -12,28 +13,71 @@ class MeditationPage extends StatefulWidget {
   MeditationPageState createState() => MeditationPageState();
 }
 
-class MeditationPageState extends State<MeditationPage> {
+class MeditationPageState extends State<MeditationPage>
+    with SingleTickerProviderStateMixin {
   String? selectedMode;
   final List<int> durations = [5, 10, 15, 20, 25, 30, 45, 60];
+  late AnimationController _animationController;
+  late Animation<double> _animation;
+  final int _patternSeed = Random().nextInt(10000);
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(seconds: 3),
+      vsync: this,
+    );
+    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    _animationController.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _animationController.reset();
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppTheme.surface,
-              AppTheme.background,
-            ],
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+      body: AnimatedBuilder(
+        animation: _animation,
+        builder: (context, child) {
+          return Stack(
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      AppTheme.accent.withValues(alpha: 0.05),
+                      AppTheme.background,
+                    ],
+                  ),
+                ),
+              ),
+              CustomPaint(
+                painter: RandomPatternPainter(
+                  seed: _patternSeed,
+                  animationValue: _animation.value,
+                ),
+                size: Size.infinite,
+              ),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
@@ -67,9 +111,12 @@ class MeditationPageState extends State<MeditationPage> {
                 _buildModeButton(
                     "Unguided", Icons.self_improvement, AppTheme.success),
               ],
+                  )
+                ],
             ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -86,32 +133,28 @@ class MeditationPageState extends State<MeditationPage> {
         width: 140,
         height: 140,
         decoration: BoxDecoration(
+          borderRadius: AppTheme.borderRadiusLg,
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              color,
-              color.withOpacity(0.7),
+              color.withOpacity(0.1),
+              color.withOpacity(0.05),
             ],
           ),
-          borderRadius: AppTheme.borderRadiusLg,
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.4),
-              blurRadius: 12,
-              spreadRadius: 0,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          border: Border.all(
+            color: color,
+            width: 2,
+          ),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Colors.white, size: 40),
+            Icon(icon, color: color, size: 40),
             SizedBox(height: 10),
             Text(
               title,
-              style: AppTheme.labelLarge.copyWith(color: Colors.white),
+              style: AppTheme.labelLarge.copyWith(color: color),
             ),
           ],
         ),
@@ -398,4 +441,34 @@ class MeditationPageState extends State<MeditationPage> {
       ),
     );
   }
+}
+
+class RandomPatternPainter extends CustomPainter {
+  final int seed;
+  final double animationValue;
+  late final Random random;
+
+  RandomPatternPainter({required this.seed, required this.animationValue}) {
+    random = Random(seed);
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Draw subtle scattered dots like home page
+    for (int i = 0; i < 25; i++) {
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height;
+      final radius = random.nextDouble() * 1.5 + 0.5;
+
+      final paint = Paint()
+        ..color = AppTheme.accent.withOpacity(0.01 * animationValue)
+        ..style = PaintingStyle.fill;
+
+      canvas.drawCircle(Offset(x, y), radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(RandomPatternPainter oldDelegate) =>
+      oldDelegate.seed != seed || oldDelegate.animationValue != animationValue;
 }

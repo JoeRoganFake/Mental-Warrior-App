@@ -84,7 +84,7 @@ class Functions {
         return Text(
           "Tomorrow$timeStr",
           style: const TextStyle(
-            color: Colors.orange,
+            color: Colors.blue,
             fontSize: 11,
           ),
           overflow: TextOverflow.ellipsis,

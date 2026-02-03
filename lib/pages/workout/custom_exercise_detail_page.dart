@@ -3,7 +3,6 @@ import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/pages/workout/edit_exercise_page.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:mental_warior/utils/app_theme.dart';
 
 // Helper class to represent exercise history entries
 class ExerciseHistoryEntry {

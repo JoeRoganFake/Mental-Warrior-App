@@ -13,7 +13,6 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:math';
 
 class DatabaseService {
   static Database? _db;
@@ -34,7 +33,7 @@ class DatabaseService {
 
     return openDatabase(
       databasePath,
-      version: 20, // Increment version for user_xp table
+      version: 21, // Increment version for importance column
       onConfigure: (db) async {
         // Enable foreign key support
         await db.execute('PRAGMA foreign_keys = ON');
@@ -148,6 +147,14 @@ class DatabaseService {
           // Create user XP table
           XPService().createXPTable(db);
         }
+        if (oldVersion < 21) {
+          // Add importance column to tasks table
+          await db.execute(
+              'ALTER TABLE tasks ADD COLUMN importance INTEGER DEFAULT 2');
+          // Add importance column to pending_tasks table
+          await db.execute(
+              'ALTER TABLE pending_tasks ADD COLUMN importance INTEGER DEFAULT 2');
+        }
       },
     );
   }
@@ -167,6 +174,7 @@ class TaskService {
   final String _taskRepeatEndTypeColumnName = "repeatEndType";
   final String _taskRepeatEndDateColumnName = "repeatEndDate";
   final String _taskRepeatOccurrencesColumnName = "repeatOccurrences";
+  final String _taskImportanceColumnName = "importance";
 
   void createTaskTable(Database db) async {
     await db.execute('''
@@ -181,7 +189,8 @@ class TaskService {
         $_taskRepeatIntervalColumnName INTEGER,
         $_taskRepeatEndTypeColumnName TEXT,
         $_taskRepeatEndDateColumnName TEXT,
-        $_taskRepeatOccurrencesColumnName INTEGER
+        $_taskRepeatOccurrencesColumnName INTEGER,
+        $_taskImportanceColumnName INTEGER DEFAULT 2
       ) 
     ''');
   }
@@ -191,6 +200,7 @@ class TaskService {
     String deadline,
     String description,
     String category, {
+    int importance = 3,
     String? repeatFrequency,
     int? repeatInterval,
     String? repeatEndType,
@@ -206,6 +216,7 @@ class TaskService {
         _taskDeadlineColumnName: deadline,
         _taskDescriptionColumnName: description,
         _taskCategoryColumnName: category,
+        _taskImportanceColumnName: importance,
         _taskRepeatFrequencyColumnName: repeatFrequency,
         _taskRepeatIntervalColumnName: repeatInterval,
         _taskRepeatEndTypeColumnName: repeatEndType,
@@ -222,10 +233,14 @@ class TaskService {
       _taskTableName,
       orderBy: '''
         CASE 
-      WHEN $_taskDeadlineColumnName IS NULL OR $_taskDeadlineColumnName = '' THEN 1 
-        ELSE 0 
-      END, 
-     $_taskDeadlineColumnName ASC
+          WHEN $_taskImportanceColumnName IS NULL THEN 0
+          ELSE $_taskImportanceColumnName 
+        END DESC,
+        CASE 
+          WHEN $_taskDeadlineColumnName IS NULL OR $_taskDeadlineColumnName = '' THEN 1 
+          ELSE 0 
+        END,
+        $_taskDeadlineColumnName ASC
       ''',
     );
 
@@ -238,6 +253,7 @@ class TaskService {
             description: e[_taskDescriptionColumnName] as String,
             deadline: e[_taskDeadlineColumnName] as String,
             category: e[_taskCategoryColumnName] as String,
+            importance: e[_taskImportanceColumnName] as int? ?? 3,
             repeatFrequency: e[_taskRepeatFrequencyColumnName] as String?,
             repeatInterval: e[_taskRepeatIntervalColumnName] as int?,
             repeatEndType: e[_taskRepeatEndTypeColumnName] as String?,
@@ -295,6 +311,7 @@ class CompletedTaskService {
   final String _taskDeadlineColumnName = "deadline";
   final String _taskCategoryColumnName = "category";
   final String _taskNextDeadlineColumnName = "nextDeadline";
+  final String _taskImportanceColumnName = "importance";
 
   void createCompletedTaskTable(Database db) async {
     await db.execute('''
@@ -340,6 +357,7 @@ class CompletedTaskService {
             description: e[_taskDescriptionColumnName] as String,
             deadline: e[_taskDeadlineColumnName] as String,
             category: e[_taskCategoryColumnName] as String,
+            importance: e[_taskImportanceColumnName] as int? ?? 3,
             nextDeadline: e[_taskNextDeadlineColumnName] as String?,
           ),
         )
@@ -826,6 +844,7 @@ class PendingTaskService {
   final String _taskRepeatEndTypeColumnName = "repeatEndType";
   final String _taskRepeatEndDateColumnName = "repeatEndDate";
   final String _taskRepeatOccurrencesColumnName = "repeatOccurrences";
+  final String _taskImportanceColumnName = "importance";
 
   void createPendingTaskTable(Database db) async {
     await db.execute('''
@@ -840,7 +859,8 @@ class PendingTaskService {
         $_taskRepeatIntervalColumnName INTEGER,
         $_taskRepeatEndTypeColumnName TEXT,
         $_taskRepeatEndDateColumnName TEXT,
-        $_taskRepeatOccurrencesColumnName INTEGER
+        $_taskRepeatOccurrencesColumnName INTEGER,
+        $_taskImportanceColumnName INTEGER DEFAULT 3
       ) 
     ''');
   }
@@ -850,6 +870,7 @@ class PendingTaskService {
     String deadline,
     String description,
     String category, {
+    int importance = 3,
     String? repeatFrequency,
     int? repeatInterval,
     String? repeatEndType,
@@ -865,6 +886,7 @@ class PendingTaskService {
         _taskDeadlineColumnName: deadline,
         _taskDescriptionColumnName: description,
         _taskCategoryColumnName: category,
+        _taskImportanceColumnName: importance,
         _taskRepeatFrequencyColumnName: repeatFrequency,
         _taskRepeatIntervalColumnName: repeatInterval,
         _taskRepeatEndTypeColumnName: repeatEndType,
@@ -876,7 +898,20 @@ class PendingTaskService {
 
   Future<List<Task>> getPendingTasks() async {
     final db = await DatabaseService.instance.database;
-    final data = await db.query(_pendingTaskTableName);
+    final data = await db.query(
+      _pendingTaskTableName,
+      orderBy: '''
+        CASE 
+          WHEN $_taskImportanceColumnName IS NULL THEN 0
+          ELSE $_taskImportanceColumnName 
+        END DESC,
+        CASE 
+          WHEN $_taskDeadlineColumnName IS NULL OR $_taskDeadlineColumnName = '' THEN 1 
+          ELSE 0 
+        END,
+        $_taskDeadlineColumnName ASC
+      ''',
+    );
 
     return data
         .map(
@@ -887,6 +922,7 @@ class PendingTaskService {
             description: e[_taskDescriptionColumnName] as String,
             deadline: e[_taskDeadlineColumnName] as String,
             category: e[_taskCategoryColumnName] as String,
+            importance: e[_taskImportanceColumnName] as int? ?? 3,
             repeatFrequency: e[_taskRepeatFrequencyColumnName] as String?,
             repeatInterval: e[_taskRepeatIntervalColumnName] as int?,
             repeatEndType: e[_taskRepeatEndTypeColumnName] as String?,
@@ -941,6 +977,7 @@ class PendingTaskService {
             task.deadline,
             task.description,
             task.category,
+            importance: task.importance,
             repeatFrequency: task.repeatFrequency,
             repeatInterval: task.repeatInterval,
             repeatEndType: task.repeatEndType,
@@ -3393,32 +3430,9 @@ class TemplateService {
       )
     ''');
 
-    // Add new columns if they don't exist (for migration)
-    try {
-      await db.execute(
-          'ALTER TABLE $_templateExercisesTableName ADD COLUMN superset_group TEXT');
-    } catch (e) {
-      // Column already exists
-    }
-    try {
-      await db.execute(
-          'ALTER TABLE $_templateSetsTableName ADD COLUMN target_weight REAL');
-    } catch (e) {
-      // Column already exists
-    }
-    try {
-      await db.execute(
-          'ALTER TABLE $_templateSetsTableName ADD COLUMN rest_time INTEGER DEFAULT 150');
-    } catch (e) {
-      // Column already exists
-    }
-    // Add folder_id column to templates if it doesn't exist
-    try {
-      await db.execute(
-          'ALTER TABLE $_templatesTableName ADD COLUMN folder_id INTEGER');
-    } catch (e) {
-      // Column already exists
-    }
+    // Columns are already defined in CREATE TABLE statements above,
+    // so no need to add them again. The CREATE TABLE IF NOT EXISTS ensures
+    // they exist from the first creation.
   }
 
   // Ensure tables exist (for dynamic creation without migration)

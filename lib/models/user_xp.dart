@@ -39,7 +39,7 @@ class UserXP {
 
   // Calculate XP needed to reach next level
   int get xpToNextLevel {
-    int currentLevelXP = xpForLevel(level);
+    xpForLevel(level);
     int nextLevelXP = xpForLevel(level + 1);
     return nextLevelXP - totalXP;
   }
