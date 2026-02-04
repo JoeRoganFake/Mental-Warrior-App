@@ -957,27 +957,29 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.surface,
+        shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
         title: Text(
           'Unsaved Changes',
-          style: TextStyle(color: AppTheme.textPrimary),
+          style: AppTheme.headlineMedium,
         ),
         content: Text(
           'You have unsaved changes. Do you want to discard them?',
-          style: TextStyle(color: AppTheme.textSecondary),
+          style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: Text(
               'Cancel',
-              style: TextStyle(color: AppTheme.textSecondary),
+              style:
+                  AppTheme.labelLarge.copyWith(color: AppTheme.textSecondary),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: Text(
               'Discard',
-              style: TextStyle(color: AppTheme.error),
+              style: AppTheme.labelLarge.copyWith(color: AppTheme.error),
             ),
           ),
         ],
@@ -989,17 +991,22 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
 
   // Reorder exercises in the workout
   void _reorderExercises(int oldIndex, int newIndex) {
+    // Account for header being at index 0
+    // Convert list indices (subtract 1 from both)
+    final oldExerciseIndex = oldIndex - 1;
+    var newExerciseIndex = newIndex - 1;
+    
     setState(() {
       // Adjust newIndex if dragging downward
-      if (newIndex >= _workout!.exercises.length) {
-        newIndex = _workout!.exercises.length - 1;
-      } else if (newIndex > oldIndex) {
-        newIndex -= 1;
+      if (newExerciseIndex >= _workout!.exercises.length) {
+        newExerciseIndex = _workout!.exercises.length - 1;
+      } else if (newExerciseIndex > oldExerciseIndex) {
+        newExerciseIndex -= 1;
       }
 
       // Move the exercise in the local list
-      final exercise = _workout!.exercises.removeAt(oldIndex);
-      _workout!.exercises.insert(newIndex, exercise);
+      final exercise = _workout!.exercises.removeAt(oldExerciseIndex);
+      _workout!.exercises.insert(newExerciseIndex, exercise);
     });
 
     _markAsChanged();
@@ -1263,62 +1270,8 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     }
   }
 
-  Future<void> _showEditNameDialog() async {
-    final dialogController = TextEditingController(text: _workout!.name);
-    
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: Text(
-          'Edit Workout Name',
-          style: TextStyle(color: AppTheme.textPrimary),
-        ),
-        content: TextField(
-          controller: dialogController,
-          style: TextStyle(color: AppTheme.textPrimary),
-          decoration: InputDecoration(
-            labelText: 'Workout Name',
-            labelStyle: TextStyle(color: AppTheme.textSecondary),
-            filled: true,
-            fillColor: AppTheme.surfaceLight,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: AppTheme.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, dialogController.text),
-            child: Text(
-              'Save',
-              style: TextStyle(color: AppTheme.accent),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    // Dispose the controller immediately after dialog closes
-    dialogController.dispose();
-
-    // Process result after controller is disposed
-    if (result != null && result.isNotEmpty && result != _workout!.name) {
-      // Update the workout name in the database
-      setState(() {
-        _workoutNameController.text = result;
-      });
-      _markAsChanged();
-    }
-  }
+  // Edit name is now handled inline in the AppBar TextField
+  // No dialog needed
 
   Widget _buildEmptyExercisesView() {
     return Center(
@@ -1330,8 +1283,8 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppTheme.accent.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                color: AppTheme.accent.withOpacity(0.12),
+                borderRadius: AppTheme.borderRadiusMd,
               ),
               child: Icon(
                 Icons.fitness_center,
@@ -1342,7 +1295,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             const SizedBox(height: 20),
             Text(
               'No exercises yet',
-              style: AppTheme.headlineMedium,
+              style: AppTheme.headlineLarge,
             ),
             const SizedBox(height: 8),
             Text(
@@ -1355,17 +1308,17 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _addExercise,
-              icon: const Icon(Icons.add, size: 18),
+              icon: const Icon(Icons.add_rounded, size: 18),
               label: const Text('Add Exercise'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.accent,
-                foregroundColor: AppTheme.textPrimary,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
-                  vertical: 10,
+                  vertical: 12,
                 ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: AppTheme.borderRadiusSm,
                 ),
                 elevation: 0,
               ),
@@ -1385,12 +1338,6 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
         appBar: AppBar(
           backgroundColor: AppTheme.surface,
           elevation: 0,
-          title: Text(
-            'Edit Workout',
-            style: AppTheme.headlineMedium.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
           leading: IconButton(
             icon: Icon(Icons.arrow_back, color: AppTheme.textPrimary),
             onPressed: () async {
@@ -1399,23 +1346,28 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
               }
             },
           ),
+          title: Text('Edit Workout', style: AppTheme.displaySmall),
           actions: [
             if (_hasChanges)
               Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: TextButton(
+                padding: const EdgeInsets.only(right: 12.0),
+                child: OutlinedButton(
                   onPressed: _saveChanges,
-                  style: TextButton.styleFrom(
-                    backgroundColor: AppTheme.accent.withOpacity(0.1),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: AppTheme.accent,
+                      width: 2,
                     ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AppTheme.borderRadiusSm,
+                    ),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                   child: Text(
                     'Save',
-                    style: TextStyle(
+                    style: AppTheme.labelLarge.copyWith(
                       color: AppTheme.accent,
-                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
@@ -1441,153 +1393,258 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                         const SizedBox(height: 16),
                         Text(
                           'Workout not found',
-                          style: AppTheme.headlineMedium.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: AppTheme.headlineLarge,
                         ),
                       ],
                     ),
                   )
-                : Column(
-                    children: [
-                      // Workout header section (similar to session page)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: AppTheme.surface,
-                          border: Border(
-                            bottom: BorderSide(
-                              color: AppTheme.textSecondary.withOpacity(0.1),
-                              width: 1,
-                            ),
-                          ),
-                        ),
+                : _workout!.exercises.isEmpty
+                    ? SingleChildScrollView(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () => _showEditNameDialog(),
-                                    child: Text(
-                                      _workout!.name,
-                                      style: AppTheme.headlineLarge.copyWith(
-                                        fontWeight: FontWeight.bold,
+                            // Workout header section with gradient background
+                            Container(
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    AppTheme.accent.withOpacity(0.15),
+                                    AppTheme.background,
+                                  ],
+                                ),
+                              ),
+                              padding:
+                                  const EdgeInsets.fromLTRB(20, 24, 20, 28),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Workout name input
+                                  TextField(
+                                    controller: _workoutNameController,
+                                    style: AppTheme.displaySmall,
+                                    decoration: InputDecoration(
+                                      border: OutlineInputBorder(
+                                        borderRadius: AppTheme.borderRadiusMd,
+                                        borderSide: BorderSide(
+                                          color:
+                                              AppTheme.accent.withOpacity(0.2),
+                                        ),
                                       ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: AppTheme.borderRadiusMd,
+                                        borderSide: BorderSide(
+                                          color:
+                                              AppTheme.accent.withOpacity(0.2),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: AppTheme.borderRadiusMd,
+                                        borderSide: BorderSide(
+                                          color: AppTheme.accent,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor: AppTheme.surfaceLight,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 16, vertical: 14),
+                                    ),
+                                    onChanged: (_) => _markAsChanged(),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _workout!.date,
+                                    style: AppTheme.bodyMedium.copyWith(
+                                      color: AppTheme.textSecondary,
                                     ),
                                   ),
-                                ),
-                                IconButton(
-                                  onPressed: () => _showEditNameDialog(),
-                                  icon: Icon(
-                                    Icons.edit,
-                                    color: AppTheme.textSecondary,
-                                    size: 20,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _workout!.date,
-                              style: AppTheme.bodyLarge.copyWith(
-                                color: AppTheme.textSecondary,
-                                fontWeight: FontWeight.w500,
+                                ],
                               ),
                             ),
+                            _buildEmptyExercisesView(),
                           ],
                         ),
-                      ),
-                      // Exercises list
-                      Expanded(
-                        child: _workout!.exercises.isEmpty
-                            ? _buildEmptyExercisesView()
-                            : ReorderableListView.builder(
-                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                                itemCount: _workout!.exercises.length,
-                                buildDefaultDragHandles: false,
-                                proxyDecorator: (child, index, animation) {
-                                  return AnimatedBuilder(
-                                    animation: animation,
-                                    builder: (context, child) {
-                                      final animValue = Curves.easeInOut
-                                          .transform(animation.value);
-                                      final elevation =
-                                          lerpDouble(0, 6, animValue)!;
-                                      final scale =
-                                          lerpDouble(1.0, 1.02, animValue)!;
-                                      return Transform.scale(
-                                        scale: scale,
-                                        child: Material(
-                                          elevation: elevation,
-                                          color: Colors.transparent,
-                                          borderRadius:
-                                              BorderRadius.circular(16),
-                                          child: child,
-                                        ),
-                                      );
-                                    },
-                                    child: child,
-                                  );
-                                },
-                                onReorder: _reorderExercises,
-                                itemBuilder: (context, index) {
-                                  final exercise = _workout!.exercises[index];
-                                  final supersetId =
-                                      _exerciseSupersets[exercise.id];
-
-                                  // Calculate superset position
-                                  String? supersetPosition;
-                                  if (supersetId != null) {
-                                    final supersetExercises = _workout!
-                                        .exercises
-                                        .where((e) =>
-                                            _exerciseSupersets[e.id] ==
-                                            supersetId)
-                                        .toList();
-                                    final posInSuperset =
-                                        supersetExercises.indexOf(exercise);
-                                    if (supersetExercises.length == 1) {
-                                      supersetPosition = 'only';
-                                    } else if (posInSuperset == 0) {
-                                      supersetPosition = 'first';
-                                    } else if (posInSuperset ==
-                                        supersetExercises.length - 1) {
-                                      supersetPosition = 'last';
-                                    } else {
-                                      supersetPosition = 'middle';
-                                    }
-                                  }
-
-                                  return ReorderableDelayedDragStartListener(
-                                    key: Key('exercise_${exercise.id}'),
-                                    index: index,
-                                    child: Padding(
-                                      padding: EdgeInsets.only(
-                                        bottom: supersetId != null &&
-                                                supersetPosition != 'last' &&
-                                                supersetPosition != 'only'
-                                            ? 2
-                                            : 16,
-                                      ),
-                                      child: _buildExerciseCard(
-                                        exercise,
-                                        supersetPosition: supersetPosition,
-                                      ),
-                                    ),
-                                  );
-                                },
+                      )
+                    : ReorderableListView.builder(
+                        padding: EdgeInsets.zero,
+                        itemCount: _workout!.exercises.length + 1,
+                        buildDefaultDragHandles: false,
+                        proxyDecorator: (child, index, animation) {
+                          return AnimatedBuilder(
+                            animation: animation,
+                            builder: (context, child) {
+                              final animValue =
+                                  Curves.easeInOut.transform(animation.value);
+                              final elevation = lerpDouble(0, 6, animValue)!;
+                              final scale = lerpDouble(1.0, 1.02, animValue)!;
+                              return Transform.scale(
+                                scale: scale,
+                                child: Material(
+                                  elevation: elevation,
+                                  color: Colors.transparent,
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: child,
+                                ),
+                              );
+                            },
+                            child: child,
+                          );
+                        },
+                        onReorder: _reorderExercises,
+                        itemBuilder: (context, index) {
+                          // Header item at index 0
+                          if (index == 0) {
+                            return Container(
+                              key: const ValueKey('workout_header'),
+                              width: double.infinity,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    AppTheme.accent.withOpacity(0.15),
+                                    AppTheme.background,
+                                  ],
+                                ),
                               ),
+                              padding:
+                                  const EdgeInsets.fromLTRB(20, 24, 20, 28),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Workout name input
+                                  TextField(
+                                    controller: _workoutNameController,
+                                    style: AppTheme.displaySmall,
+                                    decoration: InputDecoration(
+                                      border: OutlineInputBorder(
+                                        borderRadius: AppTheme.borderRadiusMd,
+                                        borderSide: BorderSide(
+                                          color:
+                                              AppTheme.accent.withOpacity(0.2),
+                                        ),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: AppTheme.borderRadiusMd,
+                                        borderSide: BorderSide(
+                                          color:
+                                              AppTheme.accent.withOpacity(0.2),
+                                        ),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: AppTheme.borderRadiusMd,
+                                        borderSide: BorderSide(
+                                          color: AppTheme.accent,
+                                          width: 2,
+                                        ),
+                                      ),
+                                      filled: true,
+                                      fillColor: AppTheme.surfaceLight,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 16, vertical: 14),
+                                    ),
+                                    onChanged: (_) => _markAsChanged(),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _workout!.date,
+                                    style: AppTheme.bodyMedium.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          // Exercise items (adjust index for header)
+                          final exerciseIndex = index - 1;
+                          final exercise = _workout!.exercises[exerciseIndex];
+                          final supersetId = _exerciseSupersets[exercise.id];
+
+                          // Calculate superset position
+                          String? supersetPosition;
+                          if (supersetId != null) {
+                            final supersetExercises = _workout!.exercises
+                                .where((e) =>
+                                    _exerciseSupersets[e.id] == supersetId)
+                                .toList();
+                            final posInSuperset =
+                                supersetExercises.indexOf(exercise);
+                            if (supersetExercises.length == 1) {
+                              supersetPosition = 'only';
+                            } else if (posInSuperset == 0) {
+                              supersetPosition = 'first';
+                            } else if (posInSuperset ==
+                                supersetExercises.length - 1) {
+                              supersetPosition = 'last';
+                            } else {
+                              supersetPosition = 'middle';
+                            }
+                          }
+
+                          return ReorderableDelayedDragStartListener(
+                            key: Key('exercise_${exercise.id}'),
+                            index: index,
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                16,
+                                index == 1 ? 12 : 0,
+                                16,
+                                supersetId != null &&
+                                        supersetPosition != 'last' &&
+                                        supersetPosition != 'only'
+                                    ? 2
+                                    : 16,
+                              ),
+                              child: _buildExerciseCard(
+                                exercise,
+                                supersetPosition: supersetPosition,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+        floatingActionButton: !_isLoading && _workout != null
+            ? Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(100),
+                  onTap: _addExercise,
+                  child: Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      border: Border.all(
+                        color: AppTheme.accent.withOpacity(0.6),
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(100),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.accent.withOpacity(0.15),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
                       ),
                     ],
                   ),
-        floatingActionButton: !_isLoading && _workout != null
-            ? FloatingActionButton(
-                onPressed: _addExercise,
-                backgroundColor: AppTheme.accent,
-                child: Icon(Icons.add, color: AppTheme.textPrimary),
+                    child: const Icon(
+                      Icons.add_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                ),
               )
             : null,
       ),
@@ -1645,10 +1702,11 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
           color: isInSuperset
               ? supersetColor!.withOpacity(0.3)
               : isCustomExercise
-                  ? Colors.orange.withOpacity(0.3)
-                  : AppTheme.textSecondary.withOpacity(0.1),
+                  ? Colors.orange.withOpacity(0.2)
+                  : AppTheme.textSecondary.withOpacity(0.08),
           width: isInSuperset ? 2 : 1,
         ),
+        boxShadow: AppTheme.shadowSm,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1658,16 +1716,14 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: supersetColor!.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(4),
+                color: supersetColor!.withOpacity(0.15),
+                borderRadius: AppTheme.borderRadiusXs,
               ),
               child: Text(
                 'SUPERSET',
-                style: TextStyle(
+                style: AppTheme.labelSmall.copyWith(
                   color: supersetColor,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
+                  letterSpacing: 0.8,
                 ),
               ),
             ),
@@ -1680,9 +1736,9 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: isCustomExercise
-                      ? Colors.orange.withOpacity(0.2)
-                      : AppTheme.accent.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
+                      ? Colors.orange.withOpacity(0.15)
+                      : AppTheme.accent.withOpacity(0.15),
+                  borderRadius: AppTheme.borderRadiusSm,
                 ),
                 child: Icon(
                   isCustomExercise ? Icons.star : Icons.fitness_center,
@@ -2106,8 +2162,8 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.surface.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(8),
+        color: AppTheme.surfaceLight.withOpacity(0.4),
+        borderRadius: AppTheme.borderRadiusSm,
         border: set.isPR
             ? Border.all(color: Colors.amber.withOpacity(0.4), width: 1.5)
             : Border.all(
@@ -2123,21 +2179,20 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                 builder: (context) => GestureDetector(
                   onTap: () => _showSetTypeDialog(context, set),
                   child: Container(
-                    width: 28,
-                    height: 28,
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
                       color: AppTheme.accent.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: AppTheme.borderRadiusXs,
                     ),
                     child: Center(
                       child: Text(
                         set.setType != SetType.normal
                             ? _getSetTypeDisplay(set.setType)
                             : setNumber.toString(),
-                        style: TextStyle(
+                        style: AppTheme.labelMedium.copyWith(
                           color: AppTheme.accent,
                           fontWeight: FontWeight.w600,
-                          fontSize: 13,
                         ),
                       ),
                     ),
@@ -2157,9 +2212,8 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                         children: [
                           Text(
                             'Weight',
-                            style: AppTheme.bodySmall.copyWith(
+                            style: AppTheme.labelSmall.copyWith(
                               color: AppTheme.textSecondary,
-                              fontWeight: FontWeight.w500,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -2167,7 +2221,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                             height: 32,
                             decoration: BoxDecoration(
                               color: AppTheme.surfaceLight,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: AppTheme.borderRadiusXs,
                             ),
                             child: TextField(
                               controller: weightController,
@@ -2181,10 +2235,9 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                                   vertical: 8,
                                 ),
                                 hintText: '0',
-                                hintStyle: TextStyle(
+                                hintStyle: AppTheme.labelSmall.copyWith(
                                   color:
                                       AppTheme.textSecondary.withOpacity(0.5),
-                                  fontSize: 14,
                                 ),
                               ),
                               keyboardType: TextInputType.number,
@@ -2205,9 +2258,8 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                         children: [
                           Text(
                             'Reps',
-                            style: AppTheme.bodySmall.copyWith(
+                            style: AppTheme.labelSmall.copyWith(
                               color: AppTheme.textSecondary,
-                              fontWeight: FontWeight.w500,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -2215,7 +2267,7 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                             height: 32,
                             decoration: BoxDecoration(
                               color: AppTheme.surfaceLight,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: AppTheme.borderRadiusXs,
                             ),
                             child: TextField(
                               controller: repsController,
@@ -2229,10 +2281,9 @@ class WorkoutEditPageState extends State<WorkoutEditPage> {
                                   vertical: 8,
                                 ),
                                 hintText: '0',
-                                hintStyle: TextStyle(
+                                hintStyle: AppTheme.labelSmall.copyWith(
                                   color:
                                       AppTheme.textSecondary.withOpacity(0.5),
-                                  fontSize: 14,
                                 ),
                               ),
                               keyboardType: TextInputType.number,

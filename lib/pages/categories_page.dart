@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:mental_warior/models/tasks.dart';
 import 'package:mental_warior/models/categories.dart';
@@ -30,6 +32,9 @@ class _CategoriesPageState extends State<CategoriesPage>
   TextEditingController? _repeatEndDateController;
   TextEditingController? _repeatOccurrencesController;
 
+  // Scroll offset for gradient fade effect
+  double _scrollOffset = 0.0;
+  Timer? _scrollThrottleTimer;
 
   Category? _currentCategory;
 
@@ -221,6 +226,7 @@ class _CategoriesPageState extends State<CategoriesPage>
 
   @override
   void dispose() {
+    _scrollThrottleTimer?.cancel();
     _tabController?.removeListener(_tabControllerListener);
     _tabController?.dispose();
     _labelController?.dispose();
@@ -311,13 +317,17 @@ class _CategoriesPageState extends State<CategoriesPage>
         children: [
           TabBarView(
             controller: _tabController,
-            physics: const PageScrollPhysics()
-                .applyTo(const ClampingScrollPhysics()),
+            physics: const BouncingScrollPhysics(),
             children: _categories
                 .map(
                   (category) => OptimizedCategoryTasksView(
                     key: ValueKey(category.id),
                     category: category,
+                    onScrollOffsetChanged: (offset) {
+                      setState(() {
+                        _scrollOffset = offset;
+                      });
+                    },
                   ),
                 )
                 .toList(),
@@ -334,6 +344,18 @@ class _CategoriesPageState extends State<CategoriesPage>
   }
 
   PreferredSizeWidget _buildAppBar({required bool showTabs}) {
+    // Calculate fade factor based on scroll offset (0 to 1)
+    // Fade completes after scrolling 200 pixels
+    double fadeFactor = (_scrollOffset / 200).clamp(0.0, 1.0);
+
+    // Interpolate color: start with accent blue, fade to black
+    final accentColor = AppTheme.accent;
+    final fadedColor = Color.lerp(
+      accentColor.withOpacity(0.15),
+      Colors.black.withOpacity(0.15),
+      fadeFactor,
+    )!;
+
     return AppBar(
       backgroundColor: AppTheme.background,
       elevation: 0,
@@ -344,7 +366,7 @@ class _CategoriesPageState extends State<CategoriesPage>
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              AppTheme.accent.withOpacity(0.15),
+              fadedColor,
               AppTheme.background,
             ],
           ),
@@ -358,14 +380,6 @@ class _CategoriesPageState extends State<CategoriesPage>
             Padding(
               padding: const EdgeInsets.only(top: 48, left: 11.0),
               child: Text('Tasks', style: AppTheme.displayMedium),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 48.0, left: 4.0),
-              child: IconButton(
-                icon: Icon(Icons.add_circle_outline, color: AppTheme.accent),
-                onPressed: () => _showAddCategoryDialog(context),
-                tooltip: 'Add Category',
-              ),
             ),
           ],
         ),
@@ -407,37 +421,74 @@ class _CategoriesPageState extends State<CategoriesPage>
       curve: Curves.elasticOut,
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            Category categoryToUse = _currentCategory ??
-                (_categories.isNotEmpty
-                    ? _categories.first
-                    : Category(id: -1, label: "General", isDefault: 0));
-            _showAddTaskDialog(context, categoryToUse);
+        child: PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'task') {
+              Category categoryToUse = _currentCategory ??
+                  (_categories.isNotEmpty
+                      ? _categories.first
+                      : Category(id: -1, label: "General", isDefault: 0));
+              _showAddTaskDialog(context, categoryToUse);
+            } else if (value == 'category') {
+              _showAddCategoryDialog(context);
+            }
           },
-          borderRadius: BorderRadius.circular(100),
-          child: Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: Colors.black,
-              border: Border.all(
-                  color: AppTheme.accent.withValues(alpha: 0.6), width: 2),
-              borderRadius: BorderRadius.circular(100),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.accent.withValues(alpha: 0.15),
-                  blurRadius: 16,
-                  offset: const Offset(0, 8),
-                ),
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+          offset: const Offset(-60, -50),
+          shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
+          color: AppTheme.surface,
+          itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+            PopupMenuItem<String>(
+              value: 'task',
+              child: Row(
+                children: [
+                  Icon(Icons.assignment_outlined,
+                      color: AppTheme.accent, size: 20),
+                  const SizedBox(width: 12),
+                  Text('Create Task', style: AppTheme.bodyMedium),
+                ],
+              ),
             ),
-            child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+            PopupMenuDivider(
+              height: 1,
+            ),
+            PopupMenuItem<String>(
+              value: 'category',
+              child: Row(
+                children: [
+                  Icon(Icons.category_outlined,
+                      color: AppTheme.accent, size: 20),
+                  const SizedBox(width: 12),
+                  Text('Create Category', style: AppTheme.bodyMedium),
+                ],
+              ),
+            ),
+          ],
+          child: InkWell(
+            borderRadius: BorderRadius.circular(100),
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                border: Border.all(
+                    color: AppTheme.accent.withValues(alpha: 0.6), width: 2),
+                borderRadius: BorderRadius.circular(100),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.accent.withValues(alpha: 0.15),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child:
+                  const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+            ),
           ),
         ),
       ),
@@ -562,10 +613,12 @@ class _CategoriesPageState extends State<CategoriesPage>
 // Optimized CategoryTasksView with better performance
 class OptimizedCategoryTasksView extends StatefulWidget {
   final Category category;
+  final Function(double)? onScrollOffsetChanged;
 
   const OptimizedCategoryTasksView({
     super.key,
     required this.category,
+    this.onScrollOffsetChanged,
   });
 
   @override
@@ -579,6 +632,9 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
   final CompletedTaskService _completedTaskService = CompletedTaskService();
   final PendingTaskService _pendingTaskService = PendingTaskService();
   final XPService _xpService = XPService();
+  
+  late ScrollController _localScrollController;
+  Timer? _scrollThrottleTimer;
   
   List<Task> _tasks = [];
   List<Task> _completedTasks = [];
@@ -604,8 +660,21 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
   @override
   void initState() {
     super.initState();
+    _localScrollController = ScrollController();
+    _localScrollController.addListener(_onScroll);
     _loadDataAsync();
     TaskService.tasksUpdatedNotifier.addListener(_refreshTasks);
+  }
+
+  void _onScroll() {
+    // More aggressive throttling to prevent UI lag (33ms = 30fps)
+    if (_scrollThrottleTimer?.isActive ?? false) return;
+
+    widget.onScrollOffsetChanged?.call(_localScrollController.offset);
+
+    _scrollThrottleTimer = Timer(const Duration(milliseconds: 33), () {
+      _scrollThrottleTimer = null;
+    });
   }
 
   Future<void> _loadDataAsync() async {
@@ -621,6 +690,9 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
 
   @override
   void dispose() {
+    _localScrollController.removeListener(_onScroll);
+    _localScrollController.dispose();
+    _scrollThrottleTimer?.cancel();
     TaskService.tasksUpdatedNotifier.removeListener(_refreshTasks);
     super.dispose();
   }
@@ -1012,7 +1084,9 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
     return RefreshIndicator(
       onRefresh: _loadDataAsync,
       child: ListView(
+        controller: _localScrollController,
         physics: const AlwaysScrollableScrollPhysics(),
+        cacheExtent: 300, // Optimize scroll view caching
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
           if (_tasks.isNotEmpty) ...[

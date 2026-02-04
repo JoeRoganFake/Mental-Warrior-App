@@ -675,32 +675,39 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
               }
             },
           ),
-          title: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.surface,
-              borderRadius: BorderRadius.circular(8),
+          title: TextField(
+            controller: _nameController,
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
             ),
-            child: TextField(
-              controller: _nameController,
-              style: TextStyle(
-                color: AppTheme.textPrimary,
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: AppTheme.accent, width: 1.5),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: AppTheme.surfaceLight, width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: AppTheme.accent, width: 2),
+              ),
+              filled: true,
+              fillColor: AppTheme.surface,
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              hintText: 'Template Name',
+              hintStyle: TextStyle(
+                color: AppTheme.textSecondary,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
               ),
-              decoration: InputDecoration(
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-                hintText: 'Template Name',
-                hintStyle: TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              ),
-              onChanged: (_) => _hasChanges = true,
             ),
+            onChanged: (_) => _hasChanges = true,
           ),
           actions: [
             TextButton.icon(
@@ -736,11 +743,41 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                   ),
                 ],
               ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: _addExercise,
-          backgroundColor: AppTheme.accent,
-          icon: const Icon(Icons.add),
-          label: const Text('Add Exercise'),
+        floatingActionButton: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(100),
+            onTap: _addExercise,
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                border: Border.all(
+                  color: AppTheme.accent.withOpacity(0.6),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(100),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.accent.withOpacity(0.15),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.add_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+          ),
         ),
       ),
     );

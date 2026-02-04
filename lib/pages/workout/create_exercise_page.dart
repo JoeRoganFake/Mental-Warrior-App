@@ -314,23 +314,24 @@ class CreateExercisePageState extends State<CreateExercisePage> {
       appBar: AppBar(
         title: Text(
           widget.editMode ? 'Edit Exercise' : 'Create Exercise',
-          style: AppTheme.headlineMedium,
+          style: AppTheme.headlineMedium.copyWith(
+            color: AppTheme.textPrimary,
+          ),
         ),
         backgroundColor: AppTheme.surface,
         iconTheme: IconThemeData(color: AppTheme.textPrimary),
         elevation: 0,
+        centerTitle: false,
       ),
       body: Form(
         key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Exercise Name
-              _buildSectionTitle('Exercise Name'),
-              const SizedBox(height: 8),
-              _buildTextFormField(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+          children: [
+            // Exercise Name Card
+            _buildFormCard(
+              title: 'Exercise Name',
+              child: _buildTextFormField(
                 controller: _nameController,
                 hintText: 'Enter exercise name',
                 validator: (value) {
@@ -340,58 +341,114 @@ class CreateExercisePageState extends State<CreateExercisePage> {
                   return null;
                 },
               ),
-              const SizedBox(height: 24),
+            ),
+            const SizedBox(height: 20),
 
-              // Equipment Selection
-              _buildSectionTitle('Equipment'),
-              const SizedBox(height: 8),
-              _buildEquipmentSelector(),
-              const SizedBox(height: 24),
+            // Equipment Selection Card
+            _buildFormCard(
+              title: 'Equipment',
+              child: _buildEquipmentSelector(),
+            ),
+            const SizedBox(height: 20),
 
-              // Primary Muscle Group
-              _buildSectionTitle('Primary Muscle Group'),
-              const SizedBox(height: 8),
-              _buildPrimaryMuscleSelector(),
-              const SizedBox(height: 24),
+            // Primary Muscle Group Card
+            _buildFormCard(
+              title: 'Primary Muscle Group',
+              child: _buildPrimaryMuscleSelector(),
+            ),
+            const SizedBox(height: 20),
 
-              // Secondary Muscle Groups
-              _buildSectionTitle('Secondary Muscle Groups (Optional)'),
-              const SizedBox(height: 8),
-              _buildSecondaryMuscleSelector(),
-              const SizedBox(height: 24),
+            // Secondary Muscle Groups Card
+            _buildFormCard(
+              title: 'Secondary Muscle Groups (Optional)',
+              child: _buildSecondaryMuscleSelector(),
+            ),
+            const SizedBox(height: 20),
 
-              // Instructions Section
-              _buildSectionTitle('Exercise Instructions (Optional)'),
-              const SizedBox(height: 8),
-              _buildInstructionsSection(),
-              const SizedBox(height: 32),
+            // Instructions Section Card
+            _buildFormCard(
+              title: 'Exercise Instructions (Optional)',
+              child: _buildInstructionsSection(),
+            ),
+            const SizedBox(height: 32),
 
-              // Create Button
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _createExercise,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.accent,
-                    foregroundColor: AppTheme.textPrimary,
-                    shape: RoundedRectangleBorder(
+            // Create Button
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _createExercise,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      border: Border.all(
+                        color: AppTheme.accent.withOpacity(0.6),
+                        width: 2,
+                      ),
                       borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.accent.withOpacity(0.15),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    elevation: 4,
-                  ),
-                  child: Text(
-                    widget.editMode ? 'Update Exercise' : 'Create Exercise',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                    child: Center(
+                      child: Text(
+                        widget.editMode ? 'Update Exercise' : 'Create Exercise',
+                        style: AppTheme.bodyMedium.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFormCard({
+    required String title,
+    required Widget child,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: AppTheme.borderRadiusMd,
+        border: Border.all(
+          color: AppTheme.accent.withOpacity(0.2),
+          width: 1,
+        ),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: AppTheme.bodyMedium.copyWith(
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
       ),
     );
   }
@@ -399,7 +456,10 @@ class CreateExercisePageState extends State<CreateExercisePage> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: AppTheme.headlineMedium,
+      style: AppTheme.bodyMedium.copyWith(
+        color: AppTheme.textPrimary,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 
@@ -418,26 +478,36 @@ class CreateExercisePageState extends State<CreateExercisePage> {
         hintText: hintText,
         hintStyle: TextStyle(color: AppTheme.textSecondary),
         filled: true,
-        fillColor: AppTheme.surfaceLight,
+        fillColor: AppTheme.background,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: AppTheme.accent.withOpacity(0.2),
+            width: 1,
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: AppTheme.accent.withOpacity(0.2),
+            width: 1,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: AppTheme.accent, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: AppTheme.error, width: 2),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: AppTheme.error, width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
+          horizontal: 12,
+          vertical: 12,
         ),
       ),
       validator: validator,
@@ -445,68 +515,100 @@ class CreateExercisePageState extends State<CreateExercisePage> {
   }
 
   Widget _buildEquipmentSelector() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceLight,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: DropdownButtonFormField<String>(
-        value: _selectedEquipment,
-        dropdownColor: AppTheme.surfaceLight,
-        style: TextStyle(color: AppTheme.textPrimary),
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
+    return DropdownButtonFormField<String>(
+      value: _selectedEquipment,
+      dropdownColor: AppTheme.surface,
+      style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: AppTheme.background,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: AppTheme.accent.withOpacity(0.2),
+            width: 1,
+          ),
         ),
-        items: _equipmentOptions.map((String equipment) {
-          return DropdownMenuItem<String>(
-            value: equipment,
-            child: Text(equipment),
-          );
-        }).toList(),
-        onChanged: (String? value) {
-          if (value != null) {
-            setState(() {
-              _selectedEquipment = value;
-            });
-          }
-        },
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: AppTheme.accent.withOpacity(0.2),
+            width: 1,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: AppTheme.accent,
+            width: 2,
+          ),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
+      items: _equipmentOptions.map((String equipment) {
+        return DropdownMenuItem<String>(
+          value: equipment,
+          child: Text(equipment),
+        );
+      }).toList(),
+      onChanged: (String? value) {
+        if (value != null) {
+          setState(() {
+            _selectedEquipment = value;
+          });
+        }
+      },
     );
   }
 
   Widget _buildPrimaryMuscleSelector() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceLight,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: DropdownButtonFormField<String>(
-        value: _selectedPrimaryMuscle,
-        dropdownColor: AppTheme.surfaceLight,
-        style: TextStyle(color: AppTheme.textPrimary),
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
+    return DropdownButtonFormField<String>(
+      value: _selectedPrimaryMuscle,
+      dropdownColor: AppTheme.surface,
+      style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+      decoration: InputDecoration(
+        filled: true,
+        fillColor: AppTheme.background,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: AppTheme.accent.withOpacity(0.2),
+            width: 1,
+          ),
         ),
-        items: _muscleOptions.map((String muscle) {
-          return DropdownMenuItem<String>(
-            value: muscle,
-            child: Text(muscle),
-          );
-        }).toList(),
-        onChanged: (String? value) {
-          if (value != null) {
-            setState(() {
-              _selectedPrimaryMuscle = value;
-              // Remove from secondary muscles if it was selected there
-              _selectedSecondaryMuscles.remove(value);
-            });
-          }
-        },
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: AppTheme.accent.withOpacity(0.2),
+            width: 1,
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: AppTheme.accent,
+            width: 2,
+          ),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
+      items: _muscleOptions.map((String muscle) {
+        return DropdownMenuItem<String>(
+          value: muscle,
+          child: Text(muscle),
+        );
+      }).toList(),
+      onChanged: (String? value) {
+        if (value != null) {
+          setState(() {
+            _selectedPrimaryMuscle = value;
+            // Remove from secondary muscles if it was selected there
+            _selectedSecondaryMuscles.remove(value);
+          });
+        }
+      },
     );
   }
 
@@ -516,234 +618,246 @@ class CreateExercisePageState extends State<CreateExercisePage> {
         .where((muscle) => muscle != _selectedPrimaryMuscle)
         .toList();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceLight,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_selectedSecondaryMuscles.isNotEmpty) ...[
-            Text(
-              'Selected: ${_selectedSecondaryMuscles.join(', ')}',
-              style: AppTheme.bodySmall,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_selectedSecondaryMuscles.isNotEmpty) ...[
+          Text(
+            'Selected: ${_selectedSecondaryMuscles.join(', ')}',
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.textSecondary,
             ),
-            const SizedBox(height: 12),
-          ],
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: availableSecondaryMuscles.map((muscle) {
-              final isSelected = _selectedSecondaryMuscles.contains(muscle);
-              return GestureDetector(
-                onTap: () => _toggleSecondaryMuscle(muscle),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
+          ),
+          const SizedBox(height: 12),
+        ],
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: availableSecondaryMuscles.map((muscle) {
+            final isSelected = _selectedSecondaryMuscles.contains(muscle);
+            return GestureDetector(
+              onTap: () => _toggleSecondaryMuscle(muscle),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? _getColorForType(muscle).withOpacity(0.7)
+                      : AppTheme.background,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
                     color: isSelected
-                        ? _getColorForType(muscle).withOpacity(0.7)
-                        : AppTheme.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: isSelected
-                          ? _getColorForType(muscle)
-                          : AppTheme.textSecondary.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    muscle,
-                    style: TextStyle(
-                      color: isSelected
-                          ? AppTheme.textPrimary
-                          : AppTheme.textPrimary,
-                      fontSize: 14,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    ),
+                        ? _getColorForType(muscle)
+                        : AppTheme.accent.withOpacity(0.3),
+                    width: 1.5,
                   ),
                 ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
+                child: Text(
+                  muscle,
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
   Widget _buildInstructionsSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceLight,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Instruction input field with add button
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _instructionController,
-                  style: TextStyle(color: AppTheme.textPrimary),
-                  textCapitalization: TextCapitalization.sentences,
-                  maxLines: null,
-                  decoration: InputDecoration(
-                    hintText: 'Enter step instruction...',
-                    hintStyle: TextStyle(color: AppTheme.textSecondary),
-                    filled: true,
-                    fillColor: AppTheme.surface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                  ),
-                  onSubmitted: (_) => _addInstructionStep(),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.accent,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: IconButton(
-                  icon: Icon(Icons.add, color: AppTheme.textPrimary),
-                  onPressed: _addInstructionStep,
-                  tooltip: 'Add Step',
-                ),
-              ),
-            ],
-          ),
-
-          if (_instructionSteps.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Steps (${_instructionSteps.length})',
-              style: AppTheme.bodySmall.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // List of instruction steps
-            ReorderableListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _instructionSteps.length,
-              onReorder: (oldIndex, newIndex) {
-                setState(() {
-                  if (newIndex > oldIndex) {
-                    newIndex -= 1;
-                  }
-                  final item = _instructionSteps.removeAt(oldIndex);
-                  _instructionSteps.insert(newIndex, item);
-                });
-              },
-              itemBuilder: (context, index) {
-                return Container(
-                  key: ValueKey('instruction_$index'),
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Instruction input field with add button
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _instructionController,
+                style: TextStyle(color: AppTheme.textPrimary),
+                textCapitalization: TextCapitalization.sentences,
+                maxLines: null,
+                decoration: InputDecoration(
+                  hintText: 'Enter step instruction...',
+                  hintStyle: TextStyle(color: AppTheme.textSecondary),
+                  filled: true,
+                  fillColor: AppTheme.background,
+                  border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppTheme.accent.withOpacity(0.3),
+                    borderSide: BorderSide(
+                      color: AppTheme.accent.withOpacity(0.2),
                       width: 1,
                     ),
                   ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    leading: Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: AppTheme.accent,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          '${index + 1}',
-                          style: TextStyle(
-                            color: AppTheme.textPrimary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    ),
-                    title: Text(
-                      _instructionSteps[index],
-                      style: AppTheme.bodySmall,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon:
-                              Icon(Icons.edit,
-                              color: AppTheme.accent, size: 20),
-                          onPressed: () => _editInstructionStep(index),
-                          tooltip: 'Edit',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon:
-                              Icon(Icons.delete,
-                              color: AppTheme.error, size: 20),
-                          onPressed: () => _removeInstructionStep(index),
-                          tooltip: 'Delete',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                        const SizedBox(width: 8),
-                        Icon(Icons.drag_handle,
-                            color: AppTheme.textSecondary, size: 20),
-                      ],
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: AppTheme.accent.withOpacity(0.2),
+                      width: 1,
                     ),
                   ),
-                );
-              },
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(
+                      color: AppTheme.accent,
+                      width: 2,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
+                ),
+                onSubmitted: (_) => _addInstructionStep(),
+              ),
             ),
+            const SizedBox(width: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.black,
+                border: Border.all(
+                  color: AppTheme.accent.withOpacity(0.6),
+                  width: 1.5,
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: IconButton(
+                icon: Icon(Icons.add, color: AppTheme.accent),
+                onPressed: _addInstructionStep,
+                tooltip: 'Add Step',
+              ),
+            ),
+          ],
+        ),
 
-            // Helper text
-            const SizedBox(height: 8),
-            Text(
-              'Tip: Long press and drag to reorder steps',
+        if (_instructionSteps.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Text(
+            'Steps (${_instructionSteps.length})',
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // List of instruction steps
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _instructionSteps.length,
+            onReorder: (oldIndex, newIndex) {
+              setState(() {
+                if (newIndex > oldIndex) {
+                  newIndex -= 1;
+                }
+                final item = _instructionSteps.removeAt(oldIndex);
+                _instructionSteps.insert(newIndex, item);
+              });
+            },
+            itemBuilder: (context, index) {
+              return Container(
+                key: ValueKey('instruction_$index'),
+                margin: const EdgeInsets.only(bottom: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppTheme.accent.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  leading: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppTheme.accent.withOpacity(0.15),
+                      border: Border.all(
+                        color: AppTheme.accent.withOpacity(0.5),
+                        width: 1.5,
+                      ),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${index + 1}',
+                        style: TextStyle(
+                          color: AppTheme.accent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    _instructionSteps[index],
+                    style: AppTheme.bodySmall.copyWith(
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon:
+                            Icon(Icons.edit, color: AppTheme.accent, size: 18),
+                        onPressed: () => _editInstructionStep(index),
+                        tooltip: 'Edit',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon:
+                            Icon(Icons.delete, color: AppTheme.error, size: 18),
+                        onPressed: () => _removeInstructionStep(index),
+                        tooltip: 'Delete',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(Icons.drag_handle,
+                          color: AppTheme.textSecondary, size: 18),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // Helper text
+          const SizedBox(height: 8),
+          Text(
+            'Tip: Long press and drag to reorder steps',
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.textTertiary,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              'No instructions added yet',
               style: AppTheme.bodySmall.copyWith(
                 color: AppTheme.textTertiary,
                 fontStyle: FontStyle.italic,
               ),
             ),
-          ] else ...[
-            const SizedBox(height: 12),
-            Center(
-              child: Text(
-                'No instructions added yet',
-                style: AppTheme.bodySmall.copyWith(
-                  color: AppTheme.textTertiary,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
-          ],
+          ),
         ],
-      ),
+      ],
     );
   }
 }

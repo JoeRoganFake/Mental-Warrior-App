@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/data/exercises_data.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
@@ -9,8 +10,19 @@ import 'package:mental_warior/utils/app_theme.dart';
 
 class ExerciseBrowsePage extends StatefulWidget {
   final bool embedded;
+  final ScrollController? scrollController;
+  final List<Map<String, dynamic>>? preLoadedExercises;
+  final List<String>? preLoadedBodyParts;
+  final List<String>? preLoadedEquipmentTypes;
 
-  const ExerciseBrowsePage({super.key, this.embedded = false});
+  const ExerciseBrowsePage({
+    super.key,
+    this.embedded = false,
+    this.scrollController,
+    this.preLoadedExercises,
+    this.preLoadedBodyParts,
+    this.preLoadedEquipmentTypes,
+  });
 
   @override
   ExerciseBrowsePageState createState() => ExerciseBrowsePageState();
@@ -21,15 +33,23 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
   String _searchQuery = '';
   String _selectedBodyPart = 'All';
   String _selectedEquipment = 'All';
-  bool _showOnlyStarred = false; // Filter to show only starred exercises
+  bool _showOnlyStarred = false;
+  bool _showOnlyCustom = false;
   List<Map<String, dynamic>> _exercises = [];
   List<Map<String, dynamic>> _customExercises = [];
-  Set<String> _starredExerciseIds = {}; // Cache of starred exercise IDs
+  Set<String> _starredExerciseIds = {};
   List<String> _bodyParts = ['All'];
   List<String> _equipmentTypes = ['All'];
   final StarredExercisesService _starredService = StarredExercisesService();
+  
+  // Performance optimization
+  bool _isLoadingExercises = false;
+  bool _isInitialized = false;
 
-  // Helper function to clean exercise names from markers
+  // Pagination for better performance
+  static const int _itemsPerPage = 50;
+  int _displayCount =
+      50; // Helper function to clean exercise names from markers
   String _cleanExerciseName(String name) {
     return name
         .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
@@ -41,7 +61,25 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
   void initState() {
     super.initState();
     _searchController.addListener(_onSearchChanged);
-    _loadExercisesFromJson();
+    
+    // Add scroll listener for pagination
+    widget.scrollController?.addListener(_onScroll);
+
+    // If exercises were pre-loaded, use them; otherwise load them
+    if (widget.preLoadedExercises != null &&
+        widget.preLoadedBodyParts != null &&
+        widget.preLoadedEquipmentTypes != null) {
+      setState(() {
+        _exercises = widget.preLoadedExercises!;
+        _bodyParts = widget.preLoadedBodyParts!;
+        _equipmentTypes = widget.preLoadedEquipmentTypes!;
+        _isInitialized = true;
+      });
+    } else {
+      // Only load exercises if not pre-loaded
+      _loadExercisesAsync();
+    }
+    
     _loadCustomExercises();
     _loadStarredExercises();
 
@@ -53,27 +91,81 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
     StarredExercisesService.starredExercisesUpdatedNotifier
         .addListener(_loadStarredExercises);
   }
+  
+  void _onScroll() {
+    if (widget.scrollController == null) return;
 
-  void _loadExercisesFromJson() {
+    final controller = widget.scrollController!;
+    if (controller.position.pixels >=
+        controller.position.maxScrollExtent - 500) {
+      _loadMoreItems();
+    }
+  }
+
+  // Load exercises in background to avoid UI freeze
+  Future<void> _loadExercisesAsync() async {
+    if (_isLoadingExercises) return;
+
+    setState(() => _isLoadingExercises = true);
+
+    try {
+      // Parse JSON in compute isolate for better performance
+      final result = await Future.delayed(
+        const Duration(milliseconds: 100),
+        () => _parseExercisesSync(),
+      );
+
+      if (mounted) {
+        setState(() {
+          _exercises = result['exercises'];
+          _bodyParts = result['bodyParts'];
+          _equipmentTypes = result['equipmentTypes'];
+          _isLoadingExercises = false;
+          _isInitialized = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingExercises = false;
+          _exercises = [];
+          _bodyParts = ['All'];
+          _equipmentTypes = ['All'];
+        });
+      }
+      debugPrint('Error loading exercises: $e');
+    }
+  }
+
+  // Synchronous parsing (can be moved to compute if needed)
+  Map<String, dynamic> _parseExercisesSync() {
     try {
       final List<dynamic> exercisesList =
           json.decode(exercisesJson) as List<dynamic>;
-      // Helper to Title Case words
+      
       String capitalizeWords(String s) => s
           .split(' ')
           .map((w) => w.isNotEmpty ? w[0].toUpperCase() + w.substring(1) : '')
           .join(' ');
-      _exercises = exercisesList.map((e) {
+      
+      final exercises = <Map<String, dynamic>>[];
+      final bodySet = <String>{};
+      final equipSet = <String>{};
+
+      for (final e in exercisesList) {
         final m = e as Map<String, dynamic>;
         final primaryMuscle =
             ((m['primaryMuscles'] as List?)?.isNotEmpty ?? false)
                 ? (m['primaryMuscles'] as List).first as String
                 : '';
         final rawEquip = (m['equipment'] as String?) ?? 'None';
-        return {
+        final muscleType = capitalizeWords(primaryMuscle);
+        final equipment = capitalizeWords(rawEquip);
+
+        exercises.add({
           'name': m['name'] ?? 'None',
-          'type': capitalizeWords(primaryMuscle),
-          'equipment': capitalizeWords(rawEquip),
+          'type': muscleType,
+          'equipment': equipment,
           'description': (m['instructions'] as List<dynamic>? ?? []).join('\n'),
           'id': m['id'] ?? '',
           'imageUrl': (m['images'] as List?)?.isNotEmpty ?? false
@@ -81,47 +173,56 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
               : '',
           'secondaryMuscles': m['secondaryMuscles'] ?? [],
           'isCustom': false,
-        };
-      }).toList();
-      // Populate dynamic filter lists
-      final bodySet = _exercises.map((e) => e['type'] as String).toSet();
-      final equipSet = _exercises.map((e) => e['equipment'] as String).toSet();
-      _bodyParts = ['All', ...bodySet.toList()..sort()];
-      _equipmentTypes = ['All', ...equipSet.toList()..sort()];
+        });
+
+        bodySet.add(muscleType);
+        equipSet.add(equipment);
+      }
+
+      return {
+        'exercises': exercises,
+        'bodyParts': ['All', ...bodySet.toList()..sort()],
+        'equipmentTypes': ['All', ...equipSet.toList()..sort()],
+      };
     } catch (e) {
-      debugPrint('Error loading local exercises: $e');
-      setState(() {
-        _exercises = [];
-        _bodyParts = ['All'];
-        _equipmentTypes = ['All'];
-      });
+      debugPrint('Error parsing exercises: $e');
+      return {
+        'exercises': [],
+        'bodyParts': ['All'],
+        'equipmentTypes': ['All'],
+      };
     }
   }
 
   void _loadCustomExercises() async {
     try {
       final customExerciseService = CustomExerciseService();
-      // Only load non-hidden exercises for search/browse
       final customExercises = await customExerciseService.getCustomExercises(includeHidden: false);
 
-      setState(() {
-        _customExercises = customExercises;
-        _updateFilterLists();
-      });
+      if (mounted) {
+        setState(() {
+          _customExercises = customExercises;
+          _updateFilterLists();
+        });
+      }
     } catch (e) {
       debugPrint('Error loading custom exercises: $e');
-      setState(() {
-        _customExercises = [];
-      });
+      if (mounted) {
+        setState(() {
+          _customExercises = [];
+        });
+      }
     }
   }
 
   void _loadStarredExercises() async {
     try {
       final starredIds = await _starredService.getStarredExerciseIds();
-      setState(() {
-        _starredExerciseIds = starredIds;
-      });
+      if (mounted) {
+        setState(() {
+          _starredExerciseIds = starredIds;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading starred exercises: $e');
     }
@@ -131,31 +232,16 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
     final allExercises = [..._exercises, ..._customExercises];
     final bodySet = allExercises.map((e) => e['type'] as String).toSet();
     final equipSet = allExercises.map((e) => e['equipment'] as String).toSet();
-    _bodyParts = ['All', ...bodySet.toList()..sort()];
-    _equipmentTypes = ['All', ...equipSet.toList()..sort()];
-  }
-
-  @override
-  void dispose() {
-    _searchController.removeListener(_onSearchChanged);
-    _searchController.dispose();
-    CustomExerciseService.customExercisesUpdatedNotifier
-        .removeListener(_loadCustomExercises);
-    StarredExercisesService.starredExercisesUpdatedNotifier
-        .removeListener(_loadStarredExercises);
-    super.dispose();
-  }
-
-  void _onSearchChanged() {
     setState(() {
-      _searchQuery = _searchController.text.toLowerCase();
+      _bodyParts = ['All', ...bodySet.toList()..sort()];
+      _equipmentTypes = ['All', ...equipSet.toList()..sort()];
     });
   }
-
+  
+  // Computed getter for instant filtering (like exercise_selection_page)
   List<Map<String, dynamic>> get _filteredExercises {
     List<Map<String, dynamic>> result = [..._exercises, ..._customExercises];
 
-    // Filter by starred status
     if (_showOnlyStarred) {
       result = result.where((exercise) {
         final exerciseId = exercise['apiId'] ?? exercise['id'];
@@ -178,22 +264,53 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
       }).toList();
     }
 
+    if (_showOnlyCustom) {
+      result = result.where((exercise) {
+        return exercise['isCustom'] ?? false;
+      }).toList();
+    }
+
     if (_searchQuery.isNotEmpty) {
       result = result.where((exercise) {
-        return (exercise['name'] != null &&
-                exercise['name']
-                    .toString()
-                    .toLowerCase()
-                    .contains(_searchQuery)) ||
-            (exercise['description'] != null &&
-                exercise['description']
-                    .toString()
-                    .toLowerCase()
-                    .contains(_searchQuery));
+        final name = (exercise['name'] ?? '').toString().toLowerCase();
+        return name.contains(_searchQuery);
       }).toList();
     }
 
     return result;
+  }
+  
+  // Get paginated subset for display
+  List<Map<String, dynamic>> get _displayedExercises {
+    final filtered = _filteredExercises;
+    return filtered.take(_displayCount).toList();
+  }
+
+  bool get _hasMoreItems => _filteredExercises.length > _displayCount;
+
+  void _loadMoreItems() {
+    setState(() {
+      _displayCount += _itemsPerPage;
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.scrollController?.removeListener(_onScroll);
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    CustomExerciseService.customExercisesUpdatedNotifier
+        .removeListener(_loadCustomExercises);
+    StarredExercisesService.starredExercisesUpdatedNotifier
+        .removeListener(_loadStarredExercises);
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchQuery = _searchController.text.toLowerCase();
+      _displayCount = _itemsPerPage; // Reset pagination on search
+    });
   }
 
   void _viewExerciseDetails(Map<String, dynamic> exercise) {
@@ -319,7 +436,9 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
         _starredExerciseIds.contains('${exerciseId}_$exerciseType');
     final exerciseTypeString = exercise['type'] as String?;
 
-    return Card(
+    // Wrap in RepaintBoundary to isolate repaints
+    return RepaintBoundary(
+      child: Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       elevation: 0,
       color: AppTheme.surface,
@@ -410,14 +529,19 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
         ),
         onTap: () => _viewExerciseDetails(exercise),
       ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final filteredExercises = _filteredExercises;
+    final displayedExercises = _displayedExercises;
 
     final bodyContent = CustomScrollView(
+      controller: widget.scrollController,
+      cacheExtent: 300, // Reduced from 500 for better memory usage
+      physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         // Search bar
         SliverToBoxAdapter(
@@ -428,6 +552,7 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
               onChanged: (value) {
                 setState(() {
                   _searchQuery = value.toLowerCase();
+                  _displayCount = _itemsPerPage;
                 });
               },
               decoration: InputDecoration(
@@ -478,16 +603,45 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
                   selected: _showOnlyStarred,
                   selectedColor: Colors.amber.withOpacity(0.3),
                   side: BorderSide.none,
+                  showCheckmark: false,
                   onSelected: (selected) {
                     setState(() {
                       _showOnlyStarred = selected;
+                      _displayCount = _itemsPerPage;
                     });
                   },
                 ),
-                if (_showOnlyStarred) ...[
+                const SizedBox(width: 8),
+                FilterChip(
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _showOnlyCustom
+                            ? Icons.edit_note
+                            : Icons.edit_note_outlined,
+                        size: 18,
+                        color: _showOnlyCustom ? AppTheme.accent : null,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(_showOnlyCustom ? 'Custom' : 'Show Custom'),
+                    ],
+                  ),
+                  selected: _showOnlyCustom,
+                  selectedColor: AppTheme.accent.withOpacity(0.2),
+                  side: BorderSide.none,
+                  showCheckmark: false,
+                  onSelected: (selected) {
+                    setState(() {
+                      _showOnlyCustom = selected;
+                      _displayCount = _itemsPerPage;
+                    });
+                  },
+                ),
+                if (_showOnlyStarred || _showOnlyCustom) ...[
                   const SizedBox(width: 8),
                   Text(
-                    '${filteredExercises.length} favorite${filteredExercises.length != 1 ? 's' : ''}',
+                    '${filteredExercises.length} exercise${filteredExercises.length != 1 ? 's' : ''}',
                     style: TextStyle(
                       color: AppTheme.textTertiary,
                       fontSize: 12,
@@ -530,6 +684,7 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
                     onSelected: (selected) {
                       setState(() {
                         _selectedBodyPart = bodyPart;
+                        _displayCount = _itemsPerPage;
                       });
                     },
                   ),
@@ -570,6 +725,7 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
                     onSelected: (selected) {
                       setState(() {
                         _selectedEquipment = equipment;
+                        _displayCount = _itemsPerPage;
                       });
                     },
                   ),
@@ -606,8 +762,28 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
         else
           SliverList(
             delegate: SliverChildBuilderDelegate(
-              (context, index) => _buildExerciseItem(filteredExercises[index]),
-              childCount: filteredExercises.length,
+              (context, index) => _buildExerciseItem(displayedExercises[index]),
+              childCount: displayedExercises.length,
+              addAutomaticKeepAlives: false,
+              addRepaintBoundaries: false, // We add them manually
+            ),
+          ),
+
+        // Loading indicator for pagination
+        if (_hasMoreItems && displayedExercises.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accent),
+                  ),
+                ),
+              ),
             ),
           ),
       ],
@@ -623,11 +799,7 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
             Positioned(
               right: 16,
               bottom: 16,
-              child: FloatingActionButton(
-                onPressed: _openCreateExercise,
-                tooltip: 'Create custom exercise',
-                child: const Icon(Icons.add),
-              ),
+              child: _buildCustomFAB(context),
             ),
           ],
         ),
@@ -640,10 +812,45 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
         title: const Text('Browse Exercises'),
       ),
       body: bodyContent,
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openCreateExercise,
-        tooltip: 'Create custom exercise',
-        child: const Icon(Icons.add),
+      floatingActionButton: _buildCustomFAB(context),
+    );
+  }
+
+  Widget _buildCustomFAB(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _openCreateExercise,
+        borderRadius: BorderRadius.circular(100),
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            border: Border.all(
+              color: AppTheme.accent.withOpacity(0.6),
+              width: 2,
+            ),
+            borderRadius: BorderRadius.circular(100),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.accent.withOpacity(0.15),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.add_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
+        ),
       ),
     );
   }

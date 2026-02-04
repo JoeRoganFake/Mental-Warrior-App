@@ -8,7 +8,7 @@ enum SetType {
 
 class Workout {
   final int id;
-  final String name;
+  late final String name;
   final String date;
   final int duration; // Duration in seconds
   final List<Exercise> exercises;

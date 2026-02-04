@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'dart:async';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/utils/app_theme.dart';
 import 'package:mental_warior/utils/app_theme.dart';
 
 class BodyMeasurementsPage extends StatefulWidget {
   final bool embedded;
+  final ScrollController? scrollController;
   
-  const BodyMeasurementsPage({super.key, this.embedded = false});
+  const BodyMeasurementsPage(
+      {super.key, this.embedded = false, this.scrollController});
 
   @override
   State<BodyMeasurementsPage> createState() => _BodyMeasurementsPageState();
@@ -22,6 +25,7 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
   bool _isLoading = true;
   bool _useMeasurementInInches = false;
   bool _showWeightInLbs = false;
+  Timer? _scrollThrottleTimer;
 
   // Theme colors
   final Color _backgroundColor = const Color(0xFF1A1B1E);
@@ -41,6 +45,7 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
 
   @override
   void dispose() {
+    _scrollThrottleTimer?.cancel();
     MeasurementService.measurementsUpdatedNotifier.removeListener(_onMeasurementsUpdated);
     SettingsService.settingsUpdatedNotifier.removeListener(_onSettingsUpdated);
     super.dispose();
@@ -88,6 +93,8 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
     return RefreshIndicator(
       onRefresh: _loadMeasurements,
       child: ListView(
+        controller: widget.scrollController,
+        cacheExtent: 250, // Optimize scroll view caching
         padding: EdgeInsets.zero,
         children: [
           // Header with gradient background
@@ -1017,6 +1024,7 @@ class _MeasurementHistoryPageState extends State<MeasurementHistoryPage> {
     
     return ListView.builder(
       padding: const EdgeInsets.all(16),
+      cacheExtent: 200, // Optimize scroll view caching
       itemCount: _measurements.length + 1, // +1 for chart header
       itemBuilder: (context, index) {
         if (index == 0) {

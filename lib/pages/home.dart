@@ -1327,7 +1327,7 @@ class HomePageState extends State<HomePage>
                         // Save Button
                         Padding(
                           padding: const EdgeInsets.all(8.0),
-                          child: ElevatedButton(
+                          child: OutlinedButton(
                             onPressed: () async {
                               if (taskFormKey.currentState!.validate()) {
                                 Future<void> operation;
@@ -1463,6 +1463,17 @@ class HomePageState extends State<HomePage>
                                 setState(() {});
                               }
                             },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.accent,
+                              side: BorderSide(
+                                color: AppTheme.accent,
+                                width: 2,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                            ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -3662,97 +3673,105 @@ class HomePageState extends State<HomePage>
   Widget _buildCustomFAB(BuildContext context) {
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          showMenu(
-            context: context,
-            color: AppTheme.surface,
-            position: RelativeRect.fromLTRB(
-              MediaQuery.of(context).size.width - 180,
-              MediaQuery.of(context).size.height - 289,
-              75,
-              0,
-            ),
-            items: [
-              PopupMenuItem<String>(
-                value: 'task',
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle_outline,
-                        color: AppTheme.textSecondary, size: 20),
-                    const SizedBox(width: 12),
-                    Text('Task', style: AppTheme.bodyMedium),
-                  ],
-                ),
-                onTap: () => taskFormDialog(context),
-              ),
-              PopupMenuItem<String>(
-                value: 'habit',
-                child: Row(
-                  children: [
-                    Icon(Icons.repeat_rounded,
-                        color: AppTheme.textSecondary, size: 20),
-                    const SizedBox(width: 12),
-                    Text('Habit', style: AppTheme.bodyMedium),
-                  ],
-                ),
-                onTap: () => habitFormDialog(),
-              ),
-              PopupMenuItem<String>(
-                value: 'goal',
-                child: Row(
-                  children: [
-                    Icon(Icons.flag_rounded,
-                        color: AppTheme.textSecondary, size: 20),
-                    const SizedBox(width: 12),
-                    Text('Long Term Goal', style: AppTheme.bodyMedium),
-                  ],
-                ),
-                onTap: () => goalFormDialog(),
-              ),
-              PopupMenuItem<String>(
-                value: 'book',
-                child: Row(
-                  children: [
-                    Icon(Icons.auto_stories,
-                        color: AppTheme.textSecondary, size: 20),
-                    const SizedBox(width: 12),
-                    Text('Book', style: AppTheme.bodyMedium),
-                  ],
-                ),
-                onTap: () => bookFormDialog(context),
-              ),
-            ],
-          );
+      child: PopupMenuButton<String>(
+        onSelected: (value) {
+          switch (value) {
+            case 'task':
+              taskFormDialog(context);
+              break;
+            case 'habit':
+              habitFormDialog();
+              break;
+            case 'goal':
+              goalFormDialog();
+              break;
+            case 'book':
+              bookFormDialog(context);
+              break;
+          }
         },
-        borderRadius: BorderRadius.circular(100),
-        child: Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: Colors.black,
-            border: Border.all(
-              color: AppTheme.accent.withOpacity(0.6),
-              width: 2,
+        offset: const Offset(-60, -150),
+        shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
+        color: AppTheme.surface,
+        itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+          PopupMenuItem<String>(
+            value: 'task',
+            child: Row(
+              children: [
+                Icon(Icons.check_circle_outline,
+                    color: AppTheme.accent, size: 20),
+                const SizedBox(width: 12),
+                Text('Create Task', style: AppTheme.bodyMedium),
+              ],
             ),
-            borderRadius: BorderRadius.circular(100),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.accent.withOpacity(0.15),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
-          child: const Icon(
-            Icons.add_rounded,
-            color: Colors.white,
-            size: 28,
+          const PopupMenuDivider(height: 1),
+          PopupMenuItem<String>(
+            value: 'habit',
+            child: Row(
+              children: [
+                Icon(Icons.repeat_rounded,
+                    color: AppTheme.accent, size: 20),
+                const SizedBox(width: 12),
+                Text('Create Habit', style: AppTheme.bodyMedium),
+              ],
+            ),
+          ),
+          const PopupMenuDivider(height: 1),
+          PopupMenuItem<String>(
+            value: 'goal',
+            child: Row(
+              children: [
+                Icon(Icons.flag_rounded,
+                    color: AppTheme.accent, size: 20),
+                const SizedBox(width: 12),
+                Text('Create Long Term Goal', style: AppTheme.bodyMedium),
+              ],
+            ),
+          ),
+          const PopupMenuDivider(height: 1),
+          PopupMenuItem<String>(
+            value: 'book',
+            child: Row(
+              children: [
+                Icon(Icons.auto_stories,
+                    color: AppTheme.accent, size: 20),
+                const SizedBox(width: 12),
+                Text('Add a Book', style: AppTheme.bodyMedium),
+              ],
+            ),
+          ),
+        ],
+        child: InkWell(
+          borderRadius: BorderRadius.circular(100),
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              border: Border.all(
+                color: AppTheme.accent.withOpacity(0.6),
+                width: 2,
+              ),
+              borderRadius: BorderRadius.circular(100),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.accent.withOpacity(0.15),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.add_rounded,
+              color: Colors.white,
+              size: 28,
+            ),
           ),
         ),
       ),

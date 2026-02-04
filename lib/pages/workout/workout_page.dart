@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:mental_warior/data/exercises_data.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/pages/workout/workout_session_page.dart';
 import 'package:mental_warior/pages/workout/workout_details_page.dart';
@@ -22,7 +26,7 @@ class WorkoutPage extends StatefulWidget {
 }
 
 class WorkoutPageState extends State<WorkoutPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final WorkoutService _workoutService = WorkoutService();
   final TemplateService _templateService = TemplateService();
   late TabController _tabController;
@@ -30,18 +34,80 @@ class WorkoutPageState extends State<WorkoutPage>
   List<Workout> _workouts = [];
   List<WorkoutTemplate> _templates = [];
   List<TemplateFolder> _folders = [];
-  Map<int, bool> _expandedFolders = {}; // Track which folders are expanded
+  Map<int, bool> _expandedFolders = {};
+  Map<int, AnimationController> _folderAnimationControllers = {};
   bool _isLoading = true;
+  
+  // Pre-loaded exercises (loaded during init to avoid lag on tab switch)
+  List<Map<String, dynamic>> _preLoadedExercises = [];
+  List<String> _preLoadedBodyParts = ['All'];
+  List<String> _preLoadedEquipmentTypes = ['All'];
+
+  // Scroll offset for gradient fade effect
+  double _scrollOffset = 0.0;
+  // Scroll controllers for all tabs
+  final ScrollController _workoutScrollController = ScrollController();
+  final ScrollController _historyScrollController = ScrollController();
+  final ScrollController _exerciseScrollController = ScrollController();
+  final ScrollController _measurementScrollController = ScrollController();
+
+  // Track which tab is currently active
+  int _activeTabIndex = 0;
+  Timer? _scrollThrottleTimer;
   int _weeklyWorkoutGoal = 5; // Default goal
   bool _showWeightInLbs = false;
   List<Map<String, dynamic>> _personalRecords = [];
   String _prDisplayMode = 'random'; // 'random' or 'pinned'
   List<String> _pinnedExercises = [];
 
+  void _onScroll() {
+    // Aggressive throttling to prevent UI lag
+    if (_scrollThrottleTimer?.isActive ?? false) return;
+
+    setState(() {
+      // Update scroll offset based on active tab
+      switch (_activeTabIndex) {
+        case 0:
+          _scrollOffset = _workoutScrollController.offset;
+          break;
+        case 1:
+          _scrollOffset = _historyScrollController.offset;
+          break;
+        case 2:
+          _scrollOffset = _exerciseScrollController.offset;
+          break;
+        case 3:
+          _scrollOffset = _measurementScrollController.offset;
+          break;
+      }
+    });
+
+    _scrollThrottleTimer = Timer(const Duration(milliseconds: 33), () {
+      _scrollThrottleTimer = null;
+    });
+  }
+
+  void _onTabChange() {
+    // Reset scroll offset when tab changes
+    setState(() {
+      _activeTabIndex = _tabController.index;
+      _scrollOffset = 0.0;
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(_onTabChange);
+    _workoutScrollController.addListener(_onScroll);
+    _historyScrollController.addListener(_onScroll);
+    _exerciseScrollController.addListener(_onScroll);
+    _measurementScrollController.addListener(_onScroll);
+
+    // Pre-load exercises in background (don't await - let it load asynchronously)
+    _preLoadExercisesAsync();
+    
     _loadWorkouts();
     _loadWeeklyGoal();
     _loadWeightUnit();
@@ -65,7 +131,20 @@ class WorkoutPageState extends State<WorkoutPage>
 
   @override
   void dispose() {
+    _scrollThrottleTimer?.cancel();
+    _tabController.removeListener(_onTabChange);
     _tabController.dispose();
+    _workoutScrollController.removeListener(_onScroll);
+    _workoutScrollController.dispose();
+    _historyScrollController.removeListener(_onScroll);
+    _historyScrollController.dispose();
+    _exerciseScrollController.removeListener(_onScroll);
+    _exerciseScrollController.dispose();
+    _measurementScrollController.removeListener(_onScroll);
+    _measurementScrollController.dispose();
+    for (var controller in _folderAnimationControllers.values) {
+      controller.dispose();
+    }
     WorkoutService.workoutsUpdatedNotifier.removeListener(_onWorkoutsUpdated);
     SettingsService.settingsUpdatedNotifier.removeListener(_onSettingsUpdated);
     TemplateService.templatesUpdatedNotifier
@@ -94,14 +173,101 @@ class WorkoutPageState extends State<WorkoutPage>
     _loadFolders();
   }
 
+  // Pre-load exercises asynchronously to avoid lag when switching to Exercises tab
+  Future<void> _preLoadExercisesAsync() async {
+    try {
+      // Use a slight delay to let the UI fully initialize first
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Parse exercises in background
+      final result = await Future(() => _parseExercisesSync());
+
+      if (mounted) {
+        setState(() {
+          _preLoadedExercises = result['exercises'];
+          _preLoadedBodyParts = result['bodyParts'];
+          _preLoadedEquipmentTypes = result['equipmentTypes'];
+        });
+      }
+    } catch (e) {
+      debugPrint('Error pre-loading exercises: $e');
+    }
+  }
+
+  // Synchronous parsing for exercises
+  Map<String, dynamic> _parseExercisesSync() {
+    try {
+      final List<dynamic> exercisesList =
+          json.decode(exercisesJson) as List<dynamic>;
+
+      String capitalizeWords(String s) => s
+          .split(' ')
+          .map((w) => w.isNotEmpty ? w[0].toUpperCase() + w.substring(1) : '')
+          .join(' ');
+
+      final exercises = <Map<String, dynamic>>[];
+      final bodySet = <String>{};
+      final equipSet = <String>{};
+
+      for (final e in exercisesList) {
+        final m = e as Map<String, dynamic>;
+        final primaryMuscle =
+            ((m['primaryMuscles'] as List?)?.isNotEmpty ?? false)
+                ? (m['primaryMuscles'] as List).first as String
+                : '';
+        final rawEquip = (m['equipment'] as String?) ?? 'None';
+        final muscleType = capitalizeWords(primaryMuscle);
+        final equipment = capitalizeWords(rawEquip);
+
+        exercises.add({
+          'name': m['name'] ?? 'None',
+          'type': muscleType,
+          'equipment': equipment,
+          'description': (m['instructions'] as List<dynamic>? ?? []).join('\n'),
+          'id': m['id'] ?? '',
+          'imageUrl': (m['images'] as List?)?.isNotEmpty ?? false
+              ? 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/${(m['images'] as List).first}'
+              : '',
+          'secondaryMuscles': m['secondaryMuscles'] ?? [],
+          'isCustom': false,
+        });
+
+        bodySet.add(muscleType);
+        equipSet.add(equipment);
+      }
+
+      return {
+        'exercises': exercises,
+        'bodyParts': ['All', ...bodySet.toList()..sort()],
+        'equipmentTypes': ['All', ...equipSet.toList()..sort()],
+      };
+    } catch (e) {
+      debugPrint('Error parsing exercises: $e');
+      return {
+        'exercises': [],
+        'bodyParts': ['All'],
+        'equipmentTypes': ['All'],
+      };
+    }
+  }
+
   Future<void> _loadFolders() async {
     try {
       final folders = await _templateService.getFolders();
       setState(() {
         _folders = folders;
-        // Initialize expanded state for new folders
+        // Initialize expanded state and animation controllers for new folders
         for (var folder in folders) {
           _expandedFolders.putIfAbsent(folder.id, () => true);
+          // Create animation controller if it doesn't exist
+          if (!_folderAnimationControllers.containsKey(folder.id)) {
+            _folderAnimationControllers[folder.id] = AnimationController(
+              duration: const Duration(milliseconds: 300),
+              vsync: this,
+            );
+            // Start animation if folder is expanded by default
+            _folderAnimationControllers[folder.id]!.forward();
+          }
         }
       });
     } catch (e) {
@@ -253,17 +419,17 @@ class WorkoutPageState extends State<WorkoutPage>
             ? 'Yesterday'
             : DateFormat('MMM d').format(prDate);
 
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 4),
+    return ClipRRect(
+      borderRadius: AppTheme.borderRadiusLg,
       child: Card(
         elevation: 0,
-        color: AppTheme.surface,
+        color: AppTheme.background,
+        margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.borderRadiusLg,
           side: BorderSide(
-            color: Colors.amber.withOpacity(0.3),
-            width: 1.5,
+            color: const Color(0xFFFFD700), // Gold yellow border
+            width: 2,
           ),
         ),
         child: InkWell(
@@ -277,8 +443,10 @@ class WorkoutPageState extends State<WorkoutPage>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Colors.amber.withOpacity(0.03),
-                  AppTheme.surface,
+                  const Color(0xFFFFD700)
+                      .withOpacity(0.15), // Bright gold for glare
+                  const Color(0xFFFFD700).withOpacity(0.08),
+                  const Color(0xFFFFA500).withOpacity(0.04), // Orange-gold fade
                 ],
               ),
             ),
@@ -296,31 +464,25 @@ class WorkoutPageState extends State<WorkoutPage>
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: Colors.amber.withOpacity(0.5),
-                          width: 1.5,
+                          color: const Color(0xFFFFD700).withOpacity(0.8),
+                          width: 1.2,
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.amber.withOpacity(0.2),
-                            blurRadius: 8,
-                            spreadRadius: 1,
-                          ),
-                        ],
                       ),
-                      child: const Row(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.emoji_events,
-                              size: 12, color: Colors.amber),
-                          SizedBox(width: 4),
+                          Icon(Icons.star,
+                              size: 11, color: const Color(0xFFFFD700)),
+                          const SizedBox(width: 4),
                           Text(
                             'PR',
-                            style: TextStyle(
-                              color: Colors.amber,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                            style: AppTheme.bodySmall.copyWith(
+                              color: const Color(0xFFFFD700),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
                               letterSpacing: 0.5,
                             ),
                           ),
@@ -332,6 +494,7 @@ class WorkoutPageState extends State<WorkoutPage>
                       style: AppTheme.bodySmall.copyWith(
                         color: AppTheme.textSecondary,
                         fontWeight: FontWeight.w500,
+                        fontSize: 10,
                       ),
                     ),
                   ],
@@ -342,8 +505,8 @@ class WorkoutPageState extends State<WorkoutPage>
                   style: AppTheme.bodyMedium.copyWith(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    height: 1.2,
+                    fontSize: 13,
+                    height: 1.3,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -351,18 +514,13 @@ class WorkoutPageState extends State<WorkoutPage>
                 const Spacer(),
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                      const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppTheme.accent.withOpacity(0.12),
-                        AppTheme.accent.withOpacity(0.06),
-                      ],
-                    ),
+                    color: Colors.transparent,
                     borderRadius: AppTheme.borderRadiusMd,
                     border: Border.all(
-                      color: AppTheme.accent.withOpacity(0.2),
-                      width: 1,
+                      color: const Color(0xFFFFD700).withOpacity(0.6),
+                      width: 1.2,
                     ),
                   ),
                   child: Row(
@@ -370,28 +528,45 @@ class WorkoutPageState extends State<WorkoutPage>
                     children: [
                       Text(
                         weight > 0
-                            ? '${weight.toStringAsFixed(weight.truncateToDouble() == weight ? 0 : 1)} $_weightUnit'
+                            ? '${weight.toStringAsFixed(weight.truncateToDouble() == weight ? 0 : 1)}'
                             : 'BW',
                         style: AppTheme.bodyMedium.copyWith(
-                          color: AppTheme.accent,
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFFFD700),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        ' $_weightUnit',
+                        style: AppTheme.bodySmall.copyWith(
+                          color: const Color(0xFFFFD700).withOpacity(0.75),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       Text(
                         ' × ',
-                        style: AppTheme.bodyMedium.copyWith(
-                          color: AppTheme.accent.withOpacity(0.7),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                        style: AppTheme.bodySmall.copyWith(
+                          color: const Color(0xFFFFD700).withOpacity(0.5),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       Text(
                         '$reps',
                         style: AppTheme.bodyMedium.copyWith(
-                          color: AppTheme.accent,
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFFFD700)
+                              .withOpacity(0.9), // Adjusted gold for reps
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        ' reps',
+                        style: AppTheme.bodySmall.copyWith(
+                          color: const Color(0xFFFFD700).withOpacity(0.9),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -724,13 +899,15 @@ class WorkoutPageState extends State<WorkoutPage>
     return RefreshIndicator(
       onRefresh: _loadWorkouts,
       child: ListView(
+        controller: _workoutScrollController,
+        padding: const EdgeInsets.only(bottom: 24),
         children: [
           // Weekly Workout Chart - always show this
           WorkoutWeekChart(
             workouts: _workouts,
             onChangeGoal: _showChangeGoalDialog,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
           // Start workout button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -777,7 +954,7 @@ class WorkoutPageState extends State<WorkoutPage>
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 32),
           // PRs Section - Carousel (only show if PRs exist and mode is not 'none')
           if (_personalRecords.isNotEmpty && _prDisplayMode != 'none') ...[
             Column(
@@ -798,23 +975,40 @@ class WorkoutPageState extends State<WorkoutPage>
                 const SizedBox(height: 12),
                 SizedBox(
                   height: 128,
-                  child: PageView.builder(
-                    controller: PageController(viewportFraction: 0.85),
-                    padEnds: false,
-                    itemCount: _personalRecords.length > 5
-                        ? 5
-                        : _personalRecords.length,
-                    itemBuilder: (context, index) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        child: _buildPRCard(index),
-                      );
-                    },
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    physics: const PageScrollPhysics(),
+                    child: Row(
+                      children: List.generate(
+                        _personalRecords.length > 5
+                            ? 5
+                            : _personalRecords.length,
+                        (index) {
+                          final isFirst = index == 0;
+                          final isLast = index ==
+                              (_personalRecords.length > 5
+                                  ? 4
+                                  : _personalRecords.length - 1);
+                          return Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              isFirst ? 16 : 8,
+                              0,
+                              isLast ? 16 : 8,
+                              0,
+                            ),
+                            child: SizedBox(
+                              width: 240,
+                              child: _buildPRCard(index),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
           ],
           // Templates section
           Padding(
@@ -862,7 +1056,7 @@ class WorkoutPageState extends State<WorkoutPage>
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 _buildTemplatesSection(),
               ],
             ),
@@ -934,6 +1128,12 @@ class WorkoutPageState extends State<WorkoutPage>
                     setState(() {
                       _expandedFolders[folder.id] = !isExpanded;
                     });
+                    // Animate the folder expansion
+                    if (isExpanded) {
+                      _folderAnimationControllers[folder.id]?.reverse();
+                    } else {
+                      _folderAnimationControllers[folder.id]?.forward();
+                    }
                   },
                   onLongPress: () => _showFolderOptions(folder),
                   borderRadius: AppTheme.borderRadiusMd,
@@ -976,26 +1176,54 @@ class WorkoutPageState extends State<WorkoutPage>
                             ],
                           ),
                         ),
-                        Icon(
-                          isExpanded ? Icons.expand_less : Icons.expand_more,
-                          color: AppTheme.textSecondary,
+                        AnimatedBuilder(
+                          animation: _folderAnimationControllers[folder.id]!,
+                          builder: (context, child) {
+                            return Transform.rotate(
+                              angle: _folderAnimationControllers[folder.id]!
+                                      .value *
+                                  3.14159,
+                              child: Icon(
+                                Icons.expand_more,
+                                color: AppTheme.textSecondary,
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
                   ),
                 ),
                 // Show templates in this folder when expanded
-                if (isExpanded && folderTemplates.isNotEmpty)
-                  Padding(
-                    padding:
-                        const EdgeInsets.only(left: 16, right: 8, bottom: 8),
-                    child: Column(
-                      children: folderTemplates
-                          .map((template) =>
-                              _buildTemplateCard(template, inFolder: true))
-                          .toList(),
-                    ),
-                  ),
+                AnimatedBuilder(
+                  animation: _folderAnimationControllers[folder.id]!,
+                  builder: (context, child) {
+                    final animationValue =
+                        _folderAnimationControllers[folder.id]!.value;
+                    return ClipRect(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        heightFactor: animationValue,
+                        child: Opacity(
+                          opacity: animationValue,
+                          child: child,
+                        ),
+                      ),
+                    );
+                  },
+                  child: folderTemplates.isNotEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.only(
+                              left: 16, right: 8, bottom: 8),
+                          child: Column(
+                            children: folderTemplates
+                                .map((template) => _buildTemplateCard(template,
+                                    inFolder: true))
+                                .toList(),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
               ],
             ),
           );
@@ -1301,14 +1529,14 @@ class WorkoutPageState extends State<WorkoutPage>
     int selectedColorIndex = 0;
 
     final List<Color> folderColors = [
-      const Color(0xFF3F8EFC), // Blue (default)
-      const Color(0xFFFF9800), // Orange
-      const Color(0xFF9C27B0), // Purple
-      const Color(0xFF4CAF50), // Green
-      const Color(0xFFE91E63), // Pink
-      const Color(0xFF00BCD4), // Cyan
-      const Color(0xFFFFEB3B), // Yellow
-      const Color(0xFFFF5722), // Deep Orange
+      const Color(0xFF6366F1), // Indigo
+      const Color(0xFF8B5CF6), // Violet
+      const Color(0xFFEC4899), // Pink
+      const Color(0xFFEF4444), // Red
+      const Color(0xFFFB923C), // Amber
+      const Color(0xFF84CC16), // Lime
+      const Color(0xFF06B6D4), // Cyan
+      const Color(0xFF3B82F6), // Blue
     ];
 
     showDialog(
@@ -1316,79 +1544,222 @@ class WorkoutPageState extends State<WorkoutPage>
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF26272B),
-              title: const Text('New Folder',
-                  style: TextStyle(color: Colors.white)),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    autofocus: true,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Folder name',
-                      hintStyle: const TextStyle(color: Colors.grey),
-                      filled: true,
-                      fillColor: const Color(0xFF1a1a1a),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
+            return Dialog(
+              backgroundColor: AppTheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: AppTheme.borderRadiusLg,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Create New Folder',
+                      style: AppTheme.headlineMedium.copyWith(
+                        color: AppTheme.textPrimary,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Color', style: TextStyle(color: Colors.white70)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: List.generate(folderColors.length, (index) {
-                      return GestureDetector(
-                        onTap: () =>
-                            setDialogState(() => selectedColorIndex = index),
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: folderColors[index],
-                            shape: BoxShape.circle,
-                            border: selectedColorIndex == index
-                                ? Border.all(color: Colors.white, width: 2)
-                                : null,
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: nameController,
+                      autofocus: true,
+                      style: AppTheme.bodyMedium.copyWith(
+                        color: AppTheme.textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Folder name',
+                        hintStyle: TextStyle(color: AppTheme.textSecondary),
+                        filled: true,
+                        fillColor: AppTheme.surfaceLight,
+                        border: OutlineInputBorder(
+                          borderRadius: AppTheme.borderRadiusMd,
+                          borderSide: BorderSide(
+                            color: AppTheme.surfaceBorder,
                           ),
-                          child: selectedColorIndex == index
-                              ? const Icon(Icons.check,
-                                  color: Colors.white, size: 18)
-                              : null,
                         ),
-                      );
-                    }),
-                  ),
-                ],
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: AppTheme.borderRadiusMd,
+                          borderSide: BorderSide(
+                            color: AppTheme.surfaceBorder,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: AppTheme.borderRadiusMd,
+                          borderSide: BorderSide(
+                            color: AppTheme.accent,
+                            width: 2,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Select Color',
+                          style: AppTheme.bodyMedium.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: folderColors[selectedColorIndex]
+                                .withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: folderColors[selectedColorIndex],
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: folderColors[selectedColorIndex],
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Selected',
+                                style: AppTheme.bodySmall.copyWith(
+                                  color: folderColors[selectedColorIndex],
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: List.generate(folderColors.length, (index) {
+                        final isSelected = selectedColorIndex == index;
+                        return Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal:
+                                  index == 0 || index == folderColors.length - 1
+                                      ? 0
+                                      : 4,
+                            ),
+                            child: GestureDetector(
+                              onTap: () => setDialogState(
+                                () => selectedColorIndex = index,
+                              ),
+                              child: MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeOutCubic,
+                                  height: isSelected ? 64 : 56,
+                                  decoration: BoxDecoration(
+                                    color: folderColors[index],
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      if (isSelected)
+                                        BoxShadow(
+                                          color: folderColors[index]
+                                              .withOpacity(0.4),
+                                          blurRadius: 16,
+                                          offset: const Offset(0, 6),
+                                        ),
+                                    ],
+                                    border: isSelected
+                                        ? Border.all(
+                                            color: Colors.white,
+                                            width: 2.5,
+                                          )
+                                        : null,
+                                  ),
+                                  child: isSelected
+                                      ? Center(
+                                          child: Icon(
+                                            Icons.check_rounded,
+                                            color: Colors.white,
+                                            size: 24,
+                                          ),
+                                        )
+                                      : const SizedBox.shrink(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 28),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            'Cancel',
+                            style: AppTheme.bodyMedium.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () async {
+                              final name = nameController.text.trim();
+                              if (name.isNotEmpty) {
+                                await _templateService.createFolder(
+                                  name,
+                                  color: folderColors[selectedColorIndex].value,
+                                );
+                                if (mounted) {
+                                  Navigator.pop(context);
+                                }
+                                _loadFolders();
+                              }
+                            },
+                            borderRadius: AppTheme.borderRadiusMd,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.accent,
+                                borderRadius: AppTheme.borderRadiusMd,
+                              ),
+                              child: Text(
+                                'Create',
+                                style: AppTheme.labelLarge.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final name = nameController.text.trim();
-                    if (name.isNotEmpty) {
-                      await _templateService.createFolder(
-                        name,
-                        color: folderColors[selectedColorIndex].value,
-                      );
-                      Navigator.pop(context);
-                      _loadFolders();
-                    }
-                  },
-                  child: const Text('Create'),
-                ),
-              ],
             );
           },
         );
@@ -1647,6 +2018,7 @@ class WorkoutPageState extends State<WorkoutPage>
     return RefreshIndicator(
       onRefresh: _loadWorkouts,
       child: ListView.builder(
+        controller: _historyScrollController,
         padding: const EdgeInsets.only(top: 8),
         itemCount: _workouts.length,
         itemBuilder: (context, index) {
@@ -1868,6 +2240,18 @@ class WorkoutPageState extends State<WorkoutPage>
 
   @override
   Widget build(BuildContext context) {
+    // Calculate fade factor based on scroll offset (0 to 1)
+    // Fade completes after scrolling 200 pixels
+    double fadeFactor = (_scrollOffset / 200).clamp(0.0, 1.0);
+
+    // Interpolate color: start with accent blue, fade to black
+    final accentColor = AppTheme.accent;
+    final fadedColor = Color.lerp(
+      accentColor.withOpacity(0.15),
+      Colors.black.withOpacity(0.15),
+      fadeFactor,
+    )!;
+
     return Scaffold(
       backgroundColor: AppTheme.background,
       resizeToAvoidBottomInset: false,
@@ -1884,7 +2268,7 @@ class WorkoutPageState extends State<WorkoutPage>
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                         colors: [
-                          AppTheme.accent.withOpacity(0.15),
+                          fadedColor,
                           AppTheme.background,
                         ],
                       ),
@@ -1933,8 +2317,17 @@ class WorkoutPageState extends State<WorkoutPage>
                       children: [
                         _buildWorkoutTab(),
                         _buildHistoryTab(),
-                        const ExerciseBrowsePage(embedded: true),
-                        const BodyMeasurementsPage(embedded: true),
+                        ExerciseBrowsePage(
+                          embedded: true,
+                          scrollController: _exerciseScrollController,
+                          preLoadedExercises: _preLoadedExercises,
+                          preLoadedBodyParts: _preLoadedBodyParts,
+                          preLoadedEquipmentTypes: _preLoadedEquipmentTypes,
+                        ),
+                        BodyMeasurementsPage(
+                          embedded: true,
+                          scrollController: _measurementScrollController,
+                        ),
                       ],
                     ),
                   ),

@@ -502,6 +502,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                     selected: _showOnlyStarred,
                     selectedColor: Colors.amber.withOpacity(0.3),
                     side: BorderSide.none,
+                    showCheckmark: false,
                     onSelected: (selected) {
                       setState(() {
                         _showOnlyStarred = selected;
@@ -527,6 +528,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                     selected: _showOnlyCustom,
                     selectedColor: AppTheme.accent.withOpacity(0.2),
                     side: BorderSide.none,
+                    showCheckmark: false,
                     onSelected: (selected) {
                       setState(() {
                         _showOnlyCustom = selected;
@@ -708,12 +710,12 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                     title: Text(
                       _cleanExerciseName(exercise['name'] ?? 'Unnamed Exercise'),
                               style: AppTheme.bodyLarge
-                                  ?.copyWith(fontWeight: FontWeight.w600),
+                                  .copyWith(fontWeight: FontWeight.w600),
                     ),
                     subtitle: Text(
                       '${exercise['equipment'] ?? 'No Equipment'} • ${exercise['type'] ?? 'No Type'}',
                               style: AppTheme.bodySmall
-                                  ?.copyWith(color: AppTheme.textSecondary),
+                                  .copyWith(color: AppTheme.textSecondary),
                     ),
                     leading: Container(
                       width: 50,
@@ -823,41 +825,117 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
           if (_selectedExercises.isNotEmpty)
             Container(
               margin: const EdgeInsets.only(bottom: 16),
-              child: FloatingActionButton.extended(
-                heroTag: "add_selected_exercises",
-                onPressed: () {
-                  final allExercises = [..._exercises, ..._customExercises];
-                  final selectedExercisesList = allExercises
-                      .where((exercise) => _selectedExercises
-                          .contains(_getExerciseKey(exercise)))
-                      .map((exercise) {
-                    final apiId = exercise['apiId'] ?? exercise['id'] ?? '';
-                    return {
-                      'name': exercise['name'],
-                      'equipment': exercise['equipment'],
-                      'type': exercise['type'],
-                      'description': exercise['description'],
-                      'id': exercise['id'],
-                      'apiId': apiId,
-                      'isCustom': exercise['isCustom'] ?? false,
-                    };
-                  }).toList();
-                  Navigator.pop(context, selectedExercisesList);
-                },
-                backgroundColor: AppTheme.accent,
-                icon: const Icon(Icons.add),
-                label: Text(
-                    'Add ${_selectedExercises.length} Exercise${_selectedExercises.length == 1 ? '' : 's'}'),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    final allExercises = [..._exercises, ..._customExercises];
+                    final selectedExercisesList = allExercises
+                        .where((exercise) => _selectedExercises
+                            .contains(_getExerciseKey(exercise)))
+                        .map((exercise) {
+                      final apiId = exercise['apiId'] ?? exercise['id'] ?? '';
+                      return {
+                        'name': exercise['name'],
+                        'equipment': exercise['equipment'],
+                        'type': exercise['type'],
+                        'description': exercise['description'],
+                        'id': exercise['id'],
+                        'apiId': apiId,
+                        'isCustom': exercise['isCustom'] ?? false,
+                      };
+                    }).toList();
+                    Navigator.pop(context, selectedExercisesList);
+                  },
+                  borderRadius: BorderRadius.circular(100),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      border: Border.all(
+                        color: AppTheme.accent.withOpacity(0.6),
+                        width: 2,
+                      ),
+                      borderRadius: BorderRadius.circular(100),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.accent.withOpacity(0.15),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.check_circle_outline,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Add ${_selectedExercises.length}',
+                          style: AppTheme.bodyMedium.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
-          FloatingActionButton(
-            heroTag: "add_custom_exercise",
-            onPressed: _navigateToCreateExercise,
-            backgroundColor: AppTheme.accent,
-            child: const Icon(Icons.add),
-            tooltip: 'Add custom exercise',
-          ),
+          _buildCustomFAB(context),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCustomFAB(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _navigateToCreateExercise,
+        borderRadius: BorderRadius.circular(100),
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            border: Border.all(
+              color: AppTheme.accent.withOpacity(0.6),
+              width: 2,
+            ),
+            borderRadius: BorderRadius.circular(100),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.accent.withOpacity(0.15),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.add_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
+        ),
       ),
     );
   }

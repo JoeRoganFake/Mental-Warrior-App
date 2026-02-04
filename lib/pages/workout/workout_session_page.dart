@@ -40,7 +40,7 @@ class WorkoutSessionPage extends StatefulWidget {
 }
 
 class WorkoutSessionPageState extends State<WorkoutSessionPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, TickerProviderStateMixin {
   final WorkoutService _workoutService = WorkoutService();
   final ExerciseStickyNoteService _stickyNoteService =
       ExerciseStickyNoteService();
@@ -50,7 +50,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   Workout? _workout;
-  bool _isLoading = true;
   bool _isTimerRunning = false;
   bool _isDisposing = false; // Flag to prevent setState during disposal
   int _elapsedSeconds = 0;
@@ -60,6 +59,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   int? _currentRestSetId;
   final Map<int, TextEditingController> _weightControllers = {};
   final Map<int, TextEditingController> _repsControllers = {};
+  late TextEditingController _workoutNameController;
 
   // Exercise notes tracking (exerciseId -> note text)
   final Map<int, String> _exerciseNotes = {};
@@ -130,27 +130,35 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   // Flag to track when we're updating data internally (to avoid triggering reload)
   bool _isUpdatingInternally = false;
 
+  // Flag to track when we're updating the workout name
+  bool _isUpdatingWorkoutName = false;
+
+  // Flag to track when exercises are being loaded
+  bool _isLoadingExercises = false;
+
   // Cache for previous exercise history to show as greyed out placeholders
   final Map<String, List<ExerciseSet>> _exerciseHistoryCache = {};
+
+  // Animation controllers for smooth set operations
+  final Map<int, AnimationController> _setCompletionControllers = {};
+  final Map<int, AnimationController> _setAddControllers = {};
 
   // Listener for temp workout data changes
   void _onTempWorkoutDataChanged() {
     // Skip if we're updating data internally (e.g., typing in a text field)
     if (_isUpdatingInternally) return;
 
+    // Skip if we're updating the workout name (to prevent controller reset)
+    if (_isUpdatingWorkoutName) return;
+
     // Only reload if this is still the active temporary workout and we're not disposing
     if (widget.isTemporary && !_isDisposing && mounted) {
       final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
       if (tempWorkouts.containsKey(widget.workoutId)) {
         print('🔄 Temp workout data changed, reloading workout...');
-        // Force a setState first to trigger immediate rebuild
-        if (mounted) {
-          setState(() {
-            // Mark as loading to show visual feedback
-            _isLoading = true;
-          });
-        }
-        // Then load the updated workout data
+        // Don't show loading screen - we use _isUpdatingInternally flag to prevent
+        // unnecessary reloads when we're making internal updates (like typing in controllers)
+        // Just reload the workout data without the loading screen flicker
         _loadWorkout();
       }
     }
@@ -159,6 +167,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   @override
   void initState() {
     super.initState();
+    // Initialize the workout name controller
+    _workoutNameController = TextEditingController(text: '');
+    
     // Add app lifecycle observer for better handling of background/foreground transitions
     WidgetsBinding.instance.addObserver(this);
 
@@ -434,6 +445,16 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // Remove settings listener
     SettingsService.settingsUpdatedNotifier.removeListener(_onSettingsChanged);
 
+    // Dispose all animation controllers
+    for (var controller in _setCompletionControllers.values) {
+      controller.dispose();
+    }
+    for (var controller in _setAddControllers.values) {
+      controller.dispose();
+    }
+    _setCompletionControllers.clear();
+    _setAddControllers.clear();
+
     // Cancel timers immediately to prevent callbacks during disposal
     _timer?.cancel();
     _timer = null;
@@ -485,7 +506,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
     for (var c in _noteControllers.values) {
       c.dispose();
-    } // If this was a temporary workout and we're navigating away without saving,
+    }
+    _workoutNameController.dispose(); // Dispose the workout name controller
+    // If this was a temporary workout and we're navigating away without saving,
     // discard the temporary workout (but not if we're minimizing)
     if (widget.isTemporary && mounted && !_isMinimizing) {
       // Check if any exercises were added
@@ -585,9 +608,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   }
 
   void _loadWorkout() async {
-    setState(() {
-      _isLoading = true;
-    });
+    // Set loading flag to show indicator (only if not already loading)
+    if (mounted && !_isLoadingExercises) {
+      setState(() {
+        _isLoadingExercises = true;
+      });
+    }
 
     try {
       Workout? workout;
@@ -835,12 +861,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           // Check if widget is still mounted before updating state
           setState(() {
             _workout = workout;
+            // Only update the workout name controller if the name actually changed
+            // This prevents resetting user input while they're typing
+            if (_workoutNameController.text != workout!.name) {
+              _workoutNameController.text = workout!.name;
+            }
             // Only set the elapsed seconds during the initial load, not on refreshes
             // This prevents timer resetting when adding exercises
             if (_elapsedSeconds == 0) {
-              _elapsedSeconds = workout!.duration;
+              _elapsedSeconds = workout.duration;
             }
-            _isLoading = false;
+            // Hide loading indicator
+            _isLoadingExercises = false;
 
             // Initialize all controllers for all sets after workout is loaded
             _initializeAllControllers();
@@ -888,6 +920,9 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
     } catch (e) {
       if (mounted) {
+        setState(() {
+          _isLoadingExercises = false;
+        });
         _showSnackBar('Error loading workout: $e', isError: true);
         Navigator.pop(context);
       }
@@ -903,6 +938,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
     for (final exercise in _workout!.exercises) {
       for (final set in exercise.sets) {
+        // Skip if controllers already exist to avoid recreating them
+        if (_weightControllers.containsKey(set.id) &&
+            _repsControllers.containsKey(set.id)) {
+          continue;
+        }
         // Initialize weight controller if it doesn't exist
         if (!_weightControllers.containsKey(set.id)) {
           String initialWeightText = '';
@@ -1221,15 +1261,13 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
   /// Play the boxing bell sound effect
   Future<void> _playBoxingBellSound() async {
-    // Check if vibration is enabled and trigger it
+    // Trigger vibration in background without blocking audio
     if (_vibrateOnRestComplete) {
       try {
-        // Simple vibration for 500ms - more compatible across devices
-        await Vibration.vibrate(duration: 500);
-        // Second vibration after delay
-        await Future.delayed(const Duration(milliseconds: 700));
-        await Vibration.vibrate(duration: 500);
-        print("Vibration triggered - rest timer completed");
+        Vibration.vibrate(duration: 500);
+        Future.delayed(const Duration(milliseconds: 700), () {
+          Vibration.vibrate(duration: 500);
+        });
       } catch (e) {
         print("Vibration error: $e");
       }
@@ -1244,13 +1282,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // Create a fresh player for each bell to allow replay
     final player = AudioPlayer();
     try {
-      await player.setSource(AssetSource('audio/BoxingBell.mp3'));
-      await player.setReleaseMode(ReleaseMode.release);
-      await player.setPlayerMode(PlayerMode.lowLatency);
-      await player.setVolume(1.0); // Ensure full volume
-
-      // Set audio context for better background support - use notification sounds that don't interrupt music
-      await player.setAudioContext(AudioContext(
+      // Configure player for immediate playback before loading source
+      player.setReleaseMode(ReleaseMode.release);
+      player.setPlayerMode(PlayerMode.lowLatency);
+      player.setVolume(1.0);
+      player.setAudioContext(AudioContext(
         android: AudioContextAndroid(
           isSpeakerphoneOn: false,
           stayAwake: true,
@@ -1260,8 +1296,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         ),
       ));
 
-      await player.resume();
-      print("Boxing bell sound played - rest timer completed");
+      // Set source and play immediately
+      await player.setSource(AssetSource('audio/BoxingBell.mp3'));
+      player.resume();
+      print("Boxing bell sound playing");
 
       // Dispose after sound completes
       player.onPlayerComplete.listen((_) => player.dispose());
@@ -1276,14 +1314,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // Create a new player per chime to allow multiple replays
     final player = AudioPlayer();
     try {
-      await player.setSource(
-          AssetSource('audio/11L-Subtle_mobile_Chime_-1748795262788.mp3'));
-      await player.setReleaseMode(ReleaseMode.release);
-      await player.setPlayerMode(PlayerMode.lowLatency);
-      await player.setVolume(0.8);
-
-      // Set audio context to avoid interrupting background music
-      await player.setAudioContext(AudioContext(
+      // Configure player for immediate playback before loading source
+      player.setReleaseMode(ReleaseMode.release);
+      player.setPlayerMode(PlayerMode.lowLatency);
+      player.setVolume(0.8);
+      player.setAudioContext(AudioContext(
         android: AudioContextAndroid(
           isSpeakerphoneOn: false,
           stayAwake: true,
@@ -1293,7 +1328,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         ),
       ));
 
-      await player.resume();
+      // Set source and play immediately
+      await player.setSource(
+          AssetSource('audio/11L-Subtle_mobile_Chime_-1748795262788.mp3'));
+      player.resume();
+
       // Dispose player once playback completes
       player.onPlayerComplete.listen((_) => player.dispose());
     } catch (e) {
@@ -1307,13 +1346,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // Create a new player for fanfare
     final player = AudioPlayer();
     try {
-      await player.setSource(AssetSource('audio/fanfare chime.mp3'));
-      await player.setReleaseMode(ReleaseMode.release);
-      await player.setPlayerMode(PlayerMode.lowLatency);
-      await player.setVolume(1.0); // Full volume for celebration
-
-      // Set audio context
-      await player.setAudioContext(AudioContext(
+      // Configure player for immediate playback before loading source
+      player.setReleaseMode(ReleaseMode.release);
+      player.setPlayerMode(PlayerMode.lowLatency);
+      player.setVolume(1.0);
+      player.setAudioContext(AudioContext(
         android: AudioContextAndroid(
           isSpeakerphoneOn: false,
           stayAwake: true,
@@ -1323,7 +1360,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         ),
       ));
 
-      await player.resume();
+      // Set source and play immediately
+      await player.setSource(AssetSource('audio/fanfare chime.mp3'));
+      player.resume();
+
       // Dispose player once playback completes
       player.onPlayerComplete.listen((_) => player.dispose());
     } catch (e) {
@@ -1520,9 +1560,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     );
 
     if (result != null && result is List<Map<String, dynamic>>) {
-      setState(() {
-        _isLoading = true;
-      });
+      // Show loading indicator IMMEDIATELY when exercises are selected
+      if (mounted) {
+        setState(() {
+          _isLoadingExercises = true;
+        });
+      }
 
       // Temporarily remove the listener to prevent multiple reloads during bulk add
       if (widget.isTemporary) {
@@ -1672,10 +1715,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         );
       } catch (e) {
         if (mounted) {
-          _showSnackBar('Error adding exercises: $e', isError: true);
           setState(() {
-            _isLoading = false;
+            _isLoadingExercises = false;
           });
+          _showSnackBar('Error adding exercises: $e', isError: true);
         }
       } finally {
         // Re-add the listener after bulk add is complete
@@ -1685,15 +1728,18 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         }
       }
     } else if (result != null && result is Map<String, dynamic>) {
+      // Show loading indicator IMMEDIATELY when exercise is selected
+      if (mounted) {
+        setState(() {
+          _isLoadingExercises = true;
+        });
+      }
+
       // Handle backward compatibility for single exercise selection (custom exercises)
       final exerciseName = result['name'] as String;
       final equipment = result['equipment'] as String? ?? '';
       final apiId = result['apiId'] as String? ?? '';
       final isCustom = result['isCustom'] as bool? ?? false;
-
-      setState(() {
-        _isLoading = true;
-      });
 
       try {
         // Add exercise to the database
@@ -1769,10 +1815,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         _updateActiveNotifier();
       } catch (e) {
         if (mounted) {
-          _showSnackBar('Error adding exercise: $e', isError: true);
           setState(() {
-            _isLoading = false;
+            _isLoadingExercises = false;
           });
+          _showSnackBar('Error adding exercise: $e', isError: true);
         }
       }
     }
@@ -1841,34 +1887,47 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   void _updateWorkoutName(String newName) {
     if (widget.readOnly || _workout == null) return;
 
-    // Update local state immediately
-    if (mounted) {
-      setState(() {
-        _workout = Workout(
-          id: _workout!.id,
-          name: newName,
-          date: _workout!.date,
-          duration: _workout!.duration,
-          exercises: _workout!.exercises,
-        );
-      });
-    }
+    // Set flag to prevent listener from triggering reload during name update
+    _isUpdatingWorkoutName = true;
 
-    if (widget.isTemporary) {
-      // Update the temporary workout in memory
-      final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
-      if (tempWorkouts.containsKey(widget.workoutId)) {
-        tempWorkouts[widget.workoutId]['name'] = newName;
-        WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+    try {
+      // Update local state immediately
+      if (mounted) {
+        setState(() {
+          _workout = Workout(
+            id: _workout!.id,
+            name: newName,
+            date: _workout!.date,
+            duration: _workout!.duration,
+            exercises: _workout!.exercises,
+          );
+          // Also update the controller to match
+          _workoutNameController.text = newName;
+        });
       }
-    } else {
-      // Then update database in background
-      _workoutService.updateWorkout(
-        widget.workoutId,
-        newName,
-        _workout!.date,
-        _workout!.duration,
-      );
+
+      if (widget.isTemporary) {
+        // Update the temporary workout in memory
+        final tempWorkouts = WorkoutService.tempWorkoutsNotifier.value;
+        if (tempWorkouts.containsKey(widget.workoutId)) {
+          tempWorkouts[widget.workoutId]['name'] = newName;
+          WorkoutService.tempWorkoutsNotifier.value = Map.from(tempWorkouts);
+        }
+      } else {
+        // Then update database in background
+        _workoutService.updateWorkout(
+          widget.workoutId,
+          newName,
+          _workout!.date,
+          _workout!.duration,
+        );
+      }
+
+      // Auto-save the workout state after updating name
+      _updateActiveNotifier();
+    } finally {
+      // Reset flag after update is complete
+      _isUpdatingWorkoutName = false;
     }
   }
 
@@ -1880,13 +1939,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
     final exercise = _workout!.exercises[exerciseIndex];
     final setNumber = exercise.sets.length + 1;
-
-    // Show a loading indicator in the exercise card
-    if (mounted) {
-      setState(() {
-        // We can add a temporary loading state flag here if needed
-      });
-    }
 
     try {
       // Get the saved rest timer value for this exercise, or use default
@@ -1915,10 +1967,20 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           completed: false,
         );
 
-        // Update the UI immediately without a full reload
+        // Create animation controller for the new set with smooth slide-in
+        final animationController = AnimationController(
+          duration: const Duration(milliseconds: 500),
+          vsync: this,
+        );
+        _setAddControllers[newSetId] = animationController;
+
+        // Update the UI immediately with animation
         setState(() {
           _workout!.exercises[exerciseIndex].sets.add(newSet);
         });
+
+        // Start the slide-in animation
+        animationController.forward();
 
         // Auto-save the workout state after adding a set
         _updateActiveNotifier();
@@ -1934,7 +1996,19 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
   }
 
-  void _toggleSetCompletion(int exerciseId, int setId, bool completed) async {
+  void _toggleSetCompletion(int exerciseId, int setId, bool completed,
+      {bool playChime = true}) async {
+    // Create or get animation controller for this set
+    if (!_setCompletionControllers.containsKey(setId)) {
+      final animationController = AnimationController(
+        duration: const Duration(milliseconds: 400),
+        vsync: this,
+      );
+      _setCompletionControllers[setId] = animationController;
+    }
+
+    final controller = _setCompletionControllers[setId]!;
+
     // If completing a set, check if we should auto-fill with previous values
     if (completed) {
       // Find the exercise and set
@@ -1994,7 +2068,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
     }
 
-    // First update UI immediately without waiting for database operation
+    // First update UI immediately with smooth animation
     if (mounted) {
       setState(() {
         // Find and update the set in the local state
@@ -2004,7 +2078,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               if (set.id == setId) {
                 set.completed = completed;
                 // Play a sound when completing a set (not when uncompleting)
-                if (completed) {
+                if (completed && playChime) {
                   _playChimeSound();
 
                   // Save the rest timer value for this exercise if there's an active rest timer
@@ -2022,6 +2096,13 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           }
         }
       });
+
+      // Play smooth pulse animation for set completion
+      if (completed) {
+        controller.forward(from: 0.0).then((_) {
+          if (mounted) controller.reverse();
+        });
+      }
     }
 
     // Then perform the database update in the background
@@ -2031,7 +2112,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     // This prevents the screen freeze when toggling set completion
   }
 
-  Future<void> _updateSetComplete(int setId, bool completed) async {
+  Future<void> _updateSetComplete(int setId, bool completed,
+      {bool playChime = true}) async {
     // Handle temporary workouts (setId < 0)
     if (widget.isTemporary || setId < 0) {
       // Update the set in memory
@@ -2498,62 +2580,95 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   Future<void> _cleanupWorkoutOnFinish() async {
     if (_workout == null) return;
 
-    // Keep track of exercises to delete if they become empty
+    // Batch operations to avoid multiple database calls
+    final List<Future> batchOperations = [];
     final exercisesToDelete = <int>[];
 
     // Process each exercise
     for (var exercise in _workout!.exercises) {
       final setsToDelete = <int>[];
+      final setsToComplete = <int>[];
+      final setsToUpdate = <Map<String, dynamic>>[];
 
       // Process each set in the exercise
       for (var set in exercise.sets) {
-        // Save any pending inline edits first
+        // Get any pending inline edits
         final wText = _weightControllers[set.id]?.text ?? '';
         final rText = _repsControllers[set.id]?.text ?? '';
 
         final weight = double.tryParse(wText) ?? set.weight;
         final reps = int.tryParse(rText) ?? set.reps;
 
-        // Update the set with current input values
-        await _updateSetData(set.id, weight, reps, set.restTime);
+        // Check if values changed from controllers
+        final bool needsUpdate = (weight != set.weight || reps != set.reps);
 
-        // Skip sets already marked as completed (they are safe)
+        // Skip sets already completed - they're safe
         if (set.completed) {
+          // Update if values changed
+          if (needsUpdate) {
+            setsToUpdate.add({
+              'id': set.id,
+              'weight': weight,
+              'reps': reps,
+              'restTime': set.restTime
+            });
+          }
           continue;
         }
 
-        // Check if set has valid data - 0 is a valid value for weight and reps
-        // Only consider a set invalid if both weight and reps are negative or null
+        // Check validity
         final bool hasValidWeight = weight >= 0;
         final bool hasValidReps = reps >= 0;
 
         if (hasValidWeight && hasValidReps) {
-          // Valid set but not completed - mark as completed to make it safe
-          await _updateSetComplete(set.id, true);
+          // Valid set - update and mark complete
+          if (needsUpdate) {
+            setsToUpdate.add({
+              'id': set.id,
+              'weight': weight,
+              'reps': reps,
+              'restTime': set.restTime
+            });
+          }
+          setsToComplete.add(set.id);
         } else {
-          // Invalid set (negative values) - mark for deletion
+          // Invalid set - delete
           setsToDelete.add(set.id);
         }
       }
 
-      // Delete invalid sets
-      for (var setId in setsToDelete) {
-        await _workoutService.deleteSet(setId);
+      // Batch update all sets that need updating
+      for (var setData in setsToUpdate) {
+        batchOperations.add(_updateSetData(setData['id'], setData['weight'],
+            setData['reps'], setData['restTime']));
       }
 
-      // If all sets in this exercise were deleted, mark exercise for deletion
+      // Batch complete all valid incomplete sets (without chime sound during auto-complete)
+      for (var setId in setsToComplete) {
+        batchOperations.add(_updateSetComplete(setId, true, playChime: false));
+      }
+
+      // Batch delete invalid sets
+      for (var setId in setsToDelete) {
+        batchOperations.add(_workoutService.deleteSet(setId));
+      }
+
+      // Mark exercise for deletion if all sets deleted
       if (setsToDelete.length == exercise.sets.length) {
         exercisesToDelete.add(exercise.id);
       }
     }
 
-    // Delete exercises that have no valid sets left
-    for (var exerciseId in exercisesToDelete) {
-      await _workoutService.deleteExercise(exerciseId);
+    // Execute all operations in parallel
+    if (batchOperations.isNotEmpty) {
+      await Future.wait(batchOperations);
     }
 
-    // Refresh the workout data to reflect all changes
-    _loadWorkout();
+    // Delete empty exercises
+    if (exercisesToDelete.isNotEmpty) {
+      await Future.wait(
+          exercisesToDelete.map((id) => _workoutService.deleteExercise(id)));
+    }
   }
 
   Future<void> _deleteSet(int exerciseId, int setId) async {
@@ -3174,6 +3289,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     final int nowMs = DateTime.now().millisecondsSinceEpoch;
     final Map<String, dynamic> workoutData = {
       'exercises': [],
+      'name': _workout?.name ?? '', // Include workout name
       // Store rest timer state for restoration
       'restTimerState': {
         'isActive': _currentRestSetId != null,
@@ -3815,97 +3931,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 Navigator.of(context).pop();
               },
             ),
-            title: Container(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: (_currentRestSetId != null)
-                    ? _primaryColor.withOpacity(0.1)
-                    : _surfaceColor,
-                borderRadius: BorderRadius.circular(8),
-                border: (_currentRestSetId != null)
-                    ? Border.all(color: _primaryColor, width: 1)
-                    : null,
-              ),
-              child: (_currentRestSetId != null)
-                  ? GestureDetector(
-                      onTap: () async {
-                        // Navigate to rest timer page when rest timer is active
-                        if (_currentRestSetId != null) {
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => RestTimerPage(
-                                originalDuration: _originalRestTime,
-                                remaining: _restRemainingNotifier,
-                                isPaused: _restPausedNotifier,
-                                onPause: _togglePauseRest,
-                                onIncrement: _incrementRest,
-                                onDecrement: _decrementRest,
-                                onSkip: () {
-                                  _cancelRestTimer(playSound: true);
-                                  Navigator.pop(context);
-                                },
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.timer,
-                                color: _primaryColor,
-                                size: 16,
-                              ),
-                              SizedBox(width: 4),
-                              Text(
-                                _formatTime(_restTimeRemaining),
-                                style: TextStyle(
-                                  color: _primaryColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 4),
-                          Container(
-                            width: 100,
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: _primaryColor.withOpacity(0.3),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                            child: FractionallySizedBox(
-                              alignment: Alignment.centerLeft,
-                              widthFactor: _originalRestTime > 0
-                                  ? (_restTimeRemaining / _originalRestTime)
-                                      .clamp(0.0, 1.0)
-                                  : 0.0,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: _primaryColor,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : Text(
-                      _formatTime(_elapsedSeconds),
-                      style: TextStyle(
-                        color: _textPrimaryColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
-                      ),
-                    ),
-            ),
             actions: [
               if (!widget.readOnly)
                 TextButton.icon(
@@ -4229,11 +4254,32 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                     // Set completion flag to prevent any further state saves
                     _isCompleting = true;
 
-                    // Play fanfare sound for workout completion
+                    // Dispose audio player to prevent late sounds
+                    _audioPlayer.dispose();
+
+                    // Play fanfare sound for workout completion (with a new temporary player)
                     _playFanfareSound();
 
+                    // Show fancy loading dialog
+                    _showLoadingDialog(
+                        'Finalizing your workout...\nRecalculating PR & saving...');
+
+                    // Give the dialog a moment to render and start animating
+                    await Future.delayed(const Duration(milliseconds: 50));
+
                     // Comprehensive cleanup when finishing workout
-                    await _cleanupWorkoutOnFinish();
+                    try {
+                      await _cleanupWorkoutOnFinish();
+                    } catch (e) {
+                      print('Error during cleanup: $e');
+                      if (mounted)
+                        Navigator.pop(context); // Close loading dialog
+                      if (mounted) {
+                        _showSnackBar('Error finalizing workout',
+                            isError: true);
+                      }
+                      return;
+                    }
 
                     // Handle temporary vs regular workouts differently
                     if (widget.isTemporary) {
@@ -4256,6 +4302,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         // FINALLY: Stop the foreground service and clear saved data
                         await WorkoutForegroundService.stopWorkoutService();
                         await WorkoutForegroundService.clearSavedWorkoutData();
+                        if (mounted)
+                          Navigator.pop(context); // Close loading dialog
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -4352,6 +4400,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         // FINALLY: Stop the foreground service and clear saved data
                         await WorkoutForegroundService.stopWorkoutService();
                         await WorkoutForegroundService.clearSavedWorkoutData();
+                        if (mounted)
+                          Navigator.pop(context); // Close loading dialog
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -4450,6 +4500,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                       await Future.delayed(Duration(milliseconds: 500));
                     }
 
+                    // Close the loading dialog before navigating
+                    if (mounted) {
+                      Navigator.pop(context);
+                    }
+
                     // Navigate to completion screen with the captured workout data
                     if (mounted && workoutForCompletion != null) {
                       Navigator.pushReplacement(
@@ -4468,210 +4523,504 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 ),
             ],
           ),
-          body: _isLoading
-              ? Center(child: CircularProgressIndicator(color: _primaryColor))
-              : Column(
-                  children: [
-                    // Timer and workout name section
-                    Container(
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: _backgroundColor,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
+          body: SingleChildScrollView(
+            child: Column(
+              children: [
+                // Workout name section
+                Container(
+                  padding: EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _backgroundColor,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 4,
+                        offset: Offset(0, 2),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _workoutNameController,
+                          style: TextStyle(
+                            color: _textPrimaryColor,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide:
+                                  BorderSide(color: _primaryColor, width: 1.5),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                  color: AppTheme.surfaceLight, width: 1),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide:
+                                  BorderSide(color: _primaryColor, width: 2),
+                            ),
+                            filled: true,
+                            fillColor: _surfaceColor,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            hintText: 'Workout Name',
+                            hintStyle: TextStyle(
+                              color: _textSecondaryColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 24,
+                            ),
+                          ),
+                          onChanged: (value) {
+                            if (_workout != null && !_isUpdatingInternally) {
+                              _isUpdatingInternally = true;
+                              _workout!.name = value;
+                              _updateActiveNotifier();
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (mounted) {
+                                  _isUpdatingInternally = false;
+                                }
+                              });
+                            }
+                          },
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (value) {
+                            final name = value.trim();
+                            if (name.isNotEmpty) {
+                              _updateWorkoutName(name);
+                              // Unfocus the text field to dismiss keyboard
+                              FocusScope.of(context).unfocus();
+                            }
+                          },
+                          readOnly: widget.readOnly,
+                        ),
+                      ),
+                      if (!widget.readOnly) SizedBox(width: 8),
+                      if (!widget.readOnly)
+                        GestureDetector(
+                          onTap: () {
+                            final name = _workoutNameController.text.trim();
+                            if (name.isNotEmpty) {
+                              _updateWorkoutName(name);
+                              // Unfocus the text field to dismiss keyboard
+                              FocusScope.of(context).unfocus();
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 12),
+                            child: Icon(Icons.check_circle_outline,
+                                color: _primaryColor, size: 24),
+                          ),
+                        ),
+                      if (!widget.readOnly)
+                        PopupMenuButton<String>(
+                          icon: Icon(Icons.more_vert, color: _textPrimaryColor),
+                          color: _surfaceColor,
+                          onSelected: (value) async {
+                            if (value == 'discard') {
+                              await _discardWorkout();
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem<String>(
+                              value: 'discard',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.delete_outline,
+                                      color: _dangerColor),
+                                  SizedBox(width: 8),
+                                  Text('Discard Workout',
+                                      style: TextStyle(color: _dangerColor)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+                // Timer section
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _backgroundColor,
+                    border: Border(
+                      bottom: BorderSide(
+                        color: _primaryColor.withOpacity(0.2),
+                        width: 1,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _primaryColor.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.timer, color: _primaryColor, size: 18),
+                            SizedBox(width: 6),
+                            Text(
+                              _formatTime(_elapsedSeconds),
+                              style: TextStyle(
+                                color: _primaryColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _workout == null
+                    ? _buildLoadingExercisesIndicator()
+                    : Stack(
                         children: [
-                          // Workout name and menu
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  _workout?.name ?? 'Workout',
-                                  style: TextStyle(
-                                    color: _textPrimaryColor,
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold,
+                          AnimatedOpacity(
+                            opacity: _workout != null ? 1.0 : 0.6,
+                            duration: const Duration(milliseconds: 300),
+                            child: _workout!.exercises.isEmpty &&
+                                    !_isLoadingExercises
+                                ? _buildEmptyExercisesView()
+                                : ReorderableListView.builder(
+                                    physics: NeverScrollableScrollPhysics(),
+                                    shrinkWrap: true,
+                                    padding: EdgeInsets.only(top: 8),
+                                    buildDefaultDragHandles: false,
+                                    proxyDecorator: (child, index, animation) {
+                                      return AnimatedBuilder(
+                                        animation: animation,
+                                        builder: (context, child) {
+                                          final double animValue = Curves
+                                              .easeInOut
+                                              .transform(animation.value);
+                                          final double elevation =
+                                              lerpDouble(0, 6, animValue)!;
+                                          final double scale =
+                                              lerpDouble(1.0, 1.02, animValue)!;
+                                          return Transform.scale(
+                                            scale: scale,
+                                            child: Material(
+                                              elevation: elevation,
+                                              color: Colors.transparent,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              child: child,
+                                            ),
+                                          );
+                                        },
+                                        child: child,
+                                      );
+                                    },
+                                    itemCount: _workout!.exercises.length + 1,
+                                    onReorder: _reorderExercises,
+                                    itemBuilder: (context, index) {
+                                      if (index < _workout!.exercises.length) {
+                                        final exercise =
+                                            _workout!.exercises[index];
+                                        final supersetId =
+                                            _exerciseSupersets[exercise.id];
+
+                                        // Determine superset position (first, middle, last)
+                                        String? supersetPosition;
+                                        if (supersetId != null) {
+                                          final supersetExercises = _workout!
+                                              .exercises
+                                              .where((e) =>
+                                                  _exerciseSupersets[e.id] ==
+                                                  supersetId)
+                                              .toList();
+                                          final posInSuperset =
+                                              supersetExercises
+                                                  .indexOf(exercise);
+                                          if (supersetExercises.length == 1) {
+                                            supersetPosition = 'only';
+                                          } else if (posInSuperset == 0) {
+                                            supersetPosition = 'first';
+                                          } else if (posInSuperset ==
+                                              supersetExercises.length - 1) {
+                                            supersetPosition = 'last';
+                                          } else {
+                                            supersetPosition = 'middle';
+                                          }
+                                        }
+
+                                        return ReorderableDelayedDragStartListener(
+                                          key: ValueKey(
+                                              'exercise_${exercise.id}'),
+                                          index: index,
+                                          enabled: !widget.readOnly,
+                                          child: _buildExerciseCard(
+                                            exercise,
+                                            supersetId: supersetId,
+                                            supersetPosition: supersetPosition,
+                                          ),
+                                        );
+                                      } else {
+                                        // Add Exercise button
+                                        return Padding(
+                                          key: ValueKey('add_exercise_button'),
+                                          padding: EdgeInsets.all(16),
+                                          child: Center(
+                                            child: TextButton.icon(
+                                              icon: Icon(Icons.add,
+                                                  color: _primaryColor),
+                                              label: Text('Add Exercise',
+                                                  style: TextStyle(
+                                                      color: _primaryColor)),
+                                              onPressed: _addExercise,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                          ),
+                          // Loading indicator as overlay (outside ReorderableListView)
+                          if (_isLoadingExercises)
+                            Positioned.fill(
+                              child: Align(
+                                alignment: Alignment.bottomCenter,
+                                child: Padding(
+                                  padding: EdgeInsets.all(16),
+                                  child: Container(
+                                    padding: EdgeInsets.symmetric(
+                                        vertical: 12, horizontal: 16),
+                                    decoration: BoxDecoration(
+                                      color: _surfaceColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: _primaryColor.withOpacity(0.3),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Animated loading spinner (smaller version)
+                                        SizedBox(
+                                          width: 40,
+                                          height: 40,
+                                          child: Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              // Outer rotating ring
+                                              TweenAnimationBuilder<double>(
+                                                tween:
+                                                    Tween(begin: 0.0, end: 1.0),
+                                                duration:
+                                                    const Duration(seconds: 2),
+                                                onEnd: () {
+                                                  if (mounted) {
+                                                    setState(() {});
+                                                  }
+                                                },
+                                                builder:
+                                                    (context, value, child) {
+                                                  return Transform.rotate(
+                                                    angle: value * 6.28318,
+                                                    child: Container(
+                                                      decoration: BoxDecoration(
+                                                        shape: BoxShape.circle,
+                                                        border: Border.all(
+                                                          color: _primaryColor
+                                                              .withOpacity(0.6),
+                                                          width: 2,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                              // Inner rotating ring
+                                              TweenAnimationBuilder<double>(
+                                                tween:
+                                                    Tween(begin: 0.0, end: 1.0),
+                                                duration:
+                                                    const Duration(seconds: 3),
+                                                onEnd: () {
+                                                  if (mounted) {
+                                                    setState(() {});
+                                                  }
+                                                },
+                                                builder:
+                                                    (context, value, child) {
+                                                  return Transform.rotate(
+                                                    angle: -value * 6.28318,
+                                                    child: Container(
+                                                      width: 30,
+                                                      height: 30,
+                                                      decoration: BoxDecoration(
+                                                        shape: BoxShape.circle,
+                                                        border: Border.all(
+                                                          color: _primaryColor
+                                                              .withOpacity(0.4),
+                                                          width: 1.5,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                              // Center pulsing dot
+                                              TweenAnimationBuilder<double>(
+                                                tween:
+                                                    Tween(begin: 0.5, end: 1.0),
+                                                duration: const Duration(
+                                                    milliseconds: 800),
+                                                onEnd: () {
+                                                  if (mounted) {
+                                                    setState(() {});
+                                                  }
+                                                },
+                                                builder:
+                                                    (context, value, child) {
+                                                  return Container(
+                                                    width: 8 * value,
+                                                    height: 8 * value,
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      color: _primaryColor,
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Text(
+                                          'Loading exercises...',
+                                          style: TextStyle(
+                                            color: _textSecondaryColor,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                              if (!widget.readOnly)
-                                PopupMenuButton<String>(
-                                  icon: Icon(Icons.more_vert,
-                                      color: _textPrimaryColor),
-                                  color: _surfaceColor,
-                                  onSelected: (value) async {
-                                    if (value == 'edit_name') {
-                                      await _showEditNameDialog();
-                                    } else if (value == 'discard') {
-                                      await _discardWorkout();
-                                    }
-                                  },
-                                  itemBuilder: (context) => [
-                                    PopupMenuItem<String>(
-                                      value: 'edit_name',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.edit_outlined,
-                                              color: _textPrimaryColor),
-                                          SizedBox(width: 8),
-                                          Text('Edit Name',
-                                              style: TextStyle(
-                                                  color: _textPrimaryColor)),
-                                        ],
-                                      ),
-                                    ),
-                                    PopupMenuItem<String>(
-                                      value: 'discard',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.delete_outline,
-                                              color: _dangerColor),
-                                          SizedBox(width: 8),
-                                          Text('Discard Workout',
-                                              style: TextStyle(
-                                                  color: _dangerColor)),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                            ],
-                          ),
-
-                          SizedBox(height: 16),
-
-                          // Timer
-                          Row(
-                            children: [
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: _primaryColor.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.timer,
-                                        color: _primaryColor, size: 18),
-                                    SizedBox(width: 6),
-                                    Text(
-                                      _formatTime(_elapsedSeconds),
-                                      style: TextStyle(
-                                        color: _primaryColor,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 18,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
                         ],
                       ),
-                    ),
-
-                    // Exercises list
-                    Expanded(
-                      child: _workout!.exercises.isEmpty
-                          ? _buildEmptyExercisesView()
-                          : ReorderableListView.builder(
-                              padding: EdgeInsets.only(top: 8),
-                              buildDefaultDragHandles: false,
-                              proxyDecorator: (child, index, animation) {
-                                return AnimatedBuilder(
-                                  animation: animation,
-                                  builder: (context, child) {
-                                    final double animValue = Curves.easeInOut
-                                        .transform(animation.value);
-                                    final double elevation =
-                                        lerpDouble(0, 6, animValue)!;
-                                    final double scale =
-                                        lerpDouble(1.0, 1.02, animValue)!;
-                                    return Transform.scale(
-                                      scale: scale,
-                                      child: Material(
-                                        elevation: elevation,
-                                        color: Colors.transparent,
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: child,
-                                      ),
-                                    );
-                                  },
-                                  child: child,
-                                );
-                              },
-                              itemCount: _workout!.exercises.length + 1,
-                              onReorder: _reorderExercises,
-                              itemBuilder: (context, index) {
-                                if (index < _workout!.exercises.length) {
-                                  final exercise = _workout!.exercises[index];
-                                  final supersetId =
-                                      _exerciseSupersets[exercise.id];
-
-                                  // Determine superset position (first, middle, last)
-                                  String? supersetPosition;
-                                  if (supersetId != null) {
-                                    final supersetExercises = _workout!
-                                        .exercises
-                                        .where((e) =>
-                                            _exerciseSupersets[e.id] ==
-                                            supersetId)
-                                        .toList();
-                                    final posInSuperset =
-                                        supersetExercises.indexOf(exercise);
-                                    if (supersetExercises.length == 1) {
-                                      supersetPosition = 'only';
-                                    } else if (posInSuperset == 0) {
-                                      supersetPosition = 'first';
-                                    } else if (posInSuperset ==
-                                        supersetExercises.length - 1) {
-                                      supersetPosition = 'last';
-                                    } else {
-                                      supersetPosition = 'middle';
-                                    }
-                                  }
-
-                                  return ReorderableDelayedDragStartListener(
-                                    key: Key('exercise_${exercise.id}'),
-                                    index: index,
-                                    enabled: !widget.readOnly,
-                                    child: _buildExerciseCard(
-                                      exercise,
-                                      supersetId: supersetId,
-                                      supersetPosition: supersetPosition,
-                                    ),
-                                  );
-                                } else {
-                                  return Padding(
-                                    key: Key('add_exercise_button'),
-                                    padding: EdgeInsets.all(16),
-                                    child: Center(
-                                      child: TextButton.icon(
-                                        icon: Icon(Icons.add,
-                                            color: _primaryColor),
-                                        label: Text('Add Exercise',
-                                            style: TextStyle(
-                                                color: _primaryColor)),
-                                        onPressed: _addExercise,
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                            ),
-                    ),
-                  ],
-                ),
+              ],
+            ),
+          ),
         ));
+  }
+
+  Widget _buildLoadingExercisesIndicator() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Animated loading spinner
+          SizedBox(
+            width: 60,
+            height: 60,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Outer rotating ring
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: const Duration(seconds: 2),
+                  onEnd: () {
+                    if (mounted) {
+                      setState(() {});
+                    }
+                  },
+                  builder: (context, value, child) {
+                    return Transform.rotate(
+                      angle: value * 6.28318, // 2π
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: _primaryColor.withOpacity(0.6),
+                            width: 2.5,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // Inner rotating ring (opposite direction)
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  duration: const Duration(seconds: 3),
+                  onEnd: () {
+                    if (mounted) {
+                      setState(() {});
+                    }
+                  },
+                  builder: (context, value, child) {
+                    return Transform.rotate(
+                      angle: -value * 6.28318, // -2π
+                      child: Container(
+                        width: 45,
+                        height: 45,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: _primaryColor.withOpacity(0.4),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                // Center pulsing dot
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.5, end: 1.0),
+                  duration: const Duration(milliseconds: 800),
+                  onEnd: () {
+                    if (mounted) {
+                      setState(() {});
+                    }
+                  },
+                  builder: (context, value, child) {
+                    return Container(
+                      width: 10 * value,
+                      height: 10 * value,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _primaryColor,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Loading exercises...',
+            style: TextStyle(
+              color: _textSecondaryColor,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildEmptyExercisesView() {
@@ -4679,6 +5028,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          SizedBox(height: 80),
           Icon(
             Icons.fitness_center,
             size: 64,
@@ -4856,7 +5206,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                             // Dismissible note content
                             Expanded(
                               child: Dismissible(
-                                key: Key('note_${exercise.id}'),
+                                key: ValueKey('note_${exercise.id}'),
                                 direction: DismissDirection.endToStart,
                                 onDismissed: (direction) {
                                   _removeExerciseNote(exercise.id);
@@ -5123,7 +5473,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                             // Show options menu only for non-default exercises
                             if (!widget.readOnly)
                               PopupMenuButton<String>(
-                                key: Key(
+                                key: ValueKey(
                                     'exercise_menu_${exercise.id}'), // Unique key to avoid hero tag conflicts
                                 icon: Icon(Icons.more_vert,
                                     color: _textSecondaryColor),
@@ -5251,7 +5601,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         padding:
                             EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                         child: Text(
-                          'Rest time: ${exercise.sets.first.restTime}s',
+                          'Rest time: ${(exercise.sets.first.restTime ~/ 60).toString().padLeft(2, '0')}:${(exercise.sets.first.restTime % 60).toString().padLeft(2, '0')}',
                           style: TextStyle(
                               color: _textSecondaryColor, fontSize: 12),
                         ),
@@ -5411,9 +5761,19 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
     // Removed PR checking for workout session UI
 
+    // Create or get animation controller for new set slide-in
+    final AnimationController? addController = _setAddControllers[set.id];
+    final animation = addController != null
+        ? Tween<Offset>(begin: Offset(1, 0), end: Offset.zero).animate(
+            CurvedAnimation(parent: addController, curve: Curves.easeOut))
+        : Tween<Offset>(begin: Offset.zero, end: Offset.zero)
+            .animate(AlwaysStoppedAnimation(0.0));
+
     return RepaintBoundary(
-        child: Dismissible(
-      key: Key(
+        child: SlideTransition(
+      position: animation,
+      child: Dismissible(
+        key: ValueKey(
           'set_${exercise.id}_${set.id}'), // More unique key including exercise ID
       direction:
           widget.readOnly ? DismissDirection.none : DismissDirection.endToStart,
@@ -5658,7 +6018,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   ),
                 ),
               ),
-              // Complete button
+                // Complete button with smooth animation
               Container(
                 width: 44,
                 height: 40,
@@ -5667,35 +6027,46 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                         ? Icon(Icons.check_circle, color: _successColor)
                         : Icon(Icons.circle_outlined,
                             color: _textSecondaryColor)
-                    : IconButton(
-                        icon: set.completed
-                            ? Icon(Icons.check_circle, color: _successColor)
-                            : Icon(Icons.circle_outlined,
-                                color: canCompleteButton
-                                    ? _textSecondaryColor
-                                    : _textSecondaryColor.withOpacity(0.3)),
-                        tooltip: canCompleteButton
-                            ? (set.completed
-                                ? 'Mark as incomplete'
-                                : hasPreviousValues
-                                    ? 'Mark as completed (will use previous values)'
-                                    : 'Mark as completed')
-                            : 'Enter weight and reps to complete',
-                        onPressed: canCompleteButton
-                            ? () {
-                                final willComplete = !set.completed;
-                                _toggleSetCompletion(
-                                    exercise.id, set.id, willComplete);
-                                if (willComplete && _autoStartRestTimer) {
-                                  // Start rest when completing (if auto-start is enabled)
-                                  _startRestTimerForSet(set.id, set.restTime);
-                                } else if (!willComplete) {
-                                  // Cancel rest when undoing, but don't play sound
-                                  _cancelRestTimer(playSound: false);
-                                }
-                              }
-                            : null,
-                      ), // close IconButton
+                      : ScaleTransition(
+                          scale: Tween<double>(begin: 1.0, end: 1.1).animate(
+                            CurvedAnimation(
+                              parent: _setCompletionControllers[set.id] ??
+                                  AnimationController(
+                                      duration: Duration.zero, vsync: this),
+                              curve: Curves.easeInOut,
+                            ),
+                          ),
+                          child: IconButton(
+                            icon: set.completed
+                                ? Icon(Icons.check_circle, color: _successColor)
+                                : Icon(Icons.circle_outlined,
+                                    color: canCompleteButton
+                                        ? _textSecondaryColor
+                                        : _textSecondaryColor.withOpacity(0.3)),
+                            tooltip: canCompleteButton
+                                ? (set.completed
+                                    ? 'Mark as incomplete'
+                                    : hasPreviousValues
+                                        ? 'Mark as completed (will use previous values)'
+                                        : 'Mark as completed')
+                                : 'Enter weight and reps to complete',
+                            onPressed: canCompleteButton
+                                ? () {
+                                    final willComplete = !set.completed;
+                                    _toggleSetCompletion(
+                                        exercise.id, set.id, willComplete);
+                                    if (willComplete && _autoStartRestTimer) {
+                                      // Start rest when completing (if auto-start is enabled)
+                                      _startRestTimerForSet(
+                                          set.id, set.restTime);
+                                    } else if (!willComplete) {
+                                      // Cancel rest when undoing, but don't play sound
+                                      _cancelRestTimer(playSound: false);
+                                    }
+                                  }
+                                : null,
+                          ),
+                        ),
               ),
             ]),
             // Show countdown under set when active
@@ -5727,7 +6098,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
           ]),
         ),
       ),
-    )); // close RepaintBoundary
+      ),
+    )); // close SlideTransition and RepaintBoundary
   }
 
   /// Show dialog to set a custom rest time for all sets in an exercise
@@ -5747,7 +6119,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               title: Text('Set Rest Time',
                   style: TextStyle(color: _textPrimaryColor)),
               content: SizedBox(
-                height: 180,
+                height: 260,
+                width: 280,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -5895,6 +6268,165 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 ),
               ],
             ));
+  }
+
+  // Show a fancy full-screen loading dialog with animation
+  Future<void> _showLoadingDialog(String message) async {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => WillPopScope(
+        onWillPop: () async => false, // Prevent dismissal
+        child: Material(
+          color: AppTheme.background.withOpacity(0.95),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 400),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 32, vertical: 48),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    borderRadius: AppTheme.borderRadiusLg,
+                    border: Border.all(
+                      color: AppTheme.accent.withOpacity(0.2),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.accent.withOpacity(0.15),
+                        blurRadius: 32,
+                        spreadRadius: 0,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Simple loading icon with pulse animation
+                      TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0.85, end: 1.0),
+                        duration: const Duration(milliseconds: 800),
+                        onEnd: () {
+                          if (mounted) {
+                            setState(() {});
+                          }
+                        },
+                        builder: (context, value, child) {
+                          return Transform.scale(
+                            scale: value,
+                            child: Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppTheme.accent.withOpacity(0.15),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.accent
+                                        .withOpacity(value * 0.4),
+                                    blurRadius: 20 * value,
+                                    spreadRadius: 5 * value,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                Icons.fitness_center_rounded,
+                                size: 40,
+                                color: AppTheme.accent,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 36),
+                      // Loading message with proper text styling
+                      DefaultTextStyle(
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          height: 1.5,
+                          letterSpacing: 0.2,
+                        ),
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          duration: const Duration(milliseconds: 600),
+                          builder: (context, value, child) {
+                            return Opacity(
+                              opacity: value,
+                              child: Text(
+                                message,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.5,
+                                  letterSpacing: 0.2,
+                                  decoration: TextDecoration.none,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      // Animated dots indicator with smoother animation
+                      SizedBox(
+                        height: 12,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: List.generate(3, (index) {
+                            return TweenAnimationBuilder<double>(
+                              tween: Tween(begin: 0.3, end: 1.0),
+                              duration:
+                                  Duration(milliseconds: 500 + (index * 200)),
+                              onEnd: () {
+                                if (mounted) {
+                                  setState(() {});
+                                }
+                              },
+                              builder: (context, value, child) {
+                                return Container(
+                                  margin:
+                                      const EdgeInsets.symmetric(horizontal: 4),
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppTheme.accent
+                                        .withOpacity(value * 0.8),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppTheme.accent
+                                            .withOpacity(value * 0.4),
+                                        blurRadius: 4,
+                                        spreadRadius: 1,
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          }),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // Shows a snack bar and removes any existing ones
