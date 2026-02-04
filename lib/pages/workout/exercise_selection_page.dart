@@ -514,7 +514,9 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          _showOnlyCustom ? Icons.edit_note : Icons.edit_note_outlined,
+                          _showOnlyCustom
+                              ? Icons.edit_note
+                              : Icons.edit_note_outlined,
                           size: 18,
                           color: _showOnlyCustom ? AppTheme.accent : null,
                         ),
