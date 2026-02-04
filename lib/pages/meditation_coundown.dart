@@ -338,11 +338,22 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: AppTheme.surface,
-          shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusXl),
-          title: Text('End Session?', style: AppTheme.headlineSmall),
+          shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
+          title: Text(
+            'End Session?',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+          ),
           content: Text(
             'Are you sure you want to end this meditation session early?',
-            style: AppTheme.bodyMedium,
+            style: TextStyle(
+              fontSize: 15,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w400,
+            ),
           ),
           actions: [
             TextButton(
@@ -350,8 +361,14 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
                 isTerminateDialogOpen = false;
                 Navigator.of(context).pop();
               },
-              child: Text('Continue',
-                  style: TextStyle(color: AppTheme.textSecondary)),
+              child: Text(
+                'Continue',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -365,7 +382,14 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
                 Navigator.of(context).pop();
                 terminateMeditation();
               },
-              child: Text('End Session'),
+              child: Text(
+                'End Session',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
         );
@@ -411,8 +435,10 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
                       ),
                       child: Text(
                         widget.mode.toUpperCase(),
-                        style: AppTheme.labelMedium.copyWith(
+                        style: TextStyle(
                           color: AppTheme.accent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                           letterSpacing: 1.5,
                         ),
                       ),
@@ -465,10 +491,11 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
                               children: [
                                 Text(
                                   "${(remainingSeconds ~/ 60).toString().padLeft(2, '0')}:${(remainingSeconds % 60).toString().padLeft(2, '0')}",
-                                  style: AppTheme.displayLarge.copyWith(
-                                    fontSize: 64,
-                                    fontWeight: FontWeight.w300,
+                                  style: TextStyle(
+                                    fontSize: 72,
+                                    fontWeight: FontWeight.w400,
                                     letterSpacing: 2,
+                                    color: AppTheme.textPrimary,
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -476,8 +503,10 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
                                   remainingSeconds > 0
                                       ? "remaining"
                                       : "complete",
-                                  style: AppTheme.bodySmall.copyWith(
-                                    color: AppTheme.textTertiary,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: AppTheme.textSecondary,
+                                    fontWeight: FontWeight.w400,
                                   ),
                                 ),
                               ],
@@ -566,7 +595,11 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
         const SizedBox(height: 8),
         Text(
           label,
-          style: AppTheme.labelSmall.copyWith(color: color),
+          style: TextStyle(
+            fontSize: 13,
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ],
     );

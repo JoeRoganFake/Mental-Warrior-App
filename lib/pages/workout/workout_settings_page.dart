@@ -848,12 +848,12 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.grey[800],
+                    color: AppTheme.surfaceBorder,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.text_fields, color: Colors.grey[400]),
+                      Icon(Icons.text_fields, color: AppTheme.textSecondary),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -862,7 +862,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                             Text(
                               'Change display only',
                               style: TextStyle(
-                                color: Colors.grey[300],
+                                color: AppTheme.textPrimary,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -870,7 +870,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                             Text(
                               'Keep existing values, just change the unit label',
                               style: TextStyle(
-                                color: Colors.grey[500],
+                                color: AppTheme.textSecondary,
                                 fontSize: 12,
                               ),
                             ),
@@ -886,7 +886,8 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel', style: TextStyle(color: Colors.grey[400])),
+              child: Text('Cancel',
+                  style: TextStyle(color: AppTheme.textSecondary)),
             ),
           ],
         );
@@ -972,7 +973,9 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color:
-              isSelected ? AppTheme.accent.withOpacity(0.2) : Colors.grey[800],
+              isSelected
+              ? AppTheme.accent.withOpacity(0.2)
+              : AppTheme.surfaceLight,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? AppTheme.accent : Colors.transparent,
@@ -1144,7 +1147,7 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                   const SizedBox(height: 16),
                   // Quick presets
                   const Text('Quick Select',
-                      style: TextStyle(color: Colors.grey)),
+                      style: TextStyle(color: AppTheme.textSecondary)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -1159,14 +1162,18 @@ class _WorkoutSettingsPageState extends State<WorkoutSettingsPage> {
                               horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
                             color:
-                                isSelected ? AppTheme.accent : Colors.grey[800],
+                                isSelected
+                                ? AppTheme.accent
+                                : AppTheme.surfaceLight,
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             _formatRestTime(seconds),
                             style: TextStyle(
                               color:
-                                  isSelected ? Colors.white : Colors.grey[400],
+                                  isSelected
+                                  ? Colors.white
+                                  : AppTheme.textTertiary,
                               fontWeight: isSelected
                                   ? FontWeight.bold
                                   : FontWeight.normal,

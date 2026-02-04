@@ -5,6 +5,7 @@ import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/create_exercise_page.dart';
 import 'package:mental_warior/services/database_services.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 class ExerciseSelectionPage extends StatefulWidget {
   final bool singleSelectionMode;
@@ -21,6 +22,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
   String _selectedBodyPart = 'All';
   String _selectedEquipment = 'All';
   bool _showOnlyStarred = false; // Filter to show only starred exercises
+  bool _showOnlyCustom = false; // Filter to show only custom exercises
   List<Map<String, dynamic>> _exercises = [];
   List<Map<String, dynamic>> _customExercises = [];
   Set<String> _starredExerciseIds = {}; // Cache of starred exercise IDs
@@ -188,6 +190,13 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
         final exerciseId = exercise['apiId'] ?? exercise['id'];
         final exerciseType = (exercise['isCustom'] ?? false) ? 'custom' : 'api';
         return _starredExerciseIds.contains('${exerciseId}_$exerciseType');
+      }).toList();
+    }
+
+    // Filter by custom status
+    if (_showOnlyCustom) {
+      result = result.where((exercise) {
+        return exercise['isCustom'] ?? false;
       }).toList();
     }
 
@@ -413,7 +422,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to delete exercise: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.error,
           behavior: SnackBarBehavior.fixed,
         ),
       );
@@ -422,238 +431,314 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
 
   @override
   Widget build(BuildContext context) {
+    final filteredExercises = _filteredExercises;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_selectedExercises.isEmpty
             ? 'Select Exercises'
             : '${_selectedExercises.length} selected'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(150),
-          child: Column(
-            children: [
-              // Search bar
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search exercises...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                            },
-                          )
-                        : null,
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+        backgroundColor: AppTheme.background,
+      ),
+      backgroundColor: AppTheme.background,
+      body: CustomScrollView(
+        slivers: [
+          // Search bar
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                controller: _searchController,
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value.toLowerCase();
+                  });
+                },
+                decoration: InputDecoration(
+                  hintText: 'Search exercises...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _searchQuery = '';
+                            });
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: AppTheme.surface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
                   ),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
                 ),
               ),
+            ),
+          ),
 
-              // Favorites filter
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                child: Row(
-                  children: [
-                    FilterChip(
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _showOnlyStarred ? Icons.star : Icons.star_border,
-                            size: 18,
-                            color: _showOnlyStarred ? Colors.amber : null,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(_showOnlyStarred
-                              ? 'Favorites'
-                              : 'Show Favorites'),
-                        ],
+          // Favorites filter
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  FilterChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _showOnlyStarred ? Icons.star : Icons.star_border,
+                          size: 18,
+                          color: _showOnlyStarred ? Colors.amber : null,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(_showOnlyStarred ? 'Favorites' : 'Show Favorites'),
+                      ],
+                    ),
+                    selected: _showOnlyStarred,
+                    selectedColor: Colors.amber.withOpacity(0.3),
+                    side: BorderSide.none,
+                    onSelected: (selected) {
+                      setState(() {
+                        _showOnlyStarred = selected;
+                      });
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  FilterChip(
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _showOnlyCustom ? Icons.edit_note : Icons.edit_note_outlined,
+                          size: 18,
+                          color: _showOnlyCustom ? AppTheme.accent : null,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(_showOnlyCustom ? 'Custom' : 'Show Custom'),
+                      ],
+                    ),
+                    selected: _showOnlyCustom,
+                    selectedColor: AppTheme.accent.withOpacity(0.2),
+                    side: BorderSide.none,
+                    onSelected: (selected) {
+                      setState(() {
+                        _showOnlyCustom = selected;
+                      });
+                    },
+                  ),
+                  if (_showOnlyStarred || _showOnlyCustom) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '${filteredExercises.length} exercise${filteredExercises.length != 1 ? 's' : ''}',
+                      style: TextStyle(
+                        color: AppTheme.textTertiary,
+                        fontSize: 12,
                       ),
-                      selected: _showOnlyStarred,
-                      selectedColor: Colors.amber.withOpacity(0.3),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
+          // Primary muscle filter
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 40,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: _bodyParts.length,
+                itemBuilder: (context, index) {
+                  final bodyPart = _bodyParts[index];
+                  final isSelected = _selectedBodyPart == bodyPart;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: ChoiceChip(
+                      label: Text(bodyPart),
+                      selected: isSelected,
+                      selectedColor: isSelected
+                          ? AppTheme.accent.withOpacity(0.2)
+                          : Colors.transparent,
+                      backgroundColor: Colors.transparent,
+                      side: BorderSide.none,
+                      labelStyle: TextStyle(
+                        color: isSelected
+                            ? AppTheme.accent
+                            : AppTheme.textSecondary,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                      showCheckmark: false,
                       onSelected: (selected) {
                         setState(() {
-                          _showOnlyStarred = selected;
+                          _selectedBodyPart = bodyPart;
                         });
                       },
                     ),
-                    if (_showOnlyStarred) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        '${_filteredExercises.length} favorite${_filteredExercises.length != 1 ? 's' : ''}',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
+                  );
+                },
               ),
-
-              // Primary muscle filter
-              SizedBox(
-                height: 40,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  children: _bodyParts.map((bodyPart) {
-                    final isSelected = _selectedBodyPart == bodyPart;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: ChoiceChip(
-                        label: Text(bodyPart),
-                        selected: isSelected,
-                        selectedColor:
-                            _getColorForType(bodyPart).withOpacity(0.7),
-                        onSelected: (selected) {
-                          setState(() {
-                            _selectedBodyPart = bodyPart;
-                          });
-                        },
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-
-              // Equipment filter
-              SizedBox(
-                height: 40,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  children: _equipmentTypes.map((equipment) {
-                    final isSelected = _selectedEquipment == equipment;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: ChoiceChip(
-                        label: Text(equipment),
-                        selected: isSelected,
-                        selectedColor: Colors.blue.withOpacity(0.7),
-                        onSelected: (selected) {
-                          setState(() {
-                            _selectedEquipment = equipment;
-                          });
-                        },
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
-      body: _filteredExercises.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text(
-                    'No exercises found',
-                    style: TextStyle(fontSize: 18),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Custom Exercise'),
-                    onPressed: _navigateToCreateExercise,
-                  ),
-                ],
+
+          // Equipment filter
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 40,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                itemCount: _equipmentTypes.length,
+                itemBuilder: (context, index) {
+                  final equipment = _equipmentTypes[index];
+                  final isSelected = _selectedEquipment == equipment;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: ChoiceChip(
+                      label: Text(equipment),
+                      selected: isSelected,
+                      selectedColor: isSelected
+                          ? AppTheme.accent.withOpacity(0.2)
+                          : Colors.transparent,
+                      backgroundColor: Colors.transparent,
+                      side: BorderSide.none,
+                      labelStyle: TextStyle(
+                        color: isSelected
+                            ? AppTheme.accent
+                            : AppTheme.textSecondary,
+                        fontWeight:
+                            isSelected ? FontWeight.w600 : FontWeight.w500,
+                      ),
+                      showCheckmark: false,
+                      onSelected: (selected) {
+                        setState(() {
+                          _selectedEquipment = equipment;
+                        });
+                      },
+                    ),
+                  );
+                },
               ),
-            )
-          : ListView.builder(
-              itemCount: _filteredExercises.length,
-              itemBuilder: (context, index) {
-                final exercise = _filteredExercises[index];
-                final isSelected =
-                    _selectedExercises.contains(_getExerciseKey(exercise));
-                final exerciseId =
-                    (exercise['apiId'] ?? exercise['id']).toString();
-                final exerciseType =
-                    (exercise['isCustom'] ?? false) ? 'custom' : 'api';
-                final isStarred =
-                    _starredExerciseIds.contains('${exerciseId}_$exerciseType');
-                
-                return Card(
-                  margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  elevation: isSelected ? 4 : 1,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: isSelected
-                        ? BorderSide(
-                            color:
-                                _getColorForType(exercise['type'] ?? 'No Type'),
-                            width: 2,
-                          )
-                        : BorderSide.none,
+            ),
+          ),
+
+          // Exercise list
+          filteredExercises.isEmpty
+              ? SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.fitness_center,
+                              size: 48, color: AppTheme.textTertiary),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No exercises found',
+                            style: AppTheme.headlineSmall,
+                          ),
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Custom Exercise'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.accent,
+                              side: BorderSide(
+                                color: AppTheme.accent,
+                                width: 2,
+                              ),
+                            ),
+                            onPressed: _navigateToCreateExercise,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  color: isSelected
-                      ? _getColorForType(exercise['type'] ?? 'No Type')
-                          .withOpacity(0.1)
-                      : null,
+            )
+              : SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final exercise = filteredExercises[index];
+                      final isSelected = _selectedExercises
+                          .contains(_getExerciseKey(exercise));
+                      final exerciseId =
+                          (exercise['apiId'] ?? exercise['id']).toString();
+                      final exerciseType =
+                          (exercise['isCustom'] ?? false) ? 'custom' : 'api';
+                      final isStarred = _starredExerciseIds
+                          .contains('${exerciseId}_$exerciseType');
+
+                      return Card(
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          elevation: 0,
+                          color: isSelected
+                              ? _getColorForType(exercise['type'] ?? 'No Type')
+                                  .withOpacity(0.08)
+                              : AppTheme.surface,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(
+                              color: isSelected
+                                  ? _getColorForType(
+                                      exercise['type'] ?? 'No Type')
+                                  : AppTheme.surfaceBorder.withOpacity(0.3),
+                              width: isSelected ? 2 : 1,
+                            ),
+                          ),
                   child: ListTile(
                     onTap: widget.singleSelectionMode
-                        ? () {
-                            // In single-selection mode, immediately return the selected exercise
+                                ? () {
                             Navigator.pop(context, [exercise]);
                           }
-                        : () {
-                            // In multi-selection mode, toggle selection on tap
+                                : () {
                             _toggleExerciseSelection(exercise);
                           },
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 4),
                     title: Text(
                       _cleanExerciseName(exercise['name'] ?? 'Unnamed Exercise'),
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                              style: AppTheme.bodyLarge
+                                  ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     subtitle: Text(
                       '${exercise['equipment'] ?? 'No Equipment'} • ${exercise['type'] ?? 'No Type'}',
+                              style: AppTheme.bodySmall
+                                  ?.copyWith(color: AppTheme.textSecondary),
                     ),
                     leading: Container(
                       width: 50,
                       height: 50,
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            _getColorForType(exercise['type'] ?? 'No Type'),
-                            _getColorForType(exercise['type'] ?? 'No Type')
-                                .withOpacity(0.7),
-                          ],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                                _getColorForType(exercise['type'] ?? 'No Type')
-                                    .withOpacity(0.3),
-                            blurRadius: 4,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
+                                shape: BoxShape.rectangle,
+                                borderRadius: BorderRadius.circular(8),
+                                color: _getColorForType(
+                                        exercise['type'] ?? 'No Type')
+                                    .withOpacity(0.12),
+                                border: Border.all(
+                                  color: _getColorForType(
+                                          exercise['type'] ?? 'No Type')
+                                      .withOpacity(0.5),
+                                  width: 1.5,
+                                ),
                       ),
                       child: Center(
                         child: Text(
-                          (_cleanExerciseName(exercise['name'] ?? 'X'))[0],
+                                  (_cleanExerciseName(
+                                          exercise['name'] ?? 'X'))[0]
+                                      .toUpperCase(),
                           style: TextStyle(
-                            color: Colors.white,
+                                    color: _getColorForType(
+                                        exercise['type'] ?? 'No Type'),
                             fontWeight: FontWeight.bold,
-                            fontSize: 20,
+                                    fontSize: 18,
                           ),
                         ),
                       ),
@@ -665,113 +750,51 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                         IconButton(
                           icon: Icon(
                             isStarred ? Icons.star : Icons.star_border,
-                            color: isStarred ? Colors.amber : Colors.grey,
+                                    color: isStarred
+                                        ? Colors.amber
+                                        : AppTheme.textSecondary,
                           ),
                           onPressed: () => _toggleStarExercise(exercise),
-                          tooltip: isStarred
-                              ? 'Remove from favorites'
-                              : 'Add to favorites',
-                        ),
-                        // Checkbox for multiple selection (hide in single-selection mode)
-                        if (!widget.singleSelectionMode)
-                          Checkbox(
-                            value: _selectedExercises
-                                .contains(_getExerciseKey(exercise)),
-                            onChanged: (bool? value) {
-                              _toggleExerciseSelection(exercise);
-                            },
-                            activeColor:
-                                _getColorForType(exercise['type'] ?? 'No Type'),
-                          ),
-                        // Info button for built-in exercises with API details
-                        if (exercise['id'] != null &&
-                            exercise['id'].toString().isNotEmpty &&
-                            !(exercise['isCustom'] ?? false))
-                          Container(
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade200,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: IconButton(
-                              icon: Icon(
-                                Icons.info_outline,
-                                color: Theme.of(context).primaryColor,
-                              ),
-                              tooltip: 'View exercise details',
-                              onPressed: () {
-                                // Check if it's a custom exercise
-                                final apiId =
-                                    exercise['apiId'] ?? exercise['id'];
-                                if (apiId.toString().startsWith('custom_')) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          CustomExerciseDetailPage(
-                                        exerciseId:
-                                            exercise['id'].toString().trim(),
-                                        exerciseName: exercise['name'],
-                                        exerciseEquipment:
-                                            exercise['equipment'] ?? '',
-                                      ),
-                                    ),
-                                  );
-                                } else {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ExerciseDetailPage(
-                                        exerciseId:
-                                            exercise['id'].toString().trim(),
-                                      ),
-                                      settings: RouteSettings(
-                                        arguments: {
-                                          'exerciseName': exercise['name'],
-                                          'exerciseEquipment':
-                                              exercise['equipment'] ?? '',
-                                          'isTemporary':
-                                              false, // These are API exercises, not temporary
-                                        },
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                            ),
-                          ),
+                                  tooltip: isStarred
+                                      ? 'Remove from favorites'
+                                      : 'Add to favorites',
+                                ),
                         // Custom exercise indicator
                         if (exercise['isCustom'] ?? false)
                           Container(
                             decoration: BoxDecoration(
-                              color: Colors.orange.shade200,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
+                                      color: AppTheme.accent.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: AppTheme.accent.withOpacity(0.4),
+                                        width: 1,
+                                      ),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    margin: const EdgeInsets.only(right: 8),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  Icons.star,
-                                  color: Colors.orange.shade700,
-                                  size: 16,
-                                ),
+                                        Icon(Icons.edit_note,
+                                            color: AppTheme.accent, size: 14),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Custom',
                                   style: TextStyle(
-                                    color: Colors.orange.shade700,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
+                                            color: AppTheme.accent,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ],
                             ),
                           ),
+                                // View details arrow
+                                Icon(Icons.chevron_right,
+                                    color: AppTheme.textTertiary),
                       ],
-                    ),
-                    // Show description on long press for built-in exercises,
-                    // or show options menu for custom exercises
+                            ),
                     onLongPress: () {
                       if (exercise['isCustom'] ?? false) {
                         _showCustomExerciseOptions(exercise);
@@ -785,21 +808,22 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                         );
                       }
                     },
+                          ));
+                    },
+                    childCount: filteredExercises.length,
                   ),
-                );
-              },
-            ),
+                ),
+        ],
+      ),
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          // Add selected exercises button
           if (_selectedExercises.isNotEmpty)
             Container(
-              margin: EdgeInsets.only(bottom: 16),
+              margin: const EdgeInsets.only(bottom: 16),
               child: FloatingActionButton.extended(
-                heroTag: "add_selected_exercises", // Unique hero tag
+                heroTag: "add_selected_exercises",
                 onPressed: () {
-                  // Return selected exercises from both built-in and custom exercises
                   final allExercises = [..._exercises, ..._customExercises];
                   final selectedExercisesList = allExercises
                       .where((exercise) => _selectedExercises
@@ -815,20 +839,19 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
                       'apiId': apiId,
                       'isCustom': exercise['isCustom'] ?? false,
                     };
-                          })
-                      .toList();
+                  }).toList();
                   Navigator.pop(context, selectedExercisesList);
                 },
-                backgroundColor: Theme.of(context).primaryColor,
-                icon: Icon(Icons.add),
+                backgroundColor: AppTheme.accent,
+                icon: const Icon(Icons.add),
                 label: Text(
                     'Add ${_selectedExercises.length} Exercise${_selectedExercises.length == 1 ? '' : 's'}'),
               ),
             ),
-          // Add custom exercise button
           FloatingActionButton(
-            heroTag: "add_custom_exercise", // Unique hero tag
+            heroTag: "add_custom_exercise",
             onPressed: _navigateToCreateExercise,
+            backgroundColor: AppTheme.accent,
             child: const Icon(Icons.add),
             tooltip: 'Add custom exercise',
           ),
@@ -836,6 +859,7 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
       ),
     );
   }
+}
 
   Color _getColorForType(String? type) {
     if (type == null) {
@@ -880,4 +904,4 @@ class ExerciseSelectionPageState extends State<ExerciseSelectionPage> {
         return Colors.grey;
     }
   }
-}
+

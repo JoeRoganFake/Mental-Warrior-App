@@ -1033,50 +1033,7 @@ class HomePageState extends State<HomePage>
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1A1A1A),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: const Color(0xFFE8E8E8)
-                                            .withOpacity(0.5),
-                                        width: 1,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: const Color(0xFFE8E8E8)
-                                              .withOpacity(0.12),
-                                          blurRadius: 6,
-                                          spreadRadius: 0,
-                                        ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          _getImportanceIcon(taskImportance),
-                                          color: const Color(0xFFE8E8E8)
-                                              .withOpacity(0.8),
-                                          size: 16,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          _getImportanceLabel(taskImportance),
-                                          style: TextStyle(
-                                            color: const Color(0xFFE8E8E8)
-                                                .withOpacity(0.85),
-                                            fontWeight: FontWeight.w500,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                  _buildImportanceDots(taskImportance),
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -2578,26 +2535,48 @@ class HomePageState extends State<HomePage>
             );
           }
 
-          // Filter tasks for today and remaining tasks
-          final today = DateTime.now();
+          // Sort tasks by deadline: today → tomorrow → other dates → no due date
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          final tomorrow = today.add(const Duration(days: 1));
           final todayStr =
               "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+          final tomorrowStr =
+              "${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}";
 
-          final tasksForToday = snapshot.data!
-              .where((task) => task.deadline.startsWith(todayStr))
-              .toList();
+          final sortedTasks = List<Task>.from(snapshot.data!);
+          sortedTasks.sort((a, b) {
+            final aDeadline =
+                a.deadline.isNotEmpty ? a.deadline.split(' ')[0] : '';
+            final bDeadline =
+                b.deadline.isNotEmpty ? b.deadline.split(' ')[0] : '';
 
-          final tasksRemaining = snapshot.data!
-              .where((task) => !task.deadline.startsWith(todayStr))
-              .toList();
+            // Tasks without due date go to bottom
+            if (aDeadline.isEmpty && bDeadline.isEmpty) return 0;
+            if (aDeadline.isEmpty) return 1;
+            if (bDeadline.isEmpty) return -1;
 
-          // Combine: today tasks first (all of them), then remaining tasks to fill up to 15
-          final displayTasks = [
-            ...tasksForToday,
-            ...tasksRemaining.take(15 - tasksForToday.length),
-          ];
+            // Today tasks come first
+            if (aDeadline == todayStr && bDeadline != todayStr) return -1;
+            if (aDeadline != todayStr && bDeadline == todayStr) return 1;
 
-          final hasMoreTasks = snapshot.data!.length > displayTasks.length;
+            // Tomorrow tasks come second
+            if (aDeadline == tomorrowStr && bDeadline != tomorrowStr) return -1;
+            if (aDeadline != tomorrowStr && bDeadline == tomorrowStr) return 1;
+
+            // Other dates sorted chronologically
+            try {
+              final aDate = DateTime.parse(aDeadline);
+              final bDate = DateTime.parse(bDeadline);
+              return aDate.compareTo(bDate);
+            } catch (e) {
+              return 0;
+            }
+          });
+
+          // Combine: display first 6 sorted tasks
+          final displayTasks = sortedTasks.take(6).toList();
+          final hasMoreTasks = sortedTasks.length > displayTasks.length;
 
           return Column(
             children: [
@@ -2692,32 +2671,8 @@ class HomePageState extends State<HomePage>
                           // Importance badge
                           Padding(
                             padding: const EdgeInsets.only(left: 8),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1A1A1A),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color:
-                                      const Color(0xFFE8E8E8).withOpacity(0.5),
-                                  width: 1,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFFE8E8E8)
-                                        .withOpacity(0.12),
-                                    blurRadius: 4,
-                                    spreadRadius: 0,
-                                  ),
-                                ],
-                              ),
-                              child: Icon(
-                                _getImportanceIcon(task.importance),
-                                color: const Color(0xFFE8E8E8).withOpacity(0.8),
-                                size: 14,
-                              ),
-                            ),
+                            child: _buildImportanceDots(task.importance,
+                                small: true),
                           ),
                         Padding(
                             padding: const EdgeInsets.only(left: 8),
@@ -2920,31 +2875,32 @@ class HomePageState extends State<HomePage>
                         });
                       },
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: AppTheme.accent,
+                        foregroundColor: Colors.grey[600],
                         side: BorderSide(
-                          color: AppTheme.accent.withOpacity(0.3),
-                          width: 1.5,
+                          color: Colors.grey.withOpacity(0.2),
+                          width: 1,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
                             'View All Tasks',
-                            style: AppTheme.bodyMedium.copyWith(
-                              color: AppTheme.accent,
-                              fontWeight: FontWeight.w600,
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Icon(
                             Icons.arrow_forward_rounded,
-                            color: AppTheme.accent,
-                            size: 16,
+                            color: Colors.grey[500],
+                            size: 14,
                           ),
                         ],
                       ),
@@ -3165,7 +3121,7 @@ class HomePageState extends State<HomePage>
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 decoration: BoxDecoration(
                   color: AppTheme.background,
-                  borderRadius: AppTheme.borderRadiusLg,
+                  borderRadius: AppTheme.borderRadiusMd,
                   boxShadow: [
                     BoxShadow(
                       color: AppTheme.warning.withOpacity(0.12),
@@ -3314,40 +3270,10 @@ class HomePageState extends State<HomePage>
                                 ),
                               ),
                               const SizedBox(height: 10),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: Container(
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    color:
-                                        AppTheme.textSecondary.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: FractionallySizedBox(
-                                    widthFactor: book.progress,
-                                    alignment: Alignment.centerLeft,
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.textSecondary
-                                            .withOpacity(0.7),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: Text(
-                                  "${(book.progress * 100).toStringAsFixed(0)}%",
-                                  style: AppTheme.bodyMedium.copyWith(
-                                    fontSize: 12,
-                                    color:
-                                        AppTheme.textSecondary.withOpacity(0.8),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                              _AnimatedBookProgressBar(
+                                progress: book.progress,
+                                percentage:
+                                    (book.progress * 100).toStringAsFixed(0),
                               ),
                             ],
                           ),
@@ -4125,46 +4051,160 @@ class HomePageState extends State<HomePage>
   }
 
   // Helper methods for 5-level importance system
-  String _getImportanceLabel(int importance) {
-    switch (importance) {
-      case 1:
-        return 'Very Low';
-      case 2:
-        return 'Low';
-      case 3:
-        return 'Medium';
-      case 4:
-        return 'High';
-      case 5:
-        return 'Very High';
-      default:
-        return 'Medium';
-    }
-  }
 
-  Color _getImportanceColor(int importance) {
-    return Colors.black;
-  }
 
-  IconData _getImportanceIcon(int importance) {
-    switch (importance) {
-      case 1:
-        return Icons.battery_1_bar_rounded;
-      case 2:
-        return Icons.battery_2_bar_rounded;
-      case 3:
-        return Icons.battery_3_bar_rounded;
-      case 4:
-        return Icons.battery_4_bar_rounded;
-      case 5:
-        return Icons.battery_full_rounded;
-      default:
-        return Icons.battery_full_rounded;
-    }
+  /// Builds a minimalist dot-based importance indicator
+  /// Shows 5 dots where filled dots represent the importance level
+  Widget _buildImportanceDots(int importance, {bool small = false}) {
+    final double dotSize = small ? 6.0 : 8.0;
+    final double spacing = small ? 3.0 : 4.0;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        final bool isFilled = index < importance;
+        return Container(
+          margin: EdgeInsets.only(right: index < 4 ? spacing : 0),
+          width: dotSize,
+          height: dotSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isFilled
+                ? Colors.white.withOpacity(0.85)
+                : Colors.white.withOpacity(0.15),
+            border: isFilled
+                ? null
+                : Border.all(
+                    color: Colors.white.withOpacity(0.25),
+                    width: 0.5,
+                  ),
+          ),
+        );
+      }),
+    );
   }
 
   @override
   bool get wantKeepAlive => true;
+}
+
+class _AnimatedBookProgressBar extends StatefulWidget {
+  final double progress;
+  final String percentage;
+
+  const _AnimatedBookProgressBar({
+    required this.progress,
+    required this.percentage,
+  });
+
+  @override
+  State<_AnimatedBookProgressBar> createState() =>
+      _AnimatedBookProgressBarState();
+}
+
+class _AnimatedBookProgressBarState extends State<_AnimatedBookProgressBar>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _progressAnimation;
+  late Animation<int> _percentageAnimation;
+  double _previousProgress = 0;
+  int _previousPercentage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    _previousProgress = widget.progress;
+    _previousPercentage = int.parse(widget.percentage);
+
+    _setupAnimations();
+    _animationController.forward();
+  }
+
+  void _setupAnimations() {
+    _progressAnimation = Tween<double>(
+      begin: _previousProgress,
+      end: widget.progress,
+    ).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+
+    _percentageAnimation = IntTween(
+      begin: _previousPercentage,
+      end: int.parse(widget.percentage),
+    ).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedBookProgressBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.progress != widget.progress) {
+      _previousProgress = oldWidget.progress;
+      _previousPercentage = int.parse(oldWidget.percentage);
+
+      _animationController.reset();
+      _setupAnimations();
+      _animationController.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                height: 6,
+                decoration: BoxDecoration(
+                  color: AppTheme.textSecondary.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: FractionallySizedBox(
+                  widthFactor: _progressAnimation.value,
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppTheme.textSecondary.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                "${_percentageAnimation.value}%",
+                style: AppTheme.bodyMedium.copyWith(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary.withOpacity(0.8),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class TaskDetailsWidget extends StatelessWidget {

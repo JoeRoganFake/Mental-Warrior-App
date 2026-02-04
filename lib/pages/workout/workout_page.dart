@@ -13,7 +13,6 @@ import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/widgets/workout_week_chart.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/utils/app_theme.dart';
-import 'package:mental_warior/widgets/xp_bar.dart';
 
 class WorkoutPage extends StatefulWidget {
   const WorkoutPage({super.key});
@@ -258,31 +257,29 @@ class WorkoutPageState extends State<WorkoutPage>
       width: double.infinity,
       margin: const EdgeInsets.symmetric(horizontal: 4),
       child: Card(
-        elevation: 8,
-        color: Colors.grey[900],
+        elevation: 0,
+        color: AppTheme.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppTheme.borderRadiusLg,
           side: BorderSide(
-            color: Colors.amber.withOpacity(0.4),
+            color: Colors.amber.withOpacity(0.3),
             width: 1.5,
           ),
         ),
         child: InkWell(
           onTap: () =>
               _navigateToExerciseDetail(originalName, exerciseName, equipment),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: AppTheme.borderRadiusLg,
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: AppTheme.borderRadiusLg,
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Colors.grey[900]!,
-                  Colors.grey[850]!,
-                  Colors.grey[900]!,
+                  Colors.amber.withOpacity(0.03),
+                  AppTheme.surface,
                 ],
-                stops: const [0.0, 0.5, 1.0],
               ),
             ),
             padding: const EdgeInsets.all(12.0),
@@ -332,9 +329,8 @@ class WorkoutPageState extends State<WorkoutPage>
                     ),
                     Text(
                       formattedDate,
-                      style: TextStyle(
-                        color: Colors.grey[400],
-                        fontSize: 10,
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -343,9 +339,9 @@ class WorkoutPageState extends State<WorkoutPage>
                 const SizedBox(height: 8),
                 Text(
                   exerciseName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                  style: AppTheme.bodyMedium.copyWith(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
                     fontSize: 14,
                     height: 1.2,
                   ),
@@ -359,13 +355,13 @@ class WorkoutPageState extends State<WorkoutPage>
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        Theme.of(context).primaryColor.withOpacity(0.25),
-                        Theme.of(context).primaryColor.withOpacity(0.15),
+                        AppTheme.accent.withOpacity(0.12),
+                        AppTheme.accent.withOpacity(0.06),
                       ],
                     ),
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: AppTheme.borderRadiusMd,
                     border: Border.all(
-                      color: Theme.of(context).primaryColor.withOpacity(0.3),
+                      color: AppTheme.accent.withOpacity(0.2),
                       width: 1,
                     ),
                   ),
@@ -376,25 +372,24 @@ class WorkoutPageState extends State<WorkoutPage>
                         weight > 0
                             ? '${weight.toStringAsFixed(weight.truncateToDouble() == weight ? 0 : 1)} $_weightUnit'
                             : 'BW',
-                        style: TextStyle(
-                          color: Theme.of(context).primaryColor,
+                        style: AppTheme.bodyMedium.copyWith(
+                          color: AppTheme.accent,
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       Text(
                         ' × ',
-                        style: TextStyle(
-                          color:
-                              Theme.of(context).primaryColor.withOpacity(0.7),
+                        style: AppTheme.bodyMedium.copyWith(
+                          color: AppTheme.accent.withOpacity(0.7),
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
                         '$reps',
-                        style: TextStyle(
-                          color: Theme.of(context).primaryColor,
+                        style: AppTheme.bodyMedium.copyWith(
+                          color: AppTheme.accent,
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
                         ),
@@ -692,11 +687,8 @@ class WorkoutPageState extends State<WorkoutPage>
 
   // Compact custom header to replace the default AppBar
   Widget _buildCompactHeader() {
-    return Container(
-      padding: const EdgeInsets.only(top: 16, left: 20, right: 12, bottom: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.background,
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 55, 12, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -705,35 +697,22 @@ class WorkoutPageState extends State<WorkoutPage>
             children: [
               Text(
                 'Workouts',
-                style: AppTheme.headlineLarge,
-                overflow: TextOverflow.ellipsis,
+                style: AppTheme.displayMedium,
               ),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: AppTheme.borderRadiusMd,
-                ),
-                child: IconButton(
-                  icon: Icon(Icons.settings_outlined,
-                      size: 22, color: AppTheme.textSecondary),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const WorkoutSettingsPage(),
-                      ),
-                    );
-                  },
-                  tooltip: 'Settings',
-                ),
+              IconButton(
+                icon: Icon(Icons.settings_outlined,
+                    size: 24, color: AppTheme.accent),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const WorkoutSettingsPage(),
+                    ),
+                  );
+                },
+                tooltip: 'Settings',
               ),
             ],
-          ),
-          const SizedBox(height: 16),
-          // XP Bar
-          const Padding(
-            padding: EdgeInsets.only(right: 8),
-            child: XPBar(compact: true),
           ),
         ],
       ),
@@ -755,18 +734,46 @@ class WorkoutPageState extends State<WorkoutPage>
           // Start workout button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.add),
-              label: Text(
-                  'Start ${Functions().getTimeOfDayDescription()} Workout'),
-              onPressed: _startNewWorkout,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
+            child: Opacity(
+              opacity: 0.6,
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: AppTheme.borderRadiusMd,
+                  border: Border.all(
+                    color: AppTheme.warning.withOpacity(0.08),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.warning.withOpacity(0.12),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                backgroundColor: Theme.of(context).primaryColor,
-                foregroundColor: Colors.white,
+                child: OutlinedButton.icon(
+                  icon: Icon(Icons.add, color: AppTheme.accent),
+                  label: Text(
+                      'Start ${Functions().getTimeOfDayDescription()} Workout',
+                      style: TextStyle(
+                          color: AppTheme.accent, fontWeight: FontWeight.w600)),
+                  onPressed: _startNewWorkout,
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 14,
+                    ),
+                    foregroundColor: AppTheme.accent,
+                    side: BorderSide(
+                      color: AppTheme.accent,
+                      width: 1.5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AppTheme.borderRadiusMd,
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -776,13 +783,15 @@ class WorkoutPageState extends State<WorkoutPage>
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
                     'Personal Records',
-                    style: TextStyle(
+                    style: AppTheme.headlineMedium.copyWith(
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                      color: AppTheme.textSecondary,
                     ),
                   ),
                 ),
@@ -816,29 +825,38 @@ class WorkoutPageState extends State<WorkoutPage>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Templates',
-                      style: TextStyle(
+                      style: AppTheme.headlineMedium.copyWith(
                         fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                        color: AppTheme.textSecondary,
                       ),
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.create_new_folder_outlined,
-                              size: 20),
+                          icon: Icon(Icons.create_new_folder_outlined,
+                              size: 20, color: AppTheme.textSecondary),
                           onPressed: _showCreateFolderDialog,
                           tooltip: 'New Folder',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                         ),
                         const SizedBox(width: 8),
-                        TextButton.icon(
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('New Template'),
-                          onPressed: _showCreateTemplateDialog,
+                        Opacity(
+                          opacity: 0.6,
+                          child: TextButton.icon(
+                            icon: Icon(Icons.add,
+                                size: 18, color: AppTheme.accent),
+                            label: Text('New Template',
+                                style: TextStyle(
+                                    color: AppTheme.accent,
+                                    fontWeight: FontWeight.w600)),
+                            onPressed: _showCreateTemplateDialog,
+                          ),
                         ),
                       ],
                     ),
@@ -859,7 +877,15 @@ class WorkoutPageState extends State<WorkoutPage>
     // Show saved templates
     if (_templates.isEmpty && _folders.isEmpty) {
       return Card(
-        color: Colors.grey[900],
+        color: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(
+            color: Colors.grey,
+            width: 1,
+          ),
+        ),
         child: const Padding(
           padding: EdgeInsets.all(16.0),
           child: Row(
@@ -892,9 +918,14 @@ class WorkoutPageState extends State<WorkoutPage>
 
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
-            color: Colors.grey[900],
+            elevation: 0,
+            color: AppTheme.surface,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: AppTheme.borderRadiusMd,
+              side: BorderSide(
+                color: AppTheme.surfaceBorder,
+                width: 1,
+              ),
             ),
             child: Column(
               children: [
@@ -905,7 +936,7 @@ class WorkoutPageState extends State<WorkoutPage>
                     });
                   },
                   onLongPress: () => _showFolderOptions(folder),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppTheme.borderRadiusMd,
                   child: Padding(
                     padding: const EdgeInsets.all(12.0),
                     child: Row(
@@ -914,8 +945,8 @@ class WorkoutPageState extends State<WorkoutPage>
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: folder.getColor().withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
+                            color: folder.getColor().withOpacity(0.15),
+                            borderRadius: AppTheme.borderRadiusSm,
                           ),
                           child: Icon(
                             isExpanded ? Icons.folder_open : Icons.folder,
@@ -930,17 +961,16 @@ class WorkoutPageState extends State<WorkoutPage>
                             children: [
                               Text(
                                 folder.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                style: AppTheme.bodyMedium.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
                                 ),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 '${folderTemplates.length} template${folderTemplates.length != 1 ? 's' : ''}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[400],
+                                style: AppTheme.bodySmall.copyWith(
+                                  color: AppTheme.textSecondary,
                                 ),
                               ),
                             ],
@@ -948,7 +978,7 @@ class WorkoutPageState extends State<WorkoutPage>
                         ),
                         Icon(
                           isExpanded ? Icons.expand_less : Icons.expand_more,
-                          color: Colors.white70,
+                          color: AppTheme.textSecondary,
                         ),
                       ],
                     ),
@@ -989,14 +1019,19 @@ class WorkoutPageState extends State<WorkoutPage>
 
     return Card(
       margin: EdgeInsets.only(bottom: 8, left: inFolder ? 0 : 0),
-      color: inFolder ? Colors.grey[850] : Colors.grey[900],
+      elevation: 0,
+      color: inFolder ? AppTheme.surfaceLight : AppTheme.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTheme.borderRadiusMd,
+        side: BorderSide(
+          color: AppTheme.surfaceBorder,
+          width: 1,
+        ),
       ),
       child: InkWell(
         onTap: () => _startWorkoutFromSavedTemplate(template),
         onLongPress: () => _showTemplateOptions(template),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTheme.borderRadiusMd,
         child: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Row(
@@ -1005,12 +1040,12 @@ class WorkoutPageState extends State<WorkoutPage>
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(8),
+                  color: AppTheme.accent.withOpacity(0.1),
+                  borderRadius: AppTheme.borderRadiusSm,
                 ),
                 child: Icon(
                   Icons.fitness_center,
-                  color: Theme.of(context).primaryColor,
+                  color: AppTheme.accent,
                   size: 20,
                 ),
               ),
@@ -1021,17 +1056,16 @@ class WorkoutPageState extends State<WorkoutPage>
                   children: [
                     Text(
                       template.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                      style: AppTheme.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '$exerciseCount exercises • $exerciseNames${template.exercises.length > 3 ? '...' : ''}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[400],
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1039,9 +1073,9 @@ class WorkoutPageState extends State<WorkoutPage>
                   ],
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.play_arrow,
-                color: Colors.white70,
+                color: AppTheme.textSecondary,
               ),
             ],
           ),
@@ -1053,9 +1087,9 @@ class WorkoutPageState extends State<WorkoutPage>
   void _showTemplateOptions(WorkoutTemplate template) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF26272B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      backgroundColor: AppTheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) {
         return SafeArea(
@@ -1063,9 +1097,9 @@ class WorkoutPageState extends State<WorkoutPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.edit, color: Colors.white70),
-                title: const Text('Edit Template',
-                    style: TextStyle(color: Colors.white)),
+                leading: Icon(Icons.edit, color: AppTheme.textSecondary),
+                title: Text('Edit Template',
+                    style: TextStyle(color: AppTheme.textPrimary)),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.push(
@@ -1081,49 +1115,53 @@ class WorkoutPageState extends State<WorkoutPage>
               ),
               ListTile(
                 leading:
-                    const Icon(Icons.folder_outlined, color: Colors.white70),
-                title: const Text('Move to Folder',
-                    style: TextStyle(color: Colors.white)),
+                    Icon(Icons.folder_outlined, color: AppTheme.textSecondary),
+                title: Text('Move to Folder',
+                    style: TextStyle(color: AppTheme.textPrimary)),
                 onTap: () {
                   Navigator.pop(context);
                   _showMoveToFolderDialog(template);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.copy, color: Colors.white70),
-                title: const Text('Duplicate Template',
-                    style: TextStyle(color: Colors.white)),
+                leading: Icon(Icons.copy, color: AppTheme.textSecondary),
+                title: Text('Duplicate Template',
+                    style: TextStyle(color: AppTheme.textPrimary)),
                 onTap: () async {
                   Navigator.pop(context);
                   await _duplicateTemplate(template);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Delete Template',
-                    style: TextStyle(color: Colors.red)),
+                leading: Icon(Icons.delete, color: AppTheme.error),
+                title: Text('Delete Template',
+                    style: TextStyle(color: AppTheme.error)),
                 onTap: () async {
                   Navigator.pop(context);
                   final confirm = await showDialog<bool>(
                     context: context,
                     builder: (context) => AlertDialog(
-                      backgroundColor: const Color(0xFF26272B),
-                      title: const Text('Delete Template?',
-                          style: TextStyle(color: Colors.white)),
+                      backgroundColor: AppTheme.surface,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: AppTheme.borderRadiusLg),
+                      title: Text('Delete Template?',
+                          style: TextStyle(color: AppTheme.textPrimary)),
                       content: Text(
                         'Are you sure you want to delete "${template.name}"?',
-                        style: const TextStyle(color: Colors.white70),
+                        style: TextStyle(color: AppTheme.textSecondary),
                       ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel'),
+                          child: Text('Cancel',
+                              style: TextStyle(color: AppTheme.textSecondary)),
                         ),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red),
+                              backgroundColor: AppTheme.error),
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Delete'),
+                          child: const Text('Delete',
+                              style: TextStyle(color: Colors.white)),
                         ),
                       ],
                     ),
@@ -1294,7 +1332,7 @@ class WorkoutPageState extends State<WorkoutPage>
                       hintText: 'Folder name',
                       hintStyle: const TextStyle(color: Colors.grey),
                       filled: true,
-                      fillColor: const Color(0xFF303136),
+                      fillColor: const Color(0xFF1a1a1a),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide.none,
@@ -1362,9 +1400,9 @@ class WorkoutPageState extends State<WorkoutPage>
   void _showMoveToFolderDialog(WorkoutTemplate template) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF26272B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      backgroundColor: AppTheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) {
         return SafeArea(
@@ -1372,13 +1410,12 @@ class WorkoutPageState extends State<WorkoutPage>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Padding(
-                padding: EdgeInsets.all(16.0),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
                 child: Text(
                   'Move to Folder',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
+                  style: AppTheme.headlineMedium.copyWith(
+                    color: AppTheme.textPrimary,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -1388,13 +1425,13 @@ class WorkoutPageState extends State<WorkoutPage>
                 leading: Icon(
                   Icons.folder_off_outlined,
                   color: template.folderId == null
-                      ? Theme.of(context).primaryColor
-                      : Colors.white70,
+                      ? AppTheme.accent
+                      : AppTheme.textSecondary,
                 ),
-                title: const Text('No Folder',
-                    style: TextStyle(color: Colors.white)),
+                title: Text('No Folder',
+                    style: TextStyle(color: AppTheme.textPrimary)),
                 trailing: template.folderId == null
-                    ? Icon(Icons.check, color: Theme.of(context).primaryColor)
+                    ? Icon(Icons.check, color: AppTheme.accent)
                     : null,
                 onTap: () async {
                   await _templateService.moveTemplateToFolder(
@@ -1403,7 +1440,7 @@ class WorkoutPageState extends State<WorkoutPage>
                   _loadTemplates();
                 },
               ),
-              const Divider(color: Colors.grey),
+              Divider(color: AppTheme.surfaceBorder),
               // List folders
               ..._folders.map((folder) {
                 final isSelected = template.folderId == folder.id;
@@ -1417,13 +1454,13 @@ class WorkoutPageState extends State<WorkoutPage>
                   title: Text(
                     folder.name,
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppTheme.textPrimary,
                       fontWeight:
                           isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
                   trailing: isSelected
-                      ? Icon(Icons.check, color: Theme.of(context).primaryColor)
+                      ? Icon(Icons.check, color: AppTheme.accent)
                       : null,
                   onTap: () async {
                     await _templateService.moveTemplateToFolder(
@@ -1445,9 +1482,9 @@ class WorkoutPageState extends State<WorkoutPage>
   void _showFolderOptions(TemplateFolder folder) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF26272B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      backgroundColor: AppTheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) {
         return SafeArea(
@@ -1455,44 +1492,49 @@ class WorkoutPageState extends State<WorkoutPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.edit, color: Colors.white70),
-                title: const Text('Rename Folder',
-                    style: TextStyle(color: Colors.white)),
+                leading: Icon(Icons.edit, color: AppTheme.textSecondary),
+                title: Text('Rename Folder',
+                    style: TextStyle(color: AppTheme.textPrimary)),
                 onTap: () {
                   Navigator.pop(context);
                   _showRenameFolderDialog(folder);
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete, color: Colors.red),
-                title: const Text('Delete Folder',
-                    style: TextStyle(color: Colors.red)),
-                subtitle: const Text(
+                leading: Icon(Icons.delete, color: AppTheme.error),
+                title: Text('Delete Folder',
+                    style: TextStyle(color: AppTheme.error)),
+                subtitle: Text(
                   'Templates will be moved to uncategorized',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  style: AppTheme.bodySmall
+                      .copyWith(color: AppTheme.textSecondary),
                 ),
                 onTap: () async {
                   Navigator.pop(context);
                   final confirm = await showDialog<bool>(
                     context: context,
                     builder: (context) => AlertDialog(
-                      backgroundColor: const Color(0xFF26272B),
-                      title: const Text('Delete Folder?',
-                          style: TextStyle(color: Colors.white)),
+                      backgroundColor: AppTheme.surface,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: AppTheme.borderRadiusLg),
+                      title: Text('Delete Folder?',
+                          style: TextStyle(color: AppTheme.textPrimary)),
                       content: Text(
                         'Are you sure you want to delete "${folder.name}"? Templates inside will be moved to uncategorized.',
-                        style: const TextStyle(color: Colors.white70),
+                        style: TextStyle(color: AppTheme.textSecondary),
                       ),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel'),
+                          child: Text('Cancel',
+                              style: TextStyle(color: AppTheme.textSecondary)),
                         ),
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red),
+                              backgroundColor: AppTheme.error),
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Delete'),
+                          child: const Text('Delete',
+                              style: TextStyle(color: Colors.white)),
                         ),
                       ],
                     ),
@@ -1530,7 +1572,7 @@ class WorkoutPageState extends State<WorkoutPage>
               hintText: 'Folder name',
               hintStyle: const TextStyle(color: Colors.grey),
               filled: true,
-              fillColor: const Color(0xFF303136),
+              fillColor: const Color(0xFF1a1a1a),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide.none,
@@ -1578,25 +1620,23 @@ class WorkoutPageState extends State<WorkoutPage>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.fitness_center,
               size: 64,
-              color: Colors.grey,
+              color: AppTheme.textSecondary.withOpacity(0.3),
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No workouts yet',
-              style: TextStyle(
-                fontSize: 20,
+              style: AppTheme.headlineMedium.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Complete a workout to see it here',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
+              style: AppTheme.bodyMedium.copyWith(
+                color: AppTheme.textSecondary,
               ),
             ),
           ],
@@ -1628,12 +1668,18 @@ class WorkoutPageState extends State<WorkoutPage>
               horizontal: 16,
               vertical: 8,
             ),
+            elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: AppTheme.borderRadiusMd,
+              side: BorderSide(
+                color: AppTheme.surfaceBorder,
+                width: 1,
+              ),
             ),
-            color: Colors.black,
+            color: AppTheme.surface,
             child: InkWell(
               onTap: () => _viewWorkoutDetails(workout.id),
+              borderRadius: AppTheme.borderRadiusMd,
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -1645,16 +1691,15 @@ class WorkoutPageState extends State<WorkoutPage>
                         Expanded(
                           child: Text(
                             workout.name,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                            style: AppTheme.bodyLarge.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
                             ),
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.delete_outline,
-                              color: Colors.white70),
+                          icon: Icon(Icons.delete_outline,
+                              color: AppTheme.textSecondary),
                           onPressed: () => _deleteWorkout(workout.id),
                         ),
                       ],
@@ -1662,17 +1707,15 @@ class WorkoutPageState extends State<WorkoutPage>
                     const SizedBox(height: 4),
                     Text(
                       formattedDate,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.white70,
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       "Sets",
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white70,
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppTheme.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1719,8 +1762,8 @@ class WorkoutPageState extends State<WorkoutPage>
                                                   RegExp(r'##CUSTOM:[^#]+##'),
                                                   '')
                                               .trim(),
-                                          style: const TextStyle(
-                                            color: Colors.white,
+                                          style: AppTheme.bodyMedium.copyWith(
+                                            color: AppTheme.textPrimary,
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
@@ -1730,9 +1773,8 @@ class WorkoutPageState extends State<WorkoutPage>
                                             set.weight > 0
                                                 ? "${set.weight.toStringAsFixed(set.weight.truncateToDouble() == set.weight ? 0 : 1)} $_weightUnit × ${set.reps}"
                                                 : "${set.reps} reps",
-                                            style: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 12,
+                                            style: AppTheme.bodySmall.copyWith(
+                                              color: AppTheme.textSecondary,
                                             ),
                                           );
                                         }),
@@ -1746,17 +1788,16 @@ class WorkoutPageState extends State<WorkoutPage>
                                       crossAxisAlignment:
                                           CrossAxisAlignment.end,
                                       children: [
-                                        const Text(
+                                        Text(
                                           "Best set",
-                                          style: TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12,
+                                          style: AppTheme.bodySmall.copyWith(
+                                            color: AppTheme.textSecondary,
                                           ),
                                         ),
                                         Text(
                                           bestSet,
-                                          style: const TextStyle(
-                                            color: Colors.white,
+                                          style: AppTheme.bodyMedium.copyWith(
+                                            color: AppTheme.textPrimary,
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
@@ -1774,17 +1815,16 @@ class WorkoutPageState extends State<WorkoutPage>
                               padding: const EdgeInsets.only(bottom: 12.0),
                               child: Row(
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.more_horiz,
-                                    color: Colors.white70,
+                                    color: AppTheme.textSecondary,
                                     size: 16,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
                                     '${workout.exercises.length - 3} more exercise${workout.exercises.length - 3 > 1 ? 's' : ''}',
-                                    style: const TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 12,
+                                    style: AppTheme.bodySmall.copyWith(
+                                      color: AppTheme.textSecondary,
                                       fontStyle: FontStyle.italic,
                                     ),
                                   ),
@@ -1830,41 +1870,60 @@ class WorkoutPageState extends State<WorkoutPage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.background,
+      resizeToAvoidBottomInset: false,
       appBar: null,
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: AppTheme.accent))
           : SafeArea(
               child: Column(
                 children: [
-                  // Header with title and browse button
-                  _buildCompactHeader(),
-                  // Tab bar
+                  // Header with gradient extending to tab bar
                   Container(
                     decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(
-                          color: AppTheme.surfaceBorder.withOpacity(0.5),
-                          width: 1,
-                        ),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          AppTheme.accent.withOpacity(0.15),
+                          AppTheme.background,
+                        ],
                       ),
                     ),
-                    child: TabBar(
-                      controller: _tabController,
-                      isScrollable: true,
-                      tabAlignment: TabAlignment.start,
-                      tabs: const [
-                        Tab(text: 'Workout'),
-                        Tab(text: 'History'),
-                        Tab(text: 'Exercises'),
-                        Tab(text: 'Measurements'),
+                    child: Column(
+                      children: [
+                        // Header with title and settings button
+                        _buildCompactHeader(),
+                        // Tab bar with border
+                        Container(
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: AppTheme.surfaceBorder,
+                                width: 0,
+                              ),
+                            ),
+                          ),
+                          child: TabBar(
+                            controller: _tabController,
+                            isScrollable: true,
+                            tabAlignment: TabAlignment.center,
+                            tabs: const [
+                              Tab(text: 'Workout'),
+                              Tab(text: 'History'),
+                              Tab(text: 'Exercises'),
+                              Tab(text: 'Measurements'),
+                            ],
+                            labelColor: AppTheme.accent,
+                            unselectedLabelColor: AppTheme.textSecondary,
+                            indicatorColor: AppTheme.accent,
+                            indicatorWeight: 1,
+                            labelStyle: AppTheme.bodyMedium
+                                .copyWith(fontWeight: FontWeight.w600),
+                            unselectedLabelStyle: AppTheme.bodyMedium,
+                            dividerColor: AppTheme.surfaceBorder,
+                          ),
+                        ),
                       ],
-                      labelColor: AppTheme.accent,
-                      unselectedLabelColor: AppTheme.textTertiary,
-                      indicatorColor: AppTheme.accent,
-                      indicatorWeight: 2,
-                      labelStyle: AppTheme.titleSmall,
-                      unselectedLabelStyle: AppTheme.titleSmall
-                          .copyWith(fontWeight: FontWeight.w400),
                     ),
                   ),
                   // Tab content

@@ -594,6 +594,9 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
   static const int _completedTasksPageSize = 20;
   int _currentCompletedPage = 0;
   bool _hasMoreCompletedTasks = true;
+  
+  // Sorting options
+  String _sortBy = 'deadline'; // 'deadline', 'importance', 'name'
 
   @override
   bool get wantKeepAlive => true;
@@ -635,6 +638,8 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
       if (mounted) {
         setState(() {
           _tasks = filteredTasks;
+          // Apply sorting after loading
+          _applySort();
           _isLoading = false;
         });
       }
@@ -646,6 +651,61 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
       }
       debugPrint('Error loading tasks: $e');
     }
+  }
+
+  void _applySort() {
+    switch (_sortBy) {
+      case 'deadline':
+        _tasks.sort((a, b) {
+          try {
+            final aDeadline =
+                a.deadline.isNotEmpty ? a.deadline.split(' ')[0] : '';
+            final bDeadline =
+                b.deadline.isNotEmpty ? b.deadline.split(' ')[0] : '';
+
+            // Tasks without due date go to bottom
+            if (aDeadline.isEmpty && bDeadline.isEmpty) return 0;
+            if (aDeadline.isEmpty) return 1;
+            if (bDeadline.isEmpty) return -1;
+
+            final now = DateTime.now();
+            final today = DateTime(now.year, now.month, now.day);
+            final tomorrow = today.add(const Duration(days: 1));
+            final todayStr =
+                "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
+            final tomorrowStr =
+                "${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}";
+
+            // Today tasks come first
+            if (aDeadline == todayStr && bDeadline != todayStr) return -1;
+            if (aDeadline != todayStr && bDeadline == todayStr) return 1;
+
+            // Tomorrow tasks come second
+            if (aDeadline == tomorrowStr && bDeadline != tomorrowStr) return -1;
+            if (aDeadline != tomorrowStr && bDeadline == tomorrowStr) return 1;
+
+            // Other dates sorted chronologically
+            final aDate = DateTime.parse(aDeadline);
+            final bDate = DateTime.parse(bDeadline);
+            return aDate.compareTo(bDate);
+          } catch (e) {
+            return 0;
+          }
+        });
+        break;
+      case 'importance':
+        _tasks.sort((a, b) => b.importance.compareTo(a.importance));
+        break;
+      case 'name':
+        _tasks.sort((a, b) => a.label.compareTo(b.label));
+        break;
+    }
+  }
+
+  void _sortTasks() {
+    setState(() {
+      _applySort();
+    });
   }
 
   Future<void> _loadCompletedTasks({bool loadMore = false}) async {
@@ -956,6 +1016,7 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
           if (_tasks.isNotEmpty) ...[
+            _buildSortHeader(),
             _buildSectionHeader('Active Tasks'),
             ..._buildTaskList(),
           ],
@@ -1001,6 +1062,90 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSortHeader() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Sort By',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              setState(() {
+                _sortBy = value;
+              });
+              _sortTasks();
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(
+                value: 'deadline',
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today, size: 18),
+                    SizedBox(width: 12),
+                    Text('Deadline'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'importance',
+                child: Row(
+                  children: [
+                    Icon(Icons.priority_high, size: 18),
+                    SizedBox(width: 12),
+                    Text('Importance'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'name',
+                child: Row(
+                  children: [
+                    Icon(Icons.abc, size: 18),
+                    SizedBox(width: 12),
+                    Text('Task Name'),
+                  ],
+                ),
+              ),
+            ],
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.accent, width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.sort, color: AppTheme.accent, size: 18),
+                  const SizedBox(width: 6),
+                  Text(
+                    _sortBy == 'deadline'
+                        ? 'Deadline'
+                        : _sortBy == 'importance'
+                            ? 'Importance'
+                            : 'Name',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.accent,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1542,32 +1687,8 @@ class OptimizedTaskCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        // Importance indicator
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1A1A1A),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: const Color(0xFFE8E8E8).withOpacity(0.6),
-                              width: 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color:
-                                    const Color(0xFFE8E8E8).withOpacity(0.15),
-                                blurRadius: 4,
-                                spreadRadius: 0,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            _getImportanceIcon(task.importance),
-                            size: 14,
-                            color: const Color(0xFFE8E8E8).withOpacity(0.8),
-                          ),
-                        ),
+                        // Importance indicator - dot meter
+                        _buildImportanceDots(task.importance),
                       ],
                     ),
                     if (task.description.isNotEmpty ||
@@ -1586,37 +1707,82 @@ class OptimizedTaskCard extends StatelessWidget {
   }
 
   Widget _buildSubtitle() {
-    List<String> subtitleParts = [];
+    List<TextSpan> subtitleSpans = [];
 
     if (task.deadline.isNotEmpty) {
       try {
-        // Format deadline more elegantly
         final parts = task.deadline.split(' ');
-        if (parts.isNotEmpty) {
-          final datePart = parts[0];
-          final dateFormatted = datePart.replaceAll('-', '/');
-          if (parts.length > 1) {
-            final timePart = parts[1];
-            subtitleParts.add('$dateFormatted at $timePart');
-          } else {
-            subtitleParts.add(dateFormatted);
-          }
+        final dateStr = parts[0];
+
+        final DateTime deadline = DateTime.parse(dateStr);
+        final DateTime now = DateTime.now();
+        final DateTime today = DateTime(now.year, now.month, now.day);
+        final DateTime tomorrow = today.add(const Duration(days: 1));
+
+        String dateDisplay = '';
+        bool isBlue = false;
+
+        if (deadline.isAtSameMomentAs(today)) {
+          dateDisplay = "Today";
+          isBlue = true;
+        } else if (deadline.isAtSameMomentAs(tomorrow)) {
+          dateDisplay = "Tomorrow";
+          isBlue = true;
+        } else {
+          // Format as "Apr 5" style
+          final months = [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec'
+          ];
+          dateDisplay = '${months[deadline.month - 1]} ${deadline.day}';
         }
+        
+        subtitleSpans.add(TextSpan(
+          text: dateDisplay,
+          style: TextStyle(
+            color: isBlue ? Colors.blue : AppTheme.textSecondary,
+            fontSize: 12,
+          ),
+        ));
       } catch (e) {
-        subtitleParts.add(task.deadline);
+        subtitleSpans.add(TextSpan(
+          text: task.deadline,
+          style: AppTheme.bodySmall.copyWith(fontSize: 12),
+        ));
       }
     }
 
     if (task.description.isNotEmpty) {
-      subtitleParts.add(task.description);
+      if (subtitleSpans.isNotEmpty) {
+        subtitleSpans.add(TextSpan(
+          text: ' • ',
+          style: AppTheme.bodySmall.copyWith(
+            color: AppTheme.textSecondary,
+            fontSize: 12,
+          ),
+        ));
+      }
+      subtitleSpans.add(TextSpan(
+        text: task.description,
+        style: AppTheme.bodySmall.copyWith(
+          color: AppTheme.textSecondary,
+          fontSize: 12,
+        ),
+      ));
     }
 
-    return Text(
-      subtitleParts.join(' • '),
-      style: AppTheme.bodySmall.copyWith(
-        color: AppTheme.textSecondary,
-        fontSize: 13,
-      ),
+    return RichText(
+      text: TextSpan(children: subtitleSpans),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );
@@ -1675,24 +1841,36 @@ class OptimizedTaskCard extends StatelessWidget {
     );
   }
 
-  Color _getImportanceColor(int importance) {
-    return Colors.black;
+  /// Builds a minimalist dot-based importance indicator
+  Widget _buildImportanceDots(int importance) {
+    const double dotSize = 6.0;
+    const double spacing = 3.0;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        final bool isFilled = index < importance;
+        return Container(
+          margin: EdgeInsets.only(right: index < 4 ? spacing : 0),
+          width: dotSize,
+          height: dotSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isFilled
+                ? Colors.white.withOpacity(0.85)
+                : Colors.white.withOpacity(0.15),
+            border: isFilled
+                ? null
+                : Border.all(
+                    color: Colors.white.withOpacity(0.25),
+                    width: 0.5,
+                  ),
+          ),
+        );
+      }),
+    );
   }
 
-  IconData _getImportanceIcon(int importance) {
-    switch (importance) {
-      case 1:
-        return Icons.battery_1_bar_rounded;
-      case 2:
-        return Icons.battery_2_bar_rounded;
-      case 3:
-        return Icons.battery_3_bar_rounded;
-      case 4:
-        return Icons.battery_4_bar_rounded;
-      case 5:
-        return Icons.battery_full_rounded;
-      default:
-        return Icons.battery_full_rounded;
-    }
-  }
+
+
 }

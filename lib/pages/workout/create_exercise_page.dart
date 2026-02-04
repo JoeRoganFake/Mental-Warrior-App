@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 import '../../services/database_services.dart';
 
 class CreateExercisePage extends StatefulWidget {
@@ -62,15 +63,6 @@ class CreateExercisePageState extends State<CreateExercisePage> {
     'Traps',
     'Lats',
   ];
-
-  // Theme colors consistent with the app
-  final Color _backgroundColor = const Color(0xFF1A1B1E);
-  final Color _surfaceColor = const Color(0xFF26272B);
-  final Color _primaryColor = const Color(0xFF3F8EFC);
-  final Color _dangerColor = const Color(0xFFE53935);
-  final Color _textPrimaryColor = Colors.white;
-  final Color _textSecondaryColor = const Color(0xFFBBBBBB);
-  final Color _inputBgColor = const Color(0xFF303136);
 
   @override
   void initState() {
@@ -185,7 +177,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Text('Exercise updated successfully!'),
-              backgroundColor: _primaryColor,
+              backgroundColor: AppTheme.accent,
               behavior: SnackBarBehavior.floating,
             ),
           );
@@ -203,7 +195,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
               SnackBar(
                 content:
                     const Text('An exercise with this name already exists'),
-                backgroundColor: _dangerColor,
+                backgroundColor: AppTheme.error,
                 behavior: SnackBarBehavior.floating,
               ),
             );
@@ -245,7 +237,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Text('Exercise created successfully!'),
-              backgroundColor: _primaryColor,
+              backgroundColor: AppTheme.accent,
               behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 1), // Short duration since we're navigating away
             ),
@@ -271,7 +263,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(errorMessage),
-            backgroundColor: _dangerColor,
+            backgroundColor: AppTheme.error,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -318,14 +310,14 @@ class CreateExercisePageState extends State<CreateExercisePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: Text(
           widget.editMode ? 'Edit Exercise' : 'Create Exercise',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: AppTheme.headlineMedium,
         ),
-        backgroundColor: _surfaceColor,
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: AppTheme.surface,
+        iconTheme: IconThemeData(color: AppTheme.textPrimary),
         elevation: 0,
       ),
       body: Form(
@@ -381,8 +373,8 @@ class CreateExercisePageState extends State<CreateExercisePage> {
                 child: ElevatedButton(
                   onPressed: _createExercise,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _primaryColor,
-                    foregroundColor: Colors.white,
+                    backgroundColor: AppTheme.accent,
+                    foregroundColor: AppTheme.textPrimary,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -407,11 +399,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
   Widget _buildSectionTitle(String title) {
     return Text(
       title,
-      style: TextStyle(
-        color: _textPrimaryColor,
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-      ),
+      style: AppTheme.headlineMedium,
     );
   }
 
@@ -424,28 +412,28 @@ class CreateExercisePageState extends State<CreateExercisePage> {
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
-      style: TextStyle(color: _textPrimaryColor),
+      style: TextStyle(color: AppTheme.textPrimary),
       textCapitalization: TextCapitalization.words,
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: TextStyle(color: _textSecondaryColor),
+        hintStyle: TextStyle(color: AppTheme.textSecondary),
         filled: true,
-        fillColor: _inputBgColor,
+        fillColor: AppTheme.surfaceLight,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _primaryColor, width: 2),
+          borderSide: BorderSide(color: AppTheme.accent, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _dangerColor, width: 2),
+          borderSide: BorderSide(color: AppTheme.error, width: 2),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: _dangerColor, width: 2),
+          borderSide: BorderSide(color: AppTheme.error, width: 2),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
@@ -459,14 +447,14 @@ class CreateExercisePageState extends State<CreateExercisePage> {
   Widget _buildEquipmentSelector() {
     return Container(
       decoration: BoxDecoration(
-        color: _inputBgColor,
+        color: AppTheme.surfaceLight,
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: DropdownButtonFormField<String>(
         value: _selectedEquipment,
-        dropdownColor: _inputBgColor,
-        style: TextStyle(color: _textPrimaryColor),
+        dropdownColor: AppTheme.surfaceLight,
+        style: TextStyle(color: AppTheme.textPrimary),
         decoration: const InputDecoration(
           border: InputBorder.none,
           contentPadding: EdgeInsets.zero,
@@ -491,14 +479,14 @@ class CreateExercisePageState extends State<CreateExercisePage> {
   Widget _buildPrimaryMuscleSelector() {
     return Container(
       decoration: BoxDecoration(
-        color: _inputBgColor,
+        color: AppTheme.surfaceLight,
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: DropdownButtonFormField<String>(
         value: _selectedPrimaryMuscle,
-        dropdownColor: _inputBgColor,
-        style: TextStyle(color: _textPrimaryColor),
+        dropdownColor: AppTheme.surfaceLight,
+        style: TextStyle(color: AppTheme.textPrimary),
         decoration: const InputDecoration(
           border: InputBorder.none,
           contentPadding: EdgeInsets.zero,
@@ -530,7 +518,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
 
     return Container(
       decoration: BoxDecoration(
-        color: _inputBgColor,
+        color: AppTheme.surfaceLight,
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.all(16),
@@ -540,10 +528,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
           if (_selectedSecondaryMuscles.isNotEmpty) ...[
             Text(
               'Selected: ${_selectedSecondaryMuscles.join(', ')}',
-              style: TextStyle(
-                color: _textSecondaryColor,
-                fontSize: 14,
-              ),
+              style: AppTheme.bodySmall,
             ),
             const SizedBox(height: 12),
           ],
@@ -562,19 +547,21 @@ class CreateExercisePageState extends State<CreateExercisePage> {
                   decoration: BoxDecoration(
                     color: isSelected
                         ? _getColorForType(muscle).withOpacity(0.7)
-                        : _surfaceColor,
+                        : AppTheme.surface,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
                       color: isSelected
                           ? _getColorForType(muscle)
-                          : _textSecondaryColor.withOpacity(0.3),
+                          : AppTheme.textSecondary.withOpacity(0.3),
                       width: 1,
                     ),
                   ),
                   child: Text(
                     muscle,
                     style: TextStyle(
-                      color: isSelected ? Colors.white : _textPrimaryColor,
+                      color: isSelected
+                          ? AppTheme.textPrimary
+                          : AppTheme.textPrimary,
                       fontSize: 14,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
@@ -591,7 +578,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
   Widget _buildInstructionsSection() {
     return Container(
       decoration: BoxDecoration(
-        color: _inputBgColor,
+        color: AppTheme.surfaceLight,
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.all(16),
@@ -604,14 +591,14 @@ class CreateExercisePageState extends State<CreateExercisePage> {
               Expanded(
                 child: TextField(
                   controller: _instructionController,
-                  style: TextStyle(color: _textPrimaryColor),
+                  style: TextStyle(color: AppTheme.textPrimary),
                   textCapitalization: TextCapitalization.sentences,
                   maxLines: null,
                   decoration: InputDecoration(
                     hintText: 'Enter step instruction...',
-                    hintStyle: TextStyle(color: _textSecondaryColor),
+                    hintStyle: TextStyle(color: AppTheme.textSecondary),
                     filled: true,
-                    fillColor: _surfaceColor,
+                    fillColor: AppTheme.surface,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
@@ -627,11 +614,11 @@ class CreateExercisePageState extends State<CreateExercisePage> {
               const SizedBox(width: 8),
               Container(
                 decoration: BoxDecoration(
-                  color: _primaryColor,
+                  color: AppTheme.accent,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: IconButton(
-                  icon: const Icon(Icons.add, color: Colors.white),
+                  icon: Icon(Icons.add, color: AppTheme.textPrimary),
                   onPressed: _addInstructionStep,
                   tooltip: 'Add Step',
                 ),
@@ -643,9 +630,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
             const SizedBox(height: 16),
             Text(
               'Steps (${_instructionSteps.length})',
-              style: TextStyle(
-                color: _textSecondaryColor,
-                fontSize: 14,
+              style: AppTheme.bodySmall.copyWith(
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -670,10 +655,10 @@ class CreateExercisePageState extends State<CreateExercisePage> {
                   key: ValueKey('instruction_$index'),
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
-                    color: _surfaceColor,
+                    color: AppTheme.surface,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: _primaryColor.withOpacity(0.3),
+                      color: AppTheme.accent.withOpacity(0.3),
                       width: 1,
                     ),
                   ),
@@ -686,14 +671,14 @@ class CreateExercisePageState extends State<CreateExercisePage> {
                       width: 32,
                       height: 32,
                       decoration: BoxDecoration(
-                        color: _primaryColor,
+                        color: AppTheme.accent,
                         shape: BoxShape.circle,
                       ),
                       child: Center(
                         child: Text(
                           '${index + 1}',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
@@ -702,17 +687,15 @@ class CreateExercisePageState extends State<CreateExercisePage> {
                     ),
                     title: Text(
                       _instructionSteps[index],
-                      style: TextStyle(
-                        color: _textPrimaryColor,
-                        fontSize: 14,
-                      ),
+                      style: AppTheme.bodySmall,
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         IconButton(
                           icon:
-                              Icon(Icons.edit, color: _primaryColor, size: 20),
+                              Icon(Icons.edit,
+                              color: AppTheme.accent, size: 20),
                           onPressed: () => _editInstructionStep(index),
                           tooltip: 'Edit',
                           padding: EdgeInsets.zero,
@@ -721,7 +704,8 @@ class CreateExercisePageState extends State<CreateExercisePage> {
                         const SizedBox(width: 8),
                         IconButton(
                           icon:
-                              Icon(Icons.delete, color: _dangerColor, size: 20),
+                              Icon(Icons.delete,
+                              color: AppTheme.error, size: 20),
                           onPressed: () => _removeInstructionStep(index),
                           tooltip: 'Delete',
                           padding: EdgeInsets.zero,
@@ -729,7 +713,7 @@ class CreateExercisePageState extends State<CreateExercisePage> {
                         ),
                         const SizedBox(width: 8),
                         Icon(Icons.drag_handle,
-                            color: _textSecondaryColor, size: 20),
+                            color: AppTheme.textSecondary, size: 20),
                       ],
                     ),
                   ),
@@ -741,9 +725,8 @@ class CreateExercisePageState extends State<CreateExercisePage> {
             const SizedBox(height: 8),
             Text(
               'Tip: Long press and drag to reorder steps',
-              style: TextStyle(
-                color: _textSecondaryColor.withOpacity(0.7),
-                fontSize: 12,
+              style: AppTheme.bodySmall.copyWith(
+                color: AppTheme.textTertiary,
                 fontStyle: FontStyle.italic,
               ),
             ),
@@ -752,9 +735,8 @@ class CreateExercisePageState extends State<CreateExercisePage> {
             Center(
               child: Text(
                 'No instructions added yet',
-                style: TextStyle(
-                  color: _textSecondaryColor.withOpacity(0.7),
-                  fontSize: 14,
+                style: AppTheme.bodySmall.copyWith(
+                  color: AppTheme.textTertiary,
                   fontStyle: FontStyle.italic,
                 ),
               ),

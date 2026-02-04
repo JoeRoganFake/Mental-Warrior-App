@@ -55,6 +55,8 @@ class _WorkoutWeekChartState extends State<WorkoutWeekChart> {
 
     return Card(
       margin: const EdgeInsets.all(16),
+      color: Colors.transparent,
+      elevation: 0,
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(

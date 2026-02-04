@@ -62,7 +62,7 @@ class MeditationPageState extends State<MeditationPage>
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      AppTheme.accent.withValues(alpha: 0.05),
+                      AppTheme.accent.withOpacity(0.0005),
                       AppTheme.background,
                     ],
                   ),
@@ -84,8 +84,8 @@ class MeditationPageState extends State<MeditationPage>
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: [
-                    AppTheme.accent.withOpacity(0.3),
-                    AppTheme.accent.withOpacity(0.1),
+                          AppTheme.accent.withOpacity(0.02),
+                          AppTheme.accent.withOpacity(0.005),
                   ],
                 ),
               ),
@@ -138,12 +138,12 @@ class MeditationPageState extends State<MeditationPage>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              color.withOpacity(0.1),
-              color.withOpacity(0.05),
+              color.withOpacity(0.015),
+              color.withOpacity(0.003),
             ],
           ),
           border: Border.all(
-            color: color,
+            color: color.withOpacity(0.1),
             width: 2,
           ),
         ),
@@ -239,13 +239,13 @@ class MeditationPageState extends State<MeditationPage>
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                                 colors: [
-                                  AppTheme.accent.withOpacity(0.15),
-                                  AppTheme.accent.withOpacity(0.08),
+                                  AppTheme.accent.withOpacity(0.02),
+                                  AppTheme.accent.withOpacity(0.005),
                                 ],
                               ),
                               borderRadius: AppTheme.borderRadiusMd,
                               border: Border.all(
-                                color: AppTheme.accent.withOpacity(0.3),
+                                color: AppTheme.accent.withOpacity(0.08),
                                 width: 1.5,
                               ),
                             ),
@@ -461,7 +461,7 @@ class RandomPatternPainter extends CustomPainter {
       final radius = random.nextDouble() * 1.5 + 0.5;
 
       final paint = Paint()
-        ..color = AppTheme.accent.withOpacity(0.01 * animationValue)
+        ..color = AppTheme.accent.withOpacity(0.002 * animationValue)
         ..style = PaintingStyle.fill;
 
       canvas.drawCircle(Offset(x, y), radius, paint);

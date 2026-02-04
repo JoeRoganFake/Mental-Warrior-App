@@ -440,9 +440,9 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
     // Display exercise details from local JSON
     final exercise = _exercise;
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1B1E),
+      backgroundColor: AppTheme.surface,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF26272B),
+        backgroundColor: AppTheme.surfaceLight,
         iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
             // Remove API ID marker if present
@@ -520,7 +520,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                   height: 320,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
-                    color: const Color(0xFF1A1B1E),
+                    color: AppTheme.surface,
                     border: Border.all(
                       color: Colors.grey[800]!,
                       width: 1.5,
@@ -547,7 +547,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                         final String imagePath =
                             (exercise['images'] as List)[index];
                         return Container(
-                          color: const Color(0xFF1A1B1E),
+                          color: AppTheme.surface,
                           child: Image.network(
                             'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/$imagePath',
                             fit: BoxFit.contain,
@@ -592,7 +592,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                                       label: const Text('Retry'),
                                       style: ElevatedButton.styleFrom(
                                         backgroundColor:
-                                            const Color(0xFF3F8EFC),
+                                            AppTheme.accent,
                                         foregroundColor: Colors.white,
                                       ),
                                     ),
@@ -620,12 +620,12 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: index == _currentImageIndex
-                                ? const Color(0xFF3F8EFC)
+                                ? AppTheme.accent
                                 : Colors.grey[700],
                             boxShadow: index == _currentImageIndex
                                 ? [
                                     BoxShadow(
-                                      color: const Color(0xFF3F8EFC)
+                                      color: AppTheme.accent
                                           .withValues(alpha: 0.4),
                                       blurRadius: 8,
                                       spreadRadius: 1,
@@ -712,14 +712,13 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Theme.of(context).primaryColor.withValues(alpha: 0.2),
-                          Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                          AppTheme.accent.withValues(alpha: 0.2),
+                          AppTheme.accent.withValues(alpha: 0.1),
                         ],
                       ),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: Theme.of(context)
-                            .primaryColor
+                        color: AppTheme.accent
                             .withValues(alpha: 0.3),
                         width: 1.5,
                       ),
@@ -730,13 +729,13 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                         Icon(
                           Icons.fitness_center,
                           size: 16,
-                          color: Theme.of(context).primaryColor,
+                          color: AppTheme.accent,
                         ),
                         const SizedBox(width: 6),
                         Text(
                           muscle,
                           style: TextStyle(
-                            color: Theme.of(context).primaryColor,
+                            color: AppTheme.accent,
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
                           ),
@@ -922,8 +921,8 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                             width: 6,
                             height: 6,
                             margin: const EdgeInsets.only(top: 6, right: 12),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF3F8EFC),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accent,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -958,7 +957,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF26272B),
+        color: AppTheme.surfaceLight,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: Colors.grey[800]!,
@@ -980,7 +979,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
               Icon(
                 icon,
                 size: 20,
-                color: const Color(0xFF3F8EFC),
+                color: AppTheme.accent,
               ),
               const SizedBox(width: 10),
               Text(
@@ -1015,7 +1014,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
               'Loading exercise history...',
               style: TextStyle(
                 fontSize: 16,
-                color: Color(0xFFBDBDBD),
+                color: AppTheme.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1074,12 +1073,12 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF3F8EFC).withValues(alpha: 0.1),
-                      const Color(0xFF3F8EFC).withValues(alpha: 0.05),
+                      AppTheme.accent.withValues(alpha: 0.1),
+                      AppTheme.accent.withValues(alpha: 0.05),
                     ],
                   ),
                   border: Border.all(
-                    color: const Color(0xFF3F8EFC).withValues(alpha: 0.3),
+                    color: AppTheme.accent.withValues(alpha: 0.3),
                     width: 1.5,
                   ),
                   borderRadius: BorderRadius.circular(12),
@@ -1087,9 +1086,9 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.info_outline,
-                      color: Color(0xFF3F8EFC),
+                      color: AppTheme.accent,
                       size: 22,
                     ),
                     const SizedBox(width: 12),

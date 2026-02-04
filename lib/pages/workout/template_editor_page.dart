@@ -3,6 +3,7 @@ import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/workout/exercise_selection_page.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 class TemplateEditorPage extends StatefulWidget {
   final int? templateId; // If editing an existing template
@@ -49,16 +50,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
     Color(0xFF673AB7), // Deep Purple
   ];
 
-  // Theme colors (matching workout_session_page)
-  final Color _backgroundColor = const Color(0xFF1A1B1E);
-  final Color _surfaceColor = const Color(0xFF26272B);
-  final Color _primaryColor = const Color(0xFF3F8EFC);
-  final Color _successColor = const Color(0xFF4CAF50);
-  final Color _dangerColor = const Color(0xFFE53935);
-  final Color _warningColor = const Color(0xFFFF9800);
-  final Color _textPrimaryColor = Colors.white;
-  final Color _textSecondaryColor = const Color(0xFFBBBBBB);
-  final Color _inputBgColor = const Color(0xFF303136);
+  // Theme colors from AppTheme design system
   
   bool _showWeightInLbs = false;
   int _defaultRestTimer = 90; // Default from settings
@@ -173,11 +165,12 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: _surfaceColor,
-        title: const Text('Discard changes?', style: TextStyle(color: Colors.white)),
+        backgroundColor: AppTheme.surface,
+        title: const Text('Discard changes?',
+            style: TextStyle(color: AppTheme.textPrimary)),
         content: const Text(
           'You have unsaved changes. Are you sure you want to discard them?',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
@@ -185,7 +178,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: _dangerColor),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Discard'),
           ),
@@ -457,7 +450,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Exercise replaced successfully'),
-          backgroundColor: _successColor,
+          backgroundColor: AppTheme.success,
           behavior: SnackBarBehavior.fixed,
         ),
       );
@@ -475,14 +468,15 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: _surfaceColor,
-          title: Text('Set Rest Time', style: TextStyle(color: _textPrimaryColor)),
+          backgroundColor: AppTheme.surface,
+          title: Text('Set Rest Time',
+              style: TextStyle(color: AppTheme.textPrimary)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 'Rest time between sets',
-                style: TextStyle(color: _textSecondaryColor),
+                style: TextStyle(color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 24),
               Row(
@@ -492,7 +486,8 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                   Column(
                     children: [
                       IconButton(
-                        icon: Icon(Icons.arrow_drop_up, color: _primaryColor, size: 32),
+                        icon: Icon(Icons.arrow_drop_up,
+                            color: AppTheme.accent, size: 32),
                         onPressed: () {
                           setDialogState(() {
                             if (minutes < 10) minutes++;
@@ -503,13 +498,13 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                         width: 60,
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: _inputBgColor,
+                          color: AppTheme.surfaceLight,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           '$minutes',
                           style: TextStyle(
-                            color: _textPrimaryColor,
+                            color: AppTheme.textPrimary,
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
                           ),
@@ -517,14 +512,16 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                         ),
                       ),
                       IconButton(
-                        icon: Icon(Icons.arrow_drop_down, color: _primaryColor, size: 32),
+                        icon: Icon(Icons.arrow_drop_down,
+                            color: AppTheme.accent, size: 32),
                         onPressed: () {
                           setDialogState(() {
                             if (minutes > 0) minutes--;
                           });
                         },
                       ),
-                      Text('min', style: TextStyle(color: _textSecondaryColor)),
+                      Text('min',
+                          style: TextStyle(color: AppTheme.textSecondary)),
                     ],
                   ),
                   Padding(
@@ -532,7 +529,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                     child: Text(
                       ':',
                       style: TextStyle(
-                        color: _textPrimaryColor,
+                        color: AppTheme.textPrimary,
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
@@ -542,7 +539,8 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                   Column(
                     children: [
                       IconButton(
-                        icon: Icon(Icons.arrow_drop_up, color: _primaryColor, size: 32),
+                        icon: Icon(Icons.arrow_drop_up,
+                            color: AppTheme.accent, size: 32),
                         onPressed: () {
                           setDialogState(() {
                             seconds = (seconds + 15) % 60;
@@ -553,13 +551,13 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                         width: 60,
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         decoration: BoxDecoration(
-                          color: _inputBgColor,
+                          color: AppTheme.surfaceLight,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           seconds.toString().padLeft(2, '0'),
                           style: TextStyle(
-                            color: _textPrimaryColor,
+                            color: AppTheme.textPrimary,
                             fontSize: 24,
                             fontWeight: FontWeight.bold,
                           ),
@@ -567,14 +565,16 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                         ),
                       ),
                       IconButton(
-                        icon: Icon(Icons.arrow_drop_down, color: _primaryColor, size: 32),
+                        icon: Icon(Icons.arrow_drop_down,
+                            color: AppTheme.accent, size: 32),
                         onPressed: () {
                           setDialogState(() {
                             seconds = (seconds - 15 + 60) % 60;
                           });
                         },
                       ),
-                      Text('sec', style: TextStyle(color: _textSecondaryColor)),
+                      Text('sec',
+                          style: TextStyle(color: AppTheme.textSecondary)),
                     ],
                   ),
                 ],
@@ -584,10 +584,11 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel', style: TextStyle(color: _textSecondaryColor)),
+              child: Text('Cancel',
+                  style: TextStyle(color: AppTheme.textSecondary)),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
               onPressed: () {
                 Navigator.pop(context);
                 _updateExerciseRestTime(exerciseIndex, minutes * 60 + seconds);
@@ -661,13 +662,13 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
     return WillPopScope(
       onWillPop: _onWillPop,
       child: Scaffold(
-        backgroundColor: _backgroundColor,
+        backgroundColor: AppTheme.background,
         appBar: AppBar(
-          backgroundColor: _backgroundColor,
+          backgroundColor: AppTheme.background,
           elevation: 0,
           leading: IconButton(
             icon: Icon(Icons.keyboard_arrow_down,
-                color: _textPrimaryColor, size: 28),
+                color: AppTheme.textPrimary, size: 28),
             onPressed: () async {
               if (await _onWillPop()) {
                 Navigator.pop(context);
@@ -677,13 +678,13 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
           title: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: _surfaceColor,
+              color: AppTheme.surface,
               borderRadius: BorderRadius.circular(8),
             ),
             child: TextField(
               controller: _nameController,
               style: TextStyle(
-                color: _textPrimaryColor,
+                color: AppTheme.textPrimary,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
               ),
@@ -693,7 +694,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                 contentPadding: EdgeInsets.zero,
                 hintText: 'Template Name',
                 hintStyle: TextStyle(
-                  color: _textSecondaryColor,
+                  color: AppTheme.textSecondary,
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
                 ),
@@ -703,11 +704,12 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
           ),
           actions: [
             TextButton.icon(
-              icon: Icon(Icons.check, color: _isLoading ? Colors.grey : _successColor),
+              icon: Icon(Icons.check,
+                  color: _isLoading ? Colors.grey : AppTheme.success),
               label: Text(
                 'Save',
                 style: TextStyle(
-                  color: _isLoading ? Colors.grey : _successColor,
+                  color: _isLoading ? Colors.grey : AppTheme.success,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -736,7 +738,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
               ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _addExercise,
-          backgroundColor: _primaryColor,
+          backgroundColor: AppTheme.accent,
           icon: const Icon(Icons.add),
           label: const Text('Add Exercise'),
         ),
@@ -752,22 +754,22 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
           Icon(
             Icons.fitness_center,
             size: 64,
-            color: _textSecondaryColor.withOpacity(0.3),
+            color: AppTheme.textSecondary.withOpacity(0.3),
           ),
           const SizedBox(height: 16),
           Text(
             'No exercises yet',
             style: TextStyle(
-              color: _textSecondaryColor,
+              color: AppTheme.textSecondary,
               fontSize: 18,
             ),
           ),
           const SizedBox(height: 24),
           TextButton.icon(
-            icon: Icon(Icons.add, color: _primaryColor),
+            icon: Icon(Icons.add, color: AppTheme.accent),
             label: Text(
               'Add Your First Exercise',
-              style: TextStyle(color: _primaryColor),
+              style: TextStyle(color: AppTheme.accent),
             ),
             onPressed: _addExercise,
           ),
@@ -816,7 +818,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                   bottom: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: _surfaceColor,
+                      color: AppTheme.surface,
                   borderRadius: BorderRadius.circular(12),
                   border: isInSuperset
                       ? Border.all(color: supersetColor.withOpacity(0.3), width: 1)
@@ -869,7 +871,8 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                           // Drag handle for reordering
                           ReorderableDragStartListener(
                             index: exerciseIndex,
-                            child: Icon(Icons.drag_handle, color: _textSecondaryColor),
+                                child: Icon(Icons.drag_handle,
+                                    color: AppTheme.textSecondary),
                           ),
                           const SizedBox(width: 12),
                           // Exercise name (tappable)
@@ -879,7 +882,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                               child: Text(
                                 _cleanExerciseName(exercise.name),
                                 style: TextStyle(
-                                  color: _textPrimaryColor,
+                                      color: AppTheme.textPrimary,
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -889,7 +892,8 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                           ),
                           // Options menu
                           PopupMenuButton<String>(
-                            icon: Icon(Icons.more_vert, color: _textSecondaryColor),
+                                icon: Icon(Icons.more_vert,
+                                    color: AppTheme.textSecondary),
                             color: Colors.black,
                             elevation: 8,
                             shape: RoundedRectangleBorder(
@@ -915,10 +919,10 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                                       child: ListTile(
                                         contentPadding: EdgeInsets.zero,
                                         leading: Icon(Icons.swap_horiz,
-                                            color: _primaryColor),
+                                            color: AppTheme.accent),
                                         title: Text('Replace Exercise',
                                             style: TextStyle(
-                                                color: _textPrimaryColor)),
+                                                color: AppTheme.textPrimary)),
                                       ),
                                     ),
                                 if (!isInSuperset)
@@ -926,9 +930,11 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                                     value: 'superset',
                                     child: ListTile(
                                       contentPadding: EdgeInsets.zero,
-                                      leading: Icon(Icons.link, color: _primaryColor),
+                                          leading: Icon(Icons.link,
+                                              color: AppTheme.accent),
                                       title: Text('Create Superset',
-                                          style: TextStyle(color: _textPrimaryColor)),
+                                              style: TextStyle(
+                                                  color: AppTheme.textPrimary)),
                                     ),
                                   )
                                 else
@@ -936,27 +942,33 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                                     value: 'remove_superset',
                                     child: ListTile(
                                       contentPadding: EdgeInsets.zero,
-                                      leading: Icon(Icons.link_off, color: _warningColor),
+                                          leading: Icon(Icons.link_off,
+                                              color: AppTheme.warning),
                                       title: Text('Remove from Superset',
-                                          style: TextStyle(color: _textPrimaryColor)),
+                                              style: TextStyle(
+                                                  color: AppTheme.textPrimary)),
                                     ),
                                   ),
                                 PopupMenuItem<String>(
                                   value: 'rest_time',
                                   child: ListTile(
                                     contentPadding: EdgeInsets.zero,
-                                    leading: Icon(Icons.timer, color: _primaryColor),
+                                        leading: Icon(Icons.timer,
+                                            color: AppTheme.accent),
                                     title: Text('Set Rest Time',
-                                        style: TextStyle(color: _textPrimaryColor)),
+                                            style: TextStyle(
+                                                color: AppTheme.textPrimary)),
                                   ),
                                 ),
                                 PopupMenuItem<String>(
                                   value: 'delete',
                                   child: ListTile(
                                     contentPadding: EdgeInsets.zero,
-                                    leading: Icon(Icons.delete, color: _dangerColor),
+                                        leading: Icon(Icons.delete,
+                                            color: AppTheme.error),
                                     title: Text('Delete Exercise',
-                                        style: TextStyle(color: _textPrimaryColor)),
+                                            style: TextStyle(
+                                                color: AppTheme.textPrimary)),
                                   ),
                                 ),
                               ];
@@ -972,7 +984,8 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Text(
                           exercise.equipment,
-                          style: TextStyle(color: _textSecondaryColor, fontSize: 12),
+                              style: TextStyle(
+                                  color: AppTheme.textSecondary, fontSize: 12),
                         ),
                       ),
                     
@@ -983,11 +996,14 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                         onTap: () => _showSetRestDialog(exerciseIndex),
                         child: Row(
                           children: [
-                            Icon(Icons.timer, size: 14, color: _textSecondaryColor),
+                                Icon(Icons.timer,
+                                    size: 14, color: AppTheme.textSecondary),
                             const SizedBox(width: 4),
                             Text(
                               'Rest: ${restMinutes > 0 ? '${restMinutes}m ' : ''}${restSeconds}s',
-                              style: TextStyle(color: _textSecondaryColor, fontSize: 12),
+                                  style: TextStyle(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 12),
                             ),
                           ],
                         ),
@@ -1008,7 +1024,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                               child: Text(
                                 'WEIGHT',
                                 style: TextStyle(
-                                  color: _textSecondaryColor,
+                                      color: AppTheme.textSecondary,
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -1020,7 +1036,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                               child: Text(
                                 'REPS',
                                 style: TextStyle(
-                                  color: _textSecondaryColor,
+                                      color: AppTheme.textSecondary,
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -1048,8 +1064,8 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                             style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: _primaryColor,
-                            side: BorderSide(color: _primaryColor),
+                                foregroundColor: AppTheme.accent,
+                                side: BorderSide(color: AppTheme.accent),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -1074,20 +1090,22 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: _surfaceColor,
-        title: Text('Delete Exercise', style: TextStyle(color: _textPrimaryColor)),
+        backgroundColor: AppTheme.surface,
+        title: Text('Delete Exercise',
+            style: TextStyle(color: AppTheme.textPrimary)),
         content: Text(
           'Are you sure you want to delete "${_cleanExerciseName(exercise.name)}"?',
-          style: TextStyle(color: _textSecondaryColor),
+          style: TextStyle(color: AppTheme.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: TextStyle(color: _textSecondaryColor)),
+            child:
+                Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: _dangerColor,
+              backgroundColor: AppTheme.error,
               foregroundColor: Colors.white,
             ),
             onPressed: () {
@@ -1130,7 +1148,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20.0),
-        color: _dangerColor,
+        color: AppTheme.error,
         child: const Icon(
           Icons.delete,
           color: Colors.white,
@@ -1144,7 +1162,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: _textSecondaryColor.withOpacity(0.1),
+              color: AppTheme.textSecondary.withOpacity(0.1),
               width: 1,
             ),
           ),
@@ -1156,14 +1174,14 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: _primaryColor.withOpacity(0.15),
+                color: AppTheme.accent.withOpacity(0.15),
                 borderRadius: BorderRadius.circular(8),
               ),
               alignment: Alignment.center,
               child: Text(
                 '${set.setNumber}',
                 style: TextStyle(
-                  color: _primaryColor,
+                  color: AppTheme.accent,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -1179,28 +1197,28 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: _textPrimaryColor,
+                    color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w500,
                   ),
                   decoration: InputDecoration(
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     isDense: true,
                     filled: true,
-                    fillColor: _inputBgColor,
+                    fillColor: AppTheme.surfaceLight,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
                     ),
                     hintText: '-',
                     hintStyle: TextStyle(
-                      color: _textSecondaryColor.withOpacity(0.6),
+                      color: AppTheme.textSecondary.withOpacity(0.6),
                       fontSize: 14,
                     ),
                     suffix: Padding(
                       padding: const EdgeInsets.only(right: 8.0),
                       child: Text(
                         _weightUnit,
-                        style: TextStyle(color: _textSecondaryColor),
+                        style: TextStyle(color: AppTheme.textSecondary),
                       ),
                     ),
                   ),
@@ -1234,21 +1252,21 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: _textPrimaryColor,
+                    color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w500,
                   ),
                   decoration: InputDecoration(
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     isDense: true,
                     filled: true,
-                    fillColor: _inputBgColor,
+                    fillColor: AppTheme.surfaceLight,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
                       borderSide: BorderSide.none,
                     ),
                     hintText: '-',
                     hintStyle: TextStyle(
-                      color: _textSecondaryColor.withOpacity(0.6),
+                      color: AppTheme.textSecondary.withOpacity(0.6),
                       fontSize: 14,
                     ),
                   ),
@@ -1280,7 +1298,7 @@ class TemplateEditorPageState extends State<TemplateEditorPage> {
                   ? IconButton(
                       icon: Icon(
                         Icons.remove_circle_outline,
-                        color: _dangerColor,
+                        color: AppTheme.error,
                         size: 20,
                       ),
                       onPressed: () => _removeSet(exerciseIndex, setIndex),
@@ -1316,13 +1334,6 @@ class _TemplateSupersetSelectionPage extends StatefulWidget {
 class _TemplateSupersetSelectionPageState extends State<_TemplateSupersetSelectionPage> {
   final Set<int> _selectedExerciseIndices = {};
 
-  // Theme colors
-  final Color _backgroundColor = const Color(0xFF1A1B1E);
-  final Color _surfaceColor = const Color(0xFF26272B);
-  final Color _primaryColor = const Color(0xFF3F8EFC);
-  final Color _textPrimaryColor = Colors.white;
-  final Color _textSecondaryColor = const Color(0xFFBBBBBB);
-
   @override
   void initState() {
     super.initState();
@@ -1333,15 +1344,15 @@ class _TemplateSupersetSelectionPageState extends State<_TemplateSupersetSelecti
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: _surfaceColor,
+        backgroundColor: AppTheme.surface,
         title: Text(
           'Create Superset',
-          style: TextStyle(color: _textPrimaryColor),
+          style: TextStyle(color: AppTheme.textPrimary),
         ),
         leading: IconButton(
-          icon: Icon(Icons.close, color: _textPrimaryColor),
+          icon: Icon(Icons.close, color: AppTheme.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
@@ -1355,8 +1366,8 @@ class _TemplateSupersetSelectionPageState extends State<_TemplateSupersetSelecti
               'Create',
               style: TextStyle(
                 color: _selectedExerciseIndices.length >= 2
-                    ? _primaryColor
-                    : _textSecondaryColor,
+                    ? AppTheme.accent
+                    : AppTheme.textSecondary,
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -1371,18 +1382,18 @@ class _TemplateSupersetSelectionPageState extends State<_TemplateSupersetSelecti
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
-            color: _primaryColor.withOpacity(0.1),
+            color: AppTheme.accent.withOpacity(0.1),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.info_outline, color: _primaryColor, size: 20),
+                    Icon(Icons.info_outline, color: AppTheme.accent, size: 20),
                     const SizedBox(width: 8),
                     Text(
                       'Select exercises for superset',
                       style: TextStyle(
-                        color: _textPrimaryColor,
+                        color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
@@ -1393,7 +1404,7 @@ class _TemplateSupersetSelectionPageState extends State<_TemplateSupersetSelecti
                 Text(
                   'Choose 2 or more exercises to group together. Selected: ${_selectedExerciseIndices.length}',
                   style: TextStyle(
-                    color: _textSecondaryColor,
+                    color: AppTheme.textSecondary,
                     fontSize: 14,
                   ),
                 ),
@@ -1418,12 +1429,12 @@ class _TemplateSupersetSelectionPageState extends State<_TemplateSupersetSelecti
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? _primaryColor.withOpacity(0.15)
-                        : _surfaceColor,
+                        ? AppTheme.accent.withOpacity(0.15)
+                        : AppTheme.surface,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
-                          ? _primaryColor
+                          ? AppTheme.accent
                           : existingSuperset != null
                               ? supersetColor.withOpacity(0.5)
                               : Colors.transparent,
@@ -1439,26 +1450,26 @@ class _TemplateSupersetSelectionPageState extends State<_TemplateSupersetSelecti
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? _primaryColor.withOpacity(0.3)
+                            ? AppTheme.accent.withOpacity(0.3)
                             : existingSuperset != null
                                 ? supersetColor.withOpacity(0.15)
-                                : _primaryColor.withOpacity(0.15),
+                                : AppTheme.accent.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
                         existingSuperset != null ? Icons.link : Icons.fitness_center,
                         color: isSelected 
-                            ? _primaryColor 
+                            ? AppTheme.accent 
                             : existingSuperset != null
                                 ? supersetColor
-                                : _textSecondaryColor,
+                                : AppTheme.textSecondary,
                         size: 20,
                       ),
                     ),
                     title: Text(
                       widget.cleanExerciseName(exercise.name),
                       style: TextStyle(
-                        color: _textPrimaryColor,
+                        color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
@@ -1469,7 +1480,7 @@ class _TemplateSupersetSelectionPageState extends State<_TemplateSupersetSelecti
                         Text(
                           '${exercise.sets.length} sets',
                           style: TextStyle(
-                            color: _textSecondaryColor,
+                            color: AppTheme.textSecondary,
                             fontSize: 12,
                           ),
                         ),
@@ -1495,9 +1506,9 @@ class _TemplateSupersetSelectionPageState extends State<_TemplateSupersetSelecti
                           }
                         });
                       },
-                      activeColor: _primaryColor,
+                      activeColor: AppTheme.accent,
                       checkColor: Colors.white,
-                      side: BorderSide(color: _textSecondaryColor),
+                      side: BorderSide(color: AppTheme.textSecondary),
                     ),
                     onTap: () {
                       setState(() {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 class HiddenExercisesPage extends StatefulWidget {
   const HiddenExercisesPage({Key? key}) : super(key: key);
@@ -13,14 +14,6 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
   final CustomExerciseService _customExerciseService = CustomExerciseService();
   List<Map<String, dynamic>> _hiddenExercises = [];
   bool _isLoading = true;
-
-  // Theme colors
-  final Color _backgroundColor = const Color(0xFF1A1B1E);
-  final Color _surfaceColor = const Color(0xFF26272B);
-  final Color _cardColor = const Color(0xFF303136);
-  final Color _primaryColor = const Color(0xFF3F8EFC);
-  final Color _textPrimaryColor = Colors.white;
-  final Color _textSecondaryColor = const Color(0xFFBBBBBB);
 
   @override
   void initState() {
@@ -55,7 +48,7 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('✅ "$exerciseName" restored to search'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppTheme.success,
             duration: const Duration(seconds: 2),
           ),
         );
@@ -69,7 +62,7 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error restoring exercise: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.error,
           ),
         );
       }
@@ -99,7 +92,7 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: const Text(
           'Hidden Exercises',
@@ -108,14 +101,14 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        backgroundColor: _surfaceColor,
+        backgroundColor: AppTheme.surface,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
       ),
       body: _isLoading
           ? Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(_primaryColor),
+                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accent),
               ),
             )
           : _hiddenExercises.isEmpty
@@ -164,7 +157,7 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w800,
-                color: _textPrimaryColor,
+                color: AppTheme.textPrimary,
                 letterSpacing: -0.5,
               ),
             ),
@@ -174,7 +167,7 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
-                color: _textSecondaryColor,
+                color: AppTheme.textSecondary,
                 height: 1.5,
               ),
             ),
@@ -184,12 +177,12 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    _primaryColor.withValues(alpha: 0.15),
-                    _primaryColor.withValues(alpha: 0.05),
+                    AppTheme.accent.withValues(alpha: 0.15),
+                    AppTheme.accent.withValues(alpha: 0.05),
                   ],
                 ),
                 border: Border.all(
-                  color: _primaryColor.withValues(alpha: 0.3),
+                  color: AppTheme.accent.withValues(alpha: 0.3),
                   width: 1.5,
                 ),
                 borderRadius: BorderRadius.circular(12),
@@ -199,7 +192,7 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
                 children: [
                   Icon(
                     Icons.info_outline,
-                    color: _primaryColor,
+                    color: AppTheme.accent,
                     size: 22,
                   ),
                   const SizedBox(width: 12),
@@ -207,7 +200,7 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
                     child: Text(
                       'Hidden exercises remain in workout history',
                       style: TextStyle(
-                        color: _primaryColor,
+                        color: AppTheme.accent,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
@@ -233,8 +226,8 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            _cardColor,
-            _surfaceColor,
+            AppTheme.surfaceLight,
+            AppTheme.surface,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -284,7 +277,7 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: _textPrimaryColor,
+                          color: AppTheme.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -293,28 +286,28 @@ class _HiddenExercisesPageState extends State<HiddenExercisesPage> {
                           Icon(
                             Icons.fitness_center,
                             size: 14,
-                            color: _textSecondaryColor,
+                            color: AppTheme.textSecondary,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             muscleGroup,
                             style: TextStyle(
                               fontSize: 14,
-                              color: _textSecondaryColor,
+                              color: AppTheme.textSecondary,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Icon(
                             Icons.sports_gymnastics,
                             size: 14,
-                            color: _textSecondaryColor,
+                            color: AppTheme.textSecondary,
                           ),
                           const SizedBox(width: 4),
                           Text(
                             equipment,
                             style: TextStyle(
                               fontSize: 14,
-                              color: _textSecondaryColor,
+                              color: AppTheme.textSecondary,
                             ),
                           ),
                         ],

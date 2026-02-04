@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:mental_warior/services/database_services.dart';
+import 'package:mental_warior/utils/app_theme.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 class BodyMeasurementsPage extends StatefulWidget {
   final bool embedded;
@@ -86,55 +88,69 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
     return RefreshIndicator(
       onRefresh: _loadMeasurements,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.zero,
         children: [
-          // Header with add button
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Body Measurements',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+          // Header with gradient background
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Body Measurements',
+                      style: AppTheme.headlineMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 24,
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _showAddMeasurementDialog,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.accent,
+                        side: BorderSide(
+                          color: AppTheme.accent,
+                          width: 2,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              ElevatedButton.icon(
-                onPressed: _showAddMeasurementDialog,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _primaryColor,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                // Progress summary inline
+                if (_progress.isNotEmpty) _buildProgressSummaryCompact(),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
           
-          // Progress summary card
-          if (_progress.isNotEmpty) ...[
-            _buildProgressSummary(),
-            const SizedBox(height: 16),
-          ],
-          
-          // Measurements grid
-          _buildMeasurementsGrid(),
+          // Content area
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Measurements grid
+                _buildMeasurementsGrid(),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildProgressSummary() {
+  Widget _buildProgressSummaryCompact() {
     // Count improvements vs declines
     int improvements = 0;
     int declines = 0;
     
     for (final entry in _progress.entries) {
-      // For waist, body fat - decrease is good
-      // For muscles - increase is good
       final isDecreaseGood = entry.key == 'waist' || entry.key == 'body_fat';
       if (entry.value.difference != 0) {
         if (isDecreaseGood) {
@@ -147,83 +163,68 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
       }
     }
 
-    return Card(
-      color: _surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Progress Overview',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    'Improving',
-                    improvements.toString(),
-                    _successColor,
-                    Icons.trending_up,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'Declining',
-                    declines.toString(),
-                    _dangerColor,
-                    Icons.trending_down,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'Tracked',
-                    _latestMeasurements.length.toString(),
-                    _primaryColor,
-                    Icons.straighten,
-                  ),
-                ),
-              ],
-            ),
-          ],
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        Expanded(
+          child: _buildStatBadge(
+            'Improving',
+            improvements.toString(),
+            _successColor,
+            Icons.trending_up,
+          ),
         ),
-      ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildStatBadge(
+            'Declining',
+            declines.toString(),
+            _dangerColor,
+            Icons.trending_down,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _buildStatBadge(
+            'Tracked',
+            _latestMeasurements.length.toString(),
+            AppTheme.accent,
+            Icons.straighten,
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildStatCard(String label, String value, Color color, IconData icon) {
+  Widget _buildStatBadge(
+      String label, String value, Color color, IconData icon) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: color.withOpacity(0.25),
+          width: 1,
+        ),
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 4),
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 6),
           Text(
             value,
             style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
               color: color,
             ),
           ),
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.grey,
+            style: TextStyle(
+              fontSize: 11,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -235,12 +236,10 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'All Measurements',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
+          style: AppTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 12),
@@ -274,14 +273,21 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      color: _surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 0,
+      color: AppTheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: AppTheme.borderRadiusMd,
+        side: BorderSide(
+          color: AppTheme.surfaceBorder.withOpacity(0.5),
+          width: 1,
+        ),
+      ),
       child: InkWell(
         onTap: () => _showMeasurementHistory(muscleType),
         onLongPress: measurement != null ? () => _showMeasurementOptions(muscleType, measurement) : null,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: AppTheme.borderRadiusMd,
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
               // Icon
@@ -289,12 +295,16 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: _primaryColor.withOpacity(0.2),
+                  color: AppTheme.accent.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppTheme.accent.withOpacity(0.25),
+                    width: 1,
+                  ),
                 ),
                 child: Icon(
                   Icons.straighten,
-                  color: _primaryColor,
+                  color: AppTheme.accent,
                   size: 20,
                 ),
               ),
@@ -306,25 +316,22 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
                   children: [
                     Text(
                       muscleType.name,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                      style: AppTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     if (measurement != null)
                       Text(
                         DateFormat('MMM d, yyyy').format(measurement.date),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[400],
+                        style: AppTheme.bodySmall?.copyWith(
+                          color: AppTheme.textSecondary,
                         ),
                       )
                     else
                       Text(
                         'Not measured yet',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
+                        style: AppTheme.bodySmall?.copyWith(
+                          color: AppTheme.textSecondary,
                           fontStyle: FontStyle.italic,
                         ),
                       ),
@@ -338,10 +345,8 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
                   children: [
                     Text(
                       '${measurement.value.toStringAsFixed(1)} ${measurement.unit}',
-                      style: const TextStyle(
-                        fontSize: 16,
+                      style: AppTheme.bodyLarge?.copyWith(
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
                       ),
                     ),
                     if (progress != null && progress.difference != 0)
@@ -364,7 +369,7 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
               ] else ...[
                 IconButton(
                   onPressed: () => _showAddMeasurementForMuscle(muscleType),
-                  icon: Icon(Icons.add_circle_outline, color: _primaryColor),
+                  icon: Icon(Icons.add_circle_outline, color: AppTheme.accent),
                 ),
               ],
             ],
@@ -989,11 +994,17 @@ class _MeasurementHistoryPageState extends State<MeasurementHistoryPage> {
             style: TextStyle(color: Colors.grey[400]),
           ),
           const SizedBox(height: 24),
-          ElevatedButton.icon(
+          OutlinedButton.icon(
             onPressed: _showAddMeasurement,
             icon: const Icon(Icons.add),
             label: const Text('Add Measurement'),
-            style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: _primaryColor,
+              side: BorderSide(
+                color: _primaryColor,
+                width: 2,
+              ),
+            ),
           ),
         ],
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mental_warior/models/workouts.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 class SupersetSelectionPage extends StatefulWidget {
   final List<Exercise> exercises;
@@ -21,13 +22,6 @@ class SupersetSelectionPage extends StatefulWidget {
 
 class _SupersetSelectionPageState extends State<SupersetSelectionPage> {
   final Set<int> _selectedExerciseIds = {};
-
-  // Theme colors
-  final Color _backgroundColor = const Color(0xFF1A1B1E);
-  final Color _surfaceColor = const Color(0xFF26272B);
-  final Color _primaryColor = const Color(0xFF3F8EFC);
-  final Color _textPrimaryColor = Colors.white;
-  final Color _textSecondaryColor = const Color(0xFFBBBBBB);
 
   // Default superset colors list (same as workout_session_page)
   static const List<Color> _defaultSupersetColors = [
@@ -75,15 +69,15 @@ class _SupersetSelectionPageState extends State<SupersetSelectionPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
-        backgroundColor: _surfaceColor,
+        backgroundColor: AppTheme.surface,
         title: Text(
           'Create Superset',
-          style: TextStyle(color: _textPrimaryColor),
+          style: TextStyle(color: AppTheme.textPrimary),
         ),
         leading: IconButton(
-          icon: Icon(Icons.close, color: _textPrimaryColor),
+          icon: Icon(Icons.close, color: AppTheme.textPrimary),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
@@ -98,8 +92,8 @@ class _SupersetSelectionPageState extends State<SupersetSelectionPage> {
               'Create',
               style: TextStyle(
                 color: _selectedExerciseIds.length >= 2
-                    ? _primaryColor
-                    : _textSecondaryColor,
+                    ? AppTheme.accent
+                    : AppTheme.textSecondary,
                 fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
@@ -114,18 +108,18 @@ class _SupersetSelectionPageState extends State<SupersetSelectionPage> {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
-            color: _primaryColor.withOpacity(0.1),
+            color: AppTheme.accent.withOpacity(0.1),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.info_outline, color: _primaryColor, size: 20),
+                    Icon(Icons.info_outline, color: AppTheme.accent, size: 20),
                     const SizedBox(width: 8),
                     Text(
                       'Select exercises for superset',
                       style: TextStyle(
-                        color: _textPrimaryColor,
+                        color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
@@ -136,7 +130,7 @@ class _SupersetSelectionPageState extends State<SupersetSelectionPage> {
                 Text(
                   'Choose 2 or more exercises to group together. Selected: ${_selectedExerciseIds.length}',
                   style: TextStyle(
-                    color: _textSecondaryColor,
+                    color: AppTheme.textSecondary,
                     fontSize: 14,
                   ),
                 ),
@@ -161,12 +155,12 @@ class _SupersetSelectionPageState extends State<SupersetSelectionPage> {
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? _primaryColor.withOpacity(0.15)
-                        : _surfaceColor,
+                        ? AppTheme.accent.withOpacity(0.15)
+                        : AppTheme.surface,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
-                          ? _primaryColor
+                          ? AppTheme.accent
                           : existingSuperset != null
                               ? supersetColor.withOpacity(0.5)
                               : Colors.transparent,
@@ -182,26 +176,26 @@ class _SupersetSelectionPageState extends State<SupersetSelectionPage> {
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? _primaryColor.withOpacity(0.3)
+                            ? AppTheme.accent.withOpacity(0.3)
                             : existingSuperset != null
                                 ? supersetColor.withOpacity(0.15)
-                                : _primaryColor.withOpacity(0.15),
+                                : AppTheme.accent.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
                         existingSuperset != null ? Icons.link : Icons.fitness_center,
                         color: isSelected 
-                            ? _primaryColor 
+                            ? AppTheme.accent 
                             : existingSuperset != null
                                 ? supersetColor
-                                : _textSecondaryColor,
+                                : AppTheme.textSecondary,
                         size: 20,
                       ),
                     ),
                     title: Text(
                       _cleanExerciseName(exercise.name),
                       style: TextStyle(
-                        color: _textPrimaryColor,
+                        color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
@@ -212,7 +206,7 @@ class _SupersetSelectionPageState extends State<SupersetSelectionPage> {
                         Text(
                           '${exercise.sets.length} sets',
                           style: TextStyle(
-                            color: _textSecondaryColor,
+                            color: AppTheme.textSecondary,
                             fontSize: 12,
                           ),
                         ),
@@ -238,9 +232,9 @@ class _SupersetSelectionPageState extends State<SupersetSelectionPage> {
                           }
                         });
                       },
-                      activeColor: _primaryColor,
+                      activeColor: AppTheme.accent,
                       checkColor: Colors.white,
-                      side: BorderSide(color: _textSecondaryColor),
+                      side: BorderSide(color: AppTheme.textSecondary),
                     ),
                     onTap: () {
                       setState(() {

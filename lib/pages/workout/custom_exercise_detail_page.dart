@@ -3,6 +3,7 @@ import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/pages/workout/edit_exercise_page.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:mental_warior/utils/app_theme.dart';
 
 // Helper class to represent exercise history entries
 class ExerciseHistoryEntry {
@@ -262,9 +263,9 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
         await _customExerciseService.unhideCustomExercise(exerciseId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Exercise unhidden successfully'),
-              backgroundColor: Colors.green,
+            SnackBar(
+              content: const Text('✅ Exercise unhidden successfully'),
+              backgroundColor: AppTheme.success,
               duration: Duration(seconds: 2),
             ),
           );
@@ -274,9 +275,9 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
         await _customExerciseService.hideCustomExercise(exerciseId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('🔒 Exercise hidden from search'),
-              backgroundColor: Colors.orange,
+            SnackBar(
+              content: const Text('🔒 Exercise hidden from search'),
+              backgroundColor: AppTheme.warning,
               duration: Duration(seconds: 2),
             ),
           );
@@ -291,7 +292,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: $e'),
-            backgroundColor: Colors.red,
+            backgroundColor: AppTheme.error,
           ),
         );
       }
@@ -315,14 +316,15 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
     final bool isHidden = _exerciseData?['hidden'] ?? false;
     
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1B1E),
+      backgroundColor: AppTheme.background,
       appBar: AppBar(
         title: Text(
           cleanAppBarName,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          style: TextStyle(
+              color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: const Color(0xFF26272B),
-        iconTheme: const IconThemeData(color: Colors.white),
+        backgroundColor: AppTheme.surface,
+        iconTheme: IconThemeData(color: AppTheme.textPrimary),
         elevation: 0,
         actions: _exerciseData != null
             ? [
@@ -335,7 +337,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   onPressed: _toggleHideExercise,
                 ),
                 IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.white),
+                  icon: Icon(Icons.edit, color: AppTheme.textPrimary),
                   tooltip: 'Edit Exercise',
                   onPressed: () async {
                     if (_exerciseData == null) return;
@@ -381,12 +383,12 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.error_outline,
-                            size: 64, color: Colors.grey[600]),
+                            size: 64, color: AppTheme.textTertiary),
                         const SizedBox(height: 16),
                         Text(
                           'Exercise not found',
                           style: TextStyle(
-                            color: Theme.of(context).textTheme.bodyLarge?.color,
+                            color: AppTheme.textPrimary,
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -395,7 +397,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                         Text(
                           'Could not load exercise with ID: ${widget.exerciseId}',
                           style: TextStyle(
-                            color: Colors.grey[600],
+                            color: AppTheme.textTertiary,
                             fontSize: 14,
                           ),
                           textAlign: TextAlign.center,
@@ -406,8 +408,8 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                           icon: const Icon(Icons.arrow_back),
                           label: const Text('Go Back'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(context).primaryColor,
-                            foregroundColor: Colors.white,
+                            backgroundColor: AppTheme.accent,
+                            foregroundColor: AppTheme.textPrimary,
                           ),
                         ),
                       ],
@@ -471,15 +473,15 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Colors.orange.withValues(alpha: 0.3),
-                    Colors.orange.withValues(alpha: 0.15),
+                    AppTheme.warning.withValues(alpha: 0.3),
+                    AppTheme.warning.withValues(alpha: 0.15),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: Colors.orange.withValues(alpha: 0.5),
+                  color: AppTheme.warning.withValues(alpha: 0.5),
                   width: 1.5,
                 ),
               ),
@@ -516,15 +518,15 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF3F8EFC).withValues(alpha: 0.3),
-                  const Color(0xFF3F8EFC).withValues(alpha: 0.15),
+                  AppTheme.accent.withValues(alpha: 0.3),
+                  AppTheme.accent.withValues(alpha: 0.15),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: const Color(0xFF3F8EFC).withValues(alpha: 0.5),
+                color: AppTheme.accent.withValues(alpha: 0.5),
                 width: 1.5,
               ),
             ),
@@ -534,17 +536,16 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF3F8EFC).withValues(alpha: 0.2),
+                    color: AppTheme.accent.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.create,
-                      color: Color(0xFF3F8EFC), size: 18),
+                  child: Icon(Icons.create, color: AppTheme.accent, size: 18),
                 ),
                 const SizedBox(width: 12),
-                const Text(
+                Text(
                   'Custom Exercise',
                   style: TextStyle(
-                    color: Color(0xFF3F8EFC),
+                    color: AppTheme.accent,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5,
@@ -563,8 +564,8 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    const Color(0xFF3F8EFC).withValues(alpha: 0.2),
-                    const Color(0xFF3F8EFC).withValues(alpha: 0.05),
+                    AppTheme.accent.withValues(alpha: 0.2),
+                    AppTheme.accent.withValues(alpha: 0.05),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -572,16 +573,16 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF3F8EFC).withValues(alpha: 0.3),
+                    color: AppTheme.accent.withValues(alpha: 0.3),
                     blurRadius: 20,
                     spreadRadius: 2,
                   ),
                 ],
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.fitness_center,
                 size: 70,
-                color: Color(0xFF3F8EFC),
+                color: AppTheme.accent,
               ),
             ),
           ),
@@ -591,7 +592,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
           Text(
             cleanName,
             style: TextStyle(
-              color: Colors.white,
+              color: AppTheme.textPrimary,
               fontSize: 32,
               fontWeight: FontWeight.w800,
               letterSpacing: -0.5,
@@ -618,16 +619,16 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
+                    gradient: LinearGradient(
                       colors: [
-                        Color(0xFF3F8EFC),
-                        Color(0xFF5FA3FF),
+                        AppTheme.accent,
+                        AppTheme.accent.withValues(alpha: 0.8),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF3F8EFC).withValues(alpha: 0.3),
+                        color: AppTheme.accent.withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -636,16 +637,16 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.fitness_center,
                         size: 18,
-                        color: Colors.white,
+                        color: AppTheme.textPrimary,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         type,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w700,
                           fontSize: 15,
                         ),
@@ -689,10 +690,10 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.fitness_center_outlined,
                                 size: 16,
-                                color: Colors.white,
+                                color: AppTheme.textPrimary,
                               ),
                               const SizedBox(width: 6),
                               Text(
@@ -740,16 +741,16 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.sports_gymnastics,
                         size: 16,
-                        color: Colors.white,
+                        color: AppTheme.textPrimary,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         equipment,
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
                         ),
@@ -782,8 +783,8 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                               width: 6,
                               height: 6,
                               margin: const EdgeInsets.only(top: 6, right: 12),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF3F8EFC),
+                              decoration: BoxDecoration(
+                                color: AppTheme.accent,
                                 shape: BoxShape.circle,
                               ),
                             ),
@@ -793,7 +794,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                                 style: TextStyle(
                                   fontSize: 15,
                                   height: 1.5,
-                                  color: Colors.grey[300],
+                                  color: AppTheme.textSecondary,
                                 ),
                               ),
                             ),
@@ -814,15 +815,15 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF3F8EFC).withValues(alpha: 0.15),
-                  const Color(0xFF3F8EFC).withValues(alpha: 0.05),
+                  AppTheme.accent.withValues(alpha: 0.15),
+                  AppTheme.accent.withValues(alpha: 0.05),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: const Color(0xFF3F8EFC).withValues(alpha: 0.3),
+                color: AppTheme.accent.withValues(alpha: 0.3),
                 width: 1.5,
               ),
             ),
@@ -831,12 +832,12 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF3F8EFC).withValues(alpha: 0.2),
+                    color: AppTheme.accent.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.info_outline,
-                    color: Color(0xFF3F8EFC),
+                    color: AppTheme.accent,
                     size: 24,
                   ),
                 ),
@@ -845,10 +846,10 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'User Created',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.textPrimary,
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                         ),
@@ -857,7 +858,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                       Text(
                         'Use this in your workouts just like any other exercise.',
                         style: TextStyle(
-                          color: Colors.grey[400],
+                          color: AppTheme.textSecondary,
                           fontSize: 14,
                           height: 1.4,
                         ),
@@ -882,10 +883,10 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF26272B),
+        color: AppTheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.grey[800]!,
+          color: AppTheme.textTertiary,
           width: 1,
         ),
         boxShadow: [
@@ -904,13 +905,13 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
               Icon(
                 icon,
                 size: 20,
-                color: const Color(0xFF3F8EFC),
+                color: AppTheme.accent,
               ),
               const SizedBox(width: 10),
               Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.3,
@@ -927,19 +928,19 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
 
   Widget _buildHistoryTab() {
     if (_isLoadingHistory) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(
-              color: Color(0xFF3F8EFC),
+              color: AppTheme.accent,
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Text(
               'Loading exercise history...',
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.grey,
+                color: AppTheme.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -961,24 +962,24 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF3F8EFC).withValues(alpha: 0.2),
-                      const Color(0xFF3F8EFC).withValues(alpha: 0.05),
+                      AppTheme.accent.withValues(alpha: 0.2),
+                      AppTheme.accent.withValues(alpha: 0.05),
                     ],
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.history,
                   size: 64,
-                  color: Colors.grey,
+                  color: AppTheme.textTertiary,
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'No History Found',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -988,7 +989,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 15,
-                  color: Colors.grey[400],
+                  color: AppTheme.textSecondary,
                   height: 1.5,
                 ),
               ),
@@ -998,12 +999,12 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF3F8EFC).withValues(alpha: 0.15),
-                      const Color(0xFF3F8EFC).withValues(alpha: 0.05),
+                      AppTheme.accent.withValues(alpha: 0.15),
+                      AppTheme.accent.withValues(alpha: 0.05),
                     ],
                   ),
                   border: Border.all(
-                    color: const Color(0xFF3F8EFC).withValues(alpha: 0.3),
+                    color: AppTheme.accent.withValues(alpha: 0.3),
                     width: 1.5,
                   ),
                   borderRadius: BorderRadius.circular(12),
@@ -1011,9 +1012,9 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.info_outline,
-                      color: Color(0xFF3F8EFC),
+                      color: AppTheme.accent,
                       size: 22,
                     ),
                     const SizedBox(width: 12),
@@ -1022,7 +1023,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                         'History is only recorded for finished workouts.',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[300],
+                          color: AppTheme.textSecondary,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -1048,17 +1049,17 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
         return Container(
           margin: const EdgeInsets.only(bottom: 20),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               colors: [
-                Color(0xFF26272B),
-                Color(0xFF1E1F22),
+                AppTheme.surface,
+                AppTheme.background,
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: Colors.grey[800]!,
+              color: AppTheme.textTertiary,
               width: 1,
             ),
             boxShadow: [
@@ -1098,30 +1099,30 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            const Color(0xFF3F8EFC).withValues(alpha: 0.3),
-                            const Color(0xFF3F8EFC).withValues(alpha: 0.15),
+                            AppTheme.accent.withValues(alpha: 0.3),
+                            AppTheme.accent.withValues(alpha: 0.15),
                           ],
                         ),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: const Color(0xFF3F8EFC).withValues(alpha: 0.5),
+                          color: AppTheme.accent.withValues(alpha: 0.5),
                           width: 1,
                         ),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.calendar_today,
                             size: 12,
-                            color: Color(0xFF3F8EFC),
+                            color: AppTheme.accent,
                           ),
                           const SizedBox(width: 6),
                           Text(
                             formattedDate,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: Color(0xFF3F8EFC),
+                              color: AppTheme.accent,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -1137,8 +1138,8 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        Colors.grey[700]!,
-                        Colors.grey[700]!.withValues(alpha: 0.0),
+                        AppTheme.textTertiary,
+                        AppTheme.textTertiary.withValues(alpha: 0.0),
                       ],
                     ),
                   ),
@@ -1155,10 +1156,10 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1A1B1E),
+                      color: AppTheme.background,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Colors.grey[800]!,
+                        color: AppTheme.textTertiary,
                         width: 1,
                       ),
                     ),
@@ -1171,13 +1172,13 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
                               colors: [
-                                const Color(0xFF3F8EFC).withValues(alpha: 0.3),
-                                const Color(0xFF3F8EFC).withValues(alpha: 0.15),
+                                AppTheme.accent.withValues(alpha: 0.3),
+                                AppTheme.accent.withValues(alpha: 0.15),
                               ],
                             ),
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: const Color(0xFF3F8EFC)
+                              color: AppTheme.accent
                                   .withValues(alpha: 0.5),
                               width: 1.5,
                             ),
@@ -1187,9 +1188,9 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                               set.setType != SetType.normal
                                   ? _getSetTypeDisplay(set.setType)
                                   : '${setIndex + 1}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w800,
-                                color: Color(0xFF3F8EFC),
+                                color: AppTheme.accent,
                                 fontSize: 15,
                               ),
                             ),
@@ -1206,7 +1207,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                                 'Weight',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey[500],
+                                  color: AppTheme.textTertiary,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0.5,
                                 ),
@@ -1214,10 +1215,10 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                               const SizedBox(height: 2),
                               Text(
                                 '${set.weight} $_weightUnit',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+                                  color: AppTheme.textPrimary,
                                 ),
                               ),
                             ],
@@ -1233,7 +1234,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                                 'Reps',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey[500],
+                                  color: AppTheme.textTertiary,
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0.5,
                                 ),
@@ -1241,10 +1242,10 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                               const SizedBox(height: 2),
                               Text(
                                 '${set.reps}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.white,
+                                  color: AppTheme.textPrimary,
                                 ),
                               ),
                             ],
@@ -1275,20 +1276,20 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                           ),
                           child: Column(
                             children: [
-                              const Text(
+                              Text(
                                 '1RM',
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: Colors.white,
+                                  color: AppTheme.textPrimary,
                                   fontWeight: FontWeight.w700,
                                   letterSpacing: 0.5,
                                 ),
                               ),
                               Text(
                                 '$oneRM kg',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
-                                  color: Colors.white,
+                                  color: AppTheme.textPrimary,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -1309,19 +1310,19 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
 
   Widget _buildChartsTab() {
     if (_isLoadingHistory) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(
-              color: Color(0xFF3F8EFC),
+              color: AppTheme.accent,
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Text(
               'Loading exercise data...',
               style: TextStyle(
                 fontSize: 16,
-                color: Color(0xFFBDBDBD),
+                color: AppTheme.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1343,24 +1344,24 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF3F8EFC).withValues(alpha: 0.1),
-                      const Color(0xFF3F8EFC).withValues(alpha: 0.05),
+                      AppTheme.accent.withValues(alpha: 0.1),
+                      AppTheme.accent.withValues(alpha: 0.05),
                     ],
                   ),
                 ),
                 child: Icon(
                   Icons.bar_chart,
                   size: 64,
-                  color: Colors.grey[500],
+                  color: AppTheme.textTertiary,
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'No Data Available',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -1370,7 +1371,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 15,
-                  color: Colors.grey[400],
+                  color: AppTheme.textSecondary,
                   height: 1.5,
                 ),
               ),
@@ -1391,7 +1392,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
           _buildChartCard(
             title: 'Best Set (Est. 1RM)',
             data: chartData['oneRM']!,
-            color: const Color(0xFF3F8EFC),
+            color: AppTheme.accent,
             unit: _weightUnit,
           ),
           const SizedBox(height: 20),
@@ -1491,17 +1492,17 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           colors: [
-            Color(0xFF26272B),
-            Color(0xFF1E1F22),
+            AppTheme.surface,
+            AppTheme.background,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.grey[800]!,
+          color: AppTheme.textTertiary,
           width: 1,
         ),
         boxShadow: [
@@ -1529,8 +1530,8 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
               Expanded(
                 child: Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.3,
@@ -1568,7 +1569,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                     child: Text(
                       'No data available',
                       style: TextStyle(
-                        color: Colors.grey[600],
+                        color: AppTheme.textTertiary,
                         fontSize: 14,
                       ),
                     ),
@@ -1591,7 +1592,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                                 radius: 4,
                                 color: color,
                                 strokeWidth: 2,
-                                strokeColor: const Color(0xFF26272B),
+                                strokeColor: AppTheme.surface,
                               );
                             },
                           ),
@@ -1621,7 +1622,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                                 child: Text(
                                   label,
                                   style: TextStyle(
-                                    color: Colors.grey[600],
+                                    color: AppTheme.textTertiary,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -1669,7 +1670,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                                 child: Text(
                                   '${date.month}/${date.day}',
                                   style: TextStyle(
-                                    color: Colors.grey[600],
+                                    color: AppTheme.textTertiary,
                                     fontSize: 10,
                                   ),
                                 ),
@@ -1684,7 +1685,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                         horizontalInterval: (maxY - minY) / 5,
                         getDrawingHorizontalLine: (value) {
                           return FlLine(
-                            color: Colors.grey[800]!.withValues(alpha: 0.3),
+                            color: AppTheme.textTertiary.withValues(alpha: 0.3),
                             strokeWidth: 1,
                           );
                         },
@@ -1693,11 +1694,11 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                         show: true,
                         border: Border(
                           left: BorderSide(
-                            color: Colors.grey[800]!.withValues(alpha: 0.5),
+                            color: AppTheme.textTertiary.withValues(alpha: 0.5),
                             width: 1,
                           ),
                           bottom: BorderSide(
-                            color: Colors.grey[800]!.withValues(alpha: 0.5),
+                            color: AppTheme.textTertiary.withValues(alpha: 0.5),
                             width: 1,
                           ),
                         ),
@@ -1710,8 +1711,8 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                             return touchedSpots.map((spot) {
                               return LineTooltipItem(
                                 '${spot.y.toStringAsFixed(unit == 'reps' ? 0 : 1)} $unit',
-                                const TextStyle(
-                                  color: Colors.white,
+                                TextStyle(
+                                  color: AppTheme.textPrimary,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
                                 ),
@@ -1768,19 +1769,19 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
 
   Widget _buildRecordsTab() {
     if (_isLoadingHistory) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(
-              color: Color(0xFF3F8EFC),
+              color: AppTheme.accent,
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Text(
               'Loading records...',
               style: TextStyle(
                 fontSize: 16,
-                color: Color(0xFFBDBDBD),
+                color: AppTheme.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1802,24 +1803,24 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
                     colors: [
-                      const Color(0xFF3F8EFC).withValues(alpha: 0.1),
-                      const Color(0xFF3F8EFC).withValues(alpha: 0.05),
+                      AppTheme.accent.withValues(alpha: 0.1),
+                      AppTheme.accent.withValues(alpha: 0.05),
                     ],
                   ),
                 ),
                 child: Icon(
                   Icons.emoji_events,
                   size: 64,
-                  color: Colors.grey[500],
+                  color: AppTheme.textTertiary,
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'No Records Yet',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: AppTheme.textPrimary,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -1829,7 +1830,7 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 15,
-                  color: Colors.grey[400],
+                  color: AppTheme.textSecondary,
                   height: 1.5,
                 ),
               ),
@@ -1874,17 +1875,17 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 colors: [
-                  Color(0xFF26272B),
-                  Color(0xFF1E1F22),
+                  AppTheme.surface,
+                  AppTheme.background,
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: Colors.grey[800]!,
+                color: AppTheme.textTertiary,
                 width: 1,
               ),
               boxShadow: [
@@ -1909,10 +1910,10 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Text(
+                    Text(
                       'PERSONAL RECORDS',
                       style: TextStyle(
-                        color: Color(0xFFBDBDBD),
+                        color: AppTheme.textSecondary,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 1.2,
@@ -1944,17 +1945,17 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 colors: [
-                  Color(0xFF26272B),
-                  Color(0xFF1E1F22),
+                  AppTheme.surface,
+                  AppTheme.background,
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: Colors.grey[800]!,
+                color: AppTheme.textTertiary,
                 width: 1,
               ),
               boxShadow: [
@@ -1974,15 +1975,15 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
                       width: 4,
                       height: 24,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF3F8EFC),
+                        color: AppTheme.accent,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    const Text(
+                    Text(
                       'LIFETIME STATS',
                       style: TextStyle(
-                        color: Color(0xFFBDBDBD),
+                        color: AppTheme.textSecondary,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 1.2,
@@ -2014,16 +2015,16 @@ class _CustomExerciseDetailPageState extends State<CustomExerciseDetailPage>
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppTheme.textPrimary,
             fontSize: 16,
             fontWeight: FontWeight.w500,
           ),
         ),
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: AppTheme.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.w700,
           ),
