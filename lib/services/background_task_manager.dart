@@ -4,6 +4,8 @@ import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/quote_service.dart';
+import 'package:mental_warior/services/reminder_service.dart';
+import 'package:mental_warior/services/notification_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // Define unique IDs for each background task
@@ -11,6 +13,7 @@ class BackgroundTaskIds {
   static const int dailyQuoteId = 0;
   static const int habitResetId = 1;
   static const int pendingTasksId = 2;
+  static const int reminderCheckId = 3;
 }
 
 @pragma('vm:entry-point')
@@ -73,6 +76,17 @@ class BackgroundTaskManager {
       rescheduleOnReboot: true,
     );
     print("✅ Check pending tasks scheduled");
+
+    // Schedule reminder check task - runs every 5 minutes for testing (change to 30 minutes in production)
+    await AndroidAlarmManager.periodic(
+      const Duration(minutes: 5),
+      BackgroundTaskIds.reminderCheckId,
+      checkRemindersCallback,
+      exact: false,
+      wakeup: true,
+      rescheduleOnReboot: true,
+    );
+    print("✅ Reminder check task scheduled (every 5 minutes)");
   }
 
   // Callback for daily quote task
@@ -149,12 +163,100 @@ class BackgroundTaskManager {
     sendPort?.send('tasks_updated');
   }
 
+  // Callback for checking due reminders
+  @pragma('vm:entry-point')
+  static Future<void> checkRemindersCallback() async {
+    final DateTime now = DateTime.now();
+    final SendPort? sendPort = IsolateNameServer.lookupPortByName(isolateName);
+
+    print('⏰ Checking due reminders at ${now.hour}:${now.minute}');
+
+    try {
+      final reminderService = ReminderService();
+      final taskService = TaskService();
+      
+      // Get all reminders that are due and not yet sent
+      final dueReminders = await reminderService.checkDueReminders();
+      
+      print('📋 Found ${dueReminders.length} due reminders');
+
+      // Send notification for each due reminder
+      for (final reminder in dueReminders) {
+        try {
+          final taskId = reminder['taskId'] as int;
+          final reminderValue = reminder['reminderValue'] as int;
+          final reminderUnit = reminder['reminderUnit'] as String;
+          final reminderTime = reminder['reminderTime'] as String;
+          
+          // Get task details
+          final tasks = await taskService.getTasks();
+          final task = tasks.firstWhere(
+            (t) => t.id == taskId,
+            orElse: () => throw Exception('Task not found'),
+          );
+          
+          // Show notification
+          await _showReminderNotification(
+            taskId: taskId,
+            taskLabel: task.label,
+            reminderValue: reminderValue,
+            reminderUnit: reminderUnit,
+            reminderTime: reminderTime,
+            deadline: task.deadline,
+          );
+          
+          // Mark reminder as sent
+          await reminderService.markReminderSent(reminder['id'] as int);
+          
+          print('✅ Sent reminder for task: ${task.label}');
+        } catch (e) {
+          print('❌ Error sending reminder: $e');
+        }
+      }
+
+      print('✅ Reminder check completed successfully');
+    } catch (e) {
+      print('❌ Error checking reminders: $e');
+    }
+
+    // Notify main isolate to refresh UI
+    sendPort?.send('reminders_checked');
+  }
+
+  // Helper method to show reminder notification
+  static Future<void> _showReminderNotification({
+    required int taskId,
+    required String taskLabel,
+    required int reminderValue,
+    required String reminderUnit,
+    required String reminderTime,
+    required String deadline,
+  }) async {
+    try {
+      final notificationService = NotificationService();
+      
+      // Format deadline for display
+      String deadlineText = deadline.isNotEmpty ? deadline.split(' ')[0] : 'soon';
+      
+      // Show notification (you'll need to implement this method in NotificationService)
+      await notificationService.showTaskReminderNotification(
+        id: taskId + 5000, // Offset to avoid ID conflicts
+        title: '⏰ Task Reminder',
+        body: '$taskLabel\nDue: $deadlineText',
+        payload: 'task_$taskId',
+      );
+    } catch (e) {
+      print('❌ Error showing reminder notification: $e');
+    }
+  }
+
   // Run all tasks manually (useful for testing or immediate execution)
   static Future<void> runAllTasksNow() async {
     print('🚀 Running all background tasks manually');
     await dailyQuoteCallback();
     await _resetHabitsCallback();
     await _checkPendingTasksCallback();
+    await checkRemindersCallback();
   }
 
   // Method to get the stored daily quote

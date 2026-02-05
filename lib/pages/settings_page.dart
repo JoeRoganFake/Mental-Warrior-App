@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/plate_bar_customization_service.dart';
+import 'package:mental_warior/services/background_task_manager.dart';
+import 'package:mental_warior/services/reminder_service.dart';
 import 'package:mental_warior/utils/app_theme.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
@@ -326,6 +328,13 @@ class _SettingsPageState extends State<SettingsPage> {
                     'Manage app notifications',
                     Icons.notifications_outlined,
                     onTap: () {},
+                  ),
+                  _buildDivider(),
+                  _buildActionTile(
+                    'Test Reminder Notifications',
+                    'Manually check for due reminders now',
+                    Icons.notification_add_outlined,
+                    () => _testReminderNotifications(),
                   ),
                   _buildDivider(),
                   _buildSettingsTile(
@@ -2519,6 +2528,215 @@ class _SettingsPageState extends State<SettingsPage> {
         );
       },
     );
+  }
+
+  Future<void> _testReminderNotifications() async {
+    try {
+      final reminderService = ReminderService();
+      final taskService = TaskService();
+      final now = DateTime.now();
+      
+      // Get all reminders from database (not just due ones)
+      final db = await DatabaseService.instance.database;
+      final allReminders = await db.query('reminders', orderBy: 'dueDateTime ASC');
+      
+      // Get due reminders
+      final dueReminders = await reminderService.checkDueReminders();
+      
+      // Build detailed info string
+      final buffer = StringBuffer();
+      buffer.writeln('🕐 CURRENT TIME');
+      buffer.writeln('${now.toString()}');
+      buffer.writeln('');
+      buffer.writeln('📊 REMINDER DATABASE STATUS');
+      buffer.writeln('Total reminders in database: ${allReminders.length}');
+      buffer.writeln('Due reminders (ready to send): ${dueReminders.length}');
+      buffer.writeln('');
+      
+      if (allReminders.isEmpty) {
+        buffer.writeln('ℹ️ No reminders found in database.');
+        buffer.writeln('Create a task with a reminder to test notifications.');
+      } else {
+        buffer.writeln('📋 ALL REMINDERS IN DATABASE:');
+        buffer.writeln('${'─' * 50}');
+        
+        for (int i = 0; i < allReminders.length; i++) {
+          final reminder = allReminders[i];
+          final taskId = reminder['taskId'] as int;
+          final reminderValue = reminder['reminderValue'] as int;
+          final reminderUnit = reminder['reminderUnit'] as String;
+          final reminderTime = reminder['reminderTime'] as String;
+          final dueDateTime = DateTime.parse(reminder['dueDateTime'] as String);
+          final notificationSent = (reminder['notificationSent'] as int) == 1;
+          
+          // Get task details
+          String taskLabel = 'Unknown Task';
+          String taskDeadline = 'No deadline';
+          try {
+            final tasks = await taskService.getTasks();
+            final task = tasks.firstWhere((t) => t.id == taskId);
+            taskLabel = task.label;
+            taskDeadline = task.deadline.isNotEmpty ? task.deadline : 'No deadline';
+          } catch (e) {
+            // Task not found or error
+          }
+          
+          final isDue = dueDateTime.isBefore(now) || dueDateTime.isAtSameMomentAs(now);
+          final timeUntilDue = dueDateTime.difference(now);
+          final timeUntilDueStr = timeUntilDue.isNegative 
+              ? 'OVERDUE by ${timeUntilDue.abs().inMinutes} min' 
+              : 'Due in ${timeUntilDue.inMinutes} min';
+          
+          buffer.writeln('');
+          buffer.writeln('Reminder #${i + 1}:');
+          buffer.writeln('  ID: ${reminder['id']}');
+          buffer.writeln('  Task: $taskLabel (ID: $taskId)');
+          buffer.writeln('  Task Deadline: $taskDeadline');
+          buffer.writeln('  Reminder: $reminderValue $reminderUnit before $reminderTime');
+          buffer.writeln('  Due DateTime: ${dueDateTime.toString()}');
+          buffer.writeln('  Status: ${isDue ? '✅ DUE NOW' : '⏳ PENDING'}');
+          buffer.writeln('  Time Until Due: $timeUntilDueStr');
+          buffer.writeln('  Notification Sent: ${notificationSent ? 'YES' : 'NO'}');
+          buffer.writeln('  ${isDue && !notificationSent ? '🔔 WILL SEND NOTIFICATION' : ''}');
+        }
+      }
+      
+      final detailedInfo = buffer.toString();
+      
+      // Print to console
+      print('\n${'=' * 60}');
+      print('MANUAL REMINDER CHECK TEST');
+      print('=' * 60);
+      print(detailedInfo);
+      print('=' * 60);
+      print('\nExecuting reminder check callback...\n');
+      
+      // Show detailed dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            backgroundColor: AppTheme.surface,
+            title: Row(
+              children: [
+                Icon(Icons.notifications_active, color: AppTheme.accent),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Reminder Check Details',
+                    style: AppTheme.headlineSmall,
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Container(
+                constraints: BoxConstraints(maxHeight: 500),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      detailedInfo,
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: AppTheme.textSecondary),
+                ),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accent,
+                ),
+                onPressed: () async {
+                  Navigator.of(context).pop();
+                  
+                  // Show processing dialog
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: AppTheme.surface,
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(color: AppTheme.accent),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Sending notifications...',
+                            style: AppTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                  
+                  try {
+                    // Run the reminder check callback
+                    await BackgroundTaskManager.checkRemindersCallback();
+                    
+                    if (mounted) {
+                      Navigator.pop(context); // Close processing dialog
+                      
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            dueReminders.isEmpty
+                                ? 'No due reminders to send'
+                                : '${dueReminders.length} notification(s) sent!',
+                          ),
+                          backgroundColor: AppTheme.accent,
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      Navigator.pop(context); // Close processing dialog
+                      
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Error: $e'),
+                          backgroundColor: AppTheme.error,
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: Text(
+                  dueReminders.isEmpty ? 'OK' : 'Send Notifications (${dueReminders.length})',
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Error in test reminder notifications: $e');
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading reminder info: $e'),
+            backgroundColor: AppTheme.error,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 
 

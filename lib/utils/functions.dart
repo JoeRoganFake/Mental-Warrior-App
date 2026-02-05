@@ -38,8 +38,10 @@ class Functions {
         );
 
         if (pickedTime != null) {
+          // Format time in 24-hour format (HH:mm) for consistent parsing
+          String timeStr24 = '${pickedTime.hour.toString().padLeft(2, '0')}:${pickedTime.minute.toString().padLeft(2, '0')}';
           String formattedDateTime =
-              "${pickedDate.toIso8601String().split('T')[0]} ${pickedTime.format(context)}";
+              "${pickedDate.toIso8601String().split('T')[0]} $timeStr24";
 
           controller.text = formattedDateTime;
         }

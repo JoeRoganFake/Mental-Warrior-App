@@ -2197,7 +2197,14 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
       });
 
       await _taskService.addTask(
-          task.label, task.deadline, task.description, task.category);
+          task.label, task.deadline, task.description, task.category,
+          importance: task.importance,
+          repeatFrequency: task.repeatFrequency,
+          repeatInterval: task.repeatInterval,
+          repeatEndType: task.repeatEndType,
+          repeatEndDate: task.repeatEndDate,
+          repeatOccurrences: task.repeatOccurrences,
+          reminders: task.reminders);
       await _completedTaskService.deleteCompTask(task.id);
       await _xpService.subtractTaskXP();
       

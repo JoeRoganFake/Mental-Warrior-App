@@ -16,6 +16,7 @@ class Task {
       repeatOccurrences; // number of occurrences if endType is 'after' - defaults to 30 if end type is 'after'
   final String?
       nextDeadline; // next deadline for repeating tasks (used for completed tasks)
+  final List<Map<String, dynamic>>? reminders; // list of reminders for the task
 
   Task({
     required this.description,
@@ -31,5 +32,6 @@ class Task {
     this.repeatEndDate,
     this.repeatOccurrences,
     this.nextDeadline,
+    this.reminders,
   });
 }

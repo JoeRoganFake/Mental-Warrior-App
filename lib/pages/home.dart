@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/pages/categories_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/quote_service.dart';
+import 'package:mental_warior/services/reminder_service.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/utils/app_theme.dart';
 import 'package:mental_warior/models/tasks.dart';
@@ -261,6 +263,11 @@ class HomePageState extends State<HomePage>
       _dateController.text = task.deadline;
       taskImportance = task.importance;
 
+      // Load saved reminders if they exist
+      if (task.reminders != null && task.reminders!.isNotEmpty) {
+        savedReminders = List.from(task.reminders!);
+      }
+
       // Show fields if they have content
       _showDescription = task.description.isNotEmpty;
       _showDateTime = task.deadline.isNotEmpty;
@@ -334,21 +341,9 @@ class HomePageState extends State<HomePage>
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  add
-                                      ? "New Task"
-                                      : changeCompletedTask
-                                          ? "Completed Task"
-                                          : "Edit Task",
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
+                              // Left spacer to balance the delete button on the right
+                              if (!add && !changeCompletedTask)
+                                SizedBox(width: 48),
                               if (!add && changeCompletedTask)
                                 IconButton(
                                   icon: const Icon(Icons.undo,
@@ -379,6 +374,21 @@ class HomePageState extends State<HomePage>
                                     }
                                   },
                                 ),
+                              Expanded(
+                                child: Text(
+                                  add
+                                      ? "New Task"
+                                      : changeCompletedTask
+                                          ? "Completed Task"
+                                          : "Edit Task",
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
                               if (!add)
                                 IconButton(
                                   icon: const Icon(Icons.delete,
@@ -389,6 +399,13 @@ class HomePageState extends State<HomePage>
                                         await _completedTaskService
                                             .deleteCompTask(task.id);
                                       } else {
+                                        // Delete reminders first
+                                        final reminderService =
+                                            ReminderService();
+                                        await reminderService
+                                            .deleteRemindersForTask(task.id);
+
+                                        // Then delete the task
                                         await _taskService.deleteTask(task.id);
                                       }
                                       Navigator.pop(context);
@@ -1263,65 +1280,70 @@ class HomePageState extends State<HomePage>
                         if (_showDateTime &&
                             _dateController.text.isNotEmpty &&
                             _dateController.text.contains(":"))
-                          TextButton.icon(
-                            icon: Icon(Icons.repeat,
-                                color: showRepeat
-                                    ? Colors.blue
-                                    : Colors.grey[400]),
-                            label: Text(
-                              showRepeat
-                                  ? "Repeats every $repeatInterval ${repeatFrequency}${repeatInterval > 1 ? 's' : ''}"
-                                  : "Add Repeat",
-                              style: TextStyle(
+                          Center(
+                            child: TextButton.icon(
+                              icon: Icon(Icons.repeat,
                                   color: showRepeat
                                       ? Colors.blue
                                       : Colors.grey[400]),
-                            ),
-                            onPressed: () {
-                              _showRepeatOptionsDialog(
-                                  context,
-                                  modalSetState,
-                                  repeatFrequency,
-                                  repeatInterval,
-                                  repeatEndType,
-                                  repeatEndDateController,
-                                  repeatOccurrencesController, onUpdate:
-                                      (frequency, interval, endType, endDate,
-                                          occurrences) {
-                                modalSetState(() {
-                                  showRepeat = true;
-                                  repeatFrequency = frequency;
-                                  repeatInterval = interval;
-                                  repeatEndType = endType;
-                                  // The controllers are updated directly
+                              label: Text(
+                                showRepeat
+                                    ? "Repeats every $repeatInterval ${repeatFrequency}${repeatInterval > 1 ? 's' : ''}"
+                                    : "Add Repeat",
+                                style: TextStyle(
+                                    color: showRepeat
+                                        ? Colors.blue
+                                        : Colors.grey[400]),
+                              ),
+                              onPressed: () {
+                                _showRepeatOptionsDialog(
+                                    context,
+                                    modalSetState,
+                                    repeatFrequency,
+                                    repeatInterval,
+                                    repeatEndType,
+                                    repeatEndDateController,
+                                    repeatOccurrencesController, onUpdate:
+                                        (frequency, interval, endType, endDate,
+                                            occurrences) {
+                                  modalSetState(() {
+                                    showRepeat = true;
+                                    repeatFrequency = frequency;
+                                    repeatInterval = interval;
+                                    repeatEndType = endType;
+                                    // The controllers are updated directly
+                                  });
                                 });
-                              });
-                            },
-                            // Add trailing remove button to discard repeat options
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.only(left: 12, right: 0),
+                              },
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                              ),
                             ),
                           ),
 
-                        // Add Reminder button (only shows if a date is selected)
+                        // Add/Show Reminder button (only shows if a date is selected)
                         if (_showDateTime &&
                             _dateController.text.isNotEmpty &&
                             _dateController.text.contains(":"))
-                          TextButton.icon(
-                            icon: Icon(Icons.notifications_outlined,
-                                color: Colors.grey[400]),
-                            label: Text(
-                              "Add Reminder",
-                              style: TextStyle(color: Colors.grey[400]),
+                          Center(
+                            child: TextButton.icon(
+                              icon: Icon(Icons.notifications_outlined,
+                                  color: Colors.grey[400]),
+                              label: Text(
+                                savedReminders.isEmpty
+                                    ? "Add Reminders"
+                                    : "Show Reminders",
+                                style: TextStyle(color: Colors.grey[400]),
+                              ),
+                              onPressed: () {
+                                _showReminderOptionsDialog(
+                                  context,
+                                  modalSetState,
+                                  _dateController.text,
+                                  savedReminders,
+                                );
+                              },
                             ),
-                            onPressed: () {
-                              _showReminderOptionsDialog(
-                                context,
-                                modalSetState,
-                                _dateController.text,
-                                savedReminders,
-                              );
-                            },
                           ),
 
                         // Show remove button for repeat options when active
@@ -1434,12 +1456,15 @@ class HomePageState extends State<HomePage>
                           child: OutlinedButton(
                             onPressed: () async {
                               if (taskFormKey.currentState!.validate()) {
+                                int? newTaskId;
                                 Future<void> operation;
                                 if (add) {
                                   // Clean up the date string before saving
                                   final String deadline =
                                       _dateController.text.trim();
-                                  operation = _taskService.addTask(
+                                  
+                                  // Add the task and get the task ID
+                                  newTaskId = await _taskService.addTask(
                                     _labelController.text,
                                     deadline,
                                     _descriptionController.text,
@@ -1461,7 +1486,30 @@ class HomePageState extends State<HomePage>
                                         ? int.tryParse(
                                             repeatOccurrencesController.text)
                                         : null,
+                                    reminders: savedReminders.isNotEmpty
+                                        ? savedReminders
+                                        : null,
                                   );
+
+                                  // Schedule reminders if any were set
+                                  if (savedReminders.isNotEmpty &&
+                                      deadline.isNotEmpty &&
+                                      newTaskId != null) {
+                                    try {
+                                      final reminderService = ReminderService();
+                                      await reminderService.scheduleReminders(
+                                        deadline,
+                                        savedReminders,
+                                        newTaskId,
+                                      );
+                                      print('✅ Reminders scheduled for task $newTaskId');
+                                    } catch (e) {
+                                      print('❌ Error scheduling reminders: $e');
+                                      // Continue anyway - don't block task creation
+                                    }
+                                  }
+
+                                  operation = Future.value();
                                 } else if (changeCompletedTask &&
                                     task != null) {
                                   operation = Future.wait([
@@ -1501,7 +1549,30 @@ class HomePageState extends State<HomePage>
                                         selectedCategory!.label),
                                     _taskService.updateTask(
                                         task.id, "importance", taskImportance),
+                                    _taskService.updateTask(
+                                        task.id,
+                                        "reminders",
+                                        savedReminders.isNotEmpty
+                                            ? jsonEncode(savedReminders)
+                                            : null),
                                   ]);
+
+                                  // Update reminders in ReminderService database
+                                  if (deadline.isNotEmpty) {
+                                    try {
+                                      final reminderService = ReminderService();
+                                      await reminderService
+                                          .updateRemindersForTask(
+                                        task.id,
+                                        deadline,
+                                        savedReminders,
+                                      );
+                                      print('✅ Reminders updated for task ${task.id}');
+                                    } catch (e) {
+                                      print('❌ Error updating reminders: $e');
+                                      // Continue anyway - don't block task update
+                                    }
+                                  }
 
                                   // Then update repeat fields
                                   if (showRepeat) {
@@ -2161,13 +2232,26 @@ class HomePageState extends State<HomePage>
     String dueDate,
     List<Map<String, dynamic>> savedReminders,
   ) {
-    List<Map<String, dynamic>> selectedReminders = [];
+    // Pre-populate selectedReminders with saved reminders
+    List<Map<String, dynamic>> selectedReminders = List.from(savedReminders);
+
+    // Extract time from dueDate for the first option
+    String deadlineTime = 'set time';
+    if (dueDate.isNotEmpty && dueDate.contains(':')) {
+      try {
+        final timePart = dueDate.split(' ')[1];
+        deadlineTime = timePart;
+      } catch (e) {
+        deadlineTime = 'set time';
+      }
+    }
+    
     List<Map<String, dynamic>> reminderOptions = [
       {
-        'title': 'The day before at set time',
+        'title': '1 day before at $deadlineTime',
         'value': 1,
         'unit': 'days',
-        'time': 'at set time'
+        'time': 'at $deadlineTime'
       },
       {
         'title': '3 days before at 9 AM',
@@ -2188,6 +2272,15 @@ class HomePageState extends State<HomePage>
         'time': 'at 9 AM'
       },
     ];
+    
+    // Add any custom reminders from savedReminders that aren't in the default options
+    for (final saved in savedReminders) {
+      final existsInOptions =
+          reminderOptions.any((option) => option['title'] == saved['title']);
+      if (!existsInOptions) {
+        reminderOptions.add(saved);
+      }
+    }
 
     showModalBottomSheet(
       context: context,
@@ -2290,9 +2383,15 @@ class HomePageState extends State<HomePage>
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue[400],
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.blue[400],
+                              side: BorderSide(
+                                color: selectedReminders.isEmpty
+                                    ? Colors.grey[600]!
+                                    : Colors.blue[400]!,
+                                width: 2,
+                              ),
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
@@ -2302,13 +2401,16 @@ class HomePageState extends State<HomePage>
                                 ? null
                                 : () {
                                     Navigator.pop(context);
-                                    _processSelectedReminders(context, dueDate,
-                                        selectedReminders, savedReminders);
+                                    _processSelectedReminders(
+                                        context,
+                                        modalSetState,
+                                        dueDate,
+                                        selectedReminders,
+                                        savedReminders);
                                   },
                             child: const Text(
                               'Save',
                               style: TextStyle(
-                                color: Colors.white,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -2389,19 +2491,28 @@ class HomePageState extends State<HomePage>
 
   Future<void> _processSelectedReminders(
     BuildContext context,
+    StateSetter modalSetState,
     String dueDate,
     List<Map<String, dynamic>> selectedReminders,
     List<Map<String, dynamic>> savedReminders,
   ) async {
-    for (final reminder in selectedReminders) {
-      await _addReminder(
-        dueDate,
-        reminder['value'],
-        reminder['unit'],
-        reminder['time'],
-        savedReminders,
-      );
-    }
+    // Clear existing reminders and replace with selected ones
+    savedReminders.clear();
+    savedReminders.addAll(selectedReminders);
+
+    // Trigger UI rebuild for the parent form
+    modalSetState(() {});
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Reminders updated',
+          style: const TextStyle(color: Colors.white),
+        ),
+        backgroundColor: Colors.green[600],
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _showCustomReminderDialog(
@@ -2671,11 +2782,22 @@ class HomePageState extends State<HomePage>
                     ),
                   ),
                   onPressed: () {
+                    // Format unit with proper singular/plural
+                    final unitDisplay = unit.toLowerCase();
+                    final unitFormatted = value == 1
+                        ? unitDisplay.substring(0, unitDisplay.length - 1)
+                        : unitDisplay;
+                    
+                    // Format time in 24-hour format for backend, but display in 12-hour for user
+                    final timeStr24 = '${timeOfDay.hour.toString().padLeft(2, '0')}:${timeOfDay.minute.toString().padLeft(2, '0')}';
+                    final timeDisplay = timeOfDay.format(context);
+                    
                     final customReminder = {
-                      'title': '$value $unit at ${timeOfDay.format(context)}',
+                      'title':
+                          '$value $unitFormatted before at $timeDisplay',
                       'value': value,
-                      'unit': unit.toLowerCase(),
-                      'time': timeOfDay.format(context),
+                      'unit': unitFormatted,
+                      'time': 'at $timeStr24',
                     };
 
                     if (setModalState != null &&
@@ -2689,7 +2811,8 @@ class HomePageState extends State<HomePage>
                     } else {
                       Navigator.pop(context);
                       _addReminder(dueDate, value, unit.toLowerCase(),
-                          timeOfDay.format(context), savedReminders ?? []);
+                          'at $timeStr24',
+                          savedReminders ?? []);
                     }
                   },
                   child:
@@ -2707,7 +2830,7 @@ class HomePageState extends State<HomePage>
       String timeNote, List<Map<String, dynamic>> savedReminders) async {
     // Add reminder to saved reminders list
     savedReminders.add({
-      'title': '$time $unit at $timeNote',
+      'title': '$time $unit before $timeNote',
       'value': time,
       'unit': unit,
       'time': timeNote,
@@ -3503,6 +3626,11 @@ class HomePageState extends State<HomePage>
                                       }
                                     }
 
+                                      // Delete reminders before deleting the task
+                                      final reminderService = ReminderService();
+                                      await reminderService
+                                          .deleteRemindersForTask(task.id);
+                                    
                                     // Delete the original task
                                     await _taskService.deleteTask(task.id);
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:mental_warior/models/goals.dart';
 import 'package:mental_warior/models/tasks.dart';
 import 'package:mental_warior/models/habits.dart';
@@ -8,6 +9,7 @@ import 'package:mental_warior/models/workouts.dart';
 import 'package:mental_warior/models/user_xp.dart';
 import 'package:mental_warior/services/foreground_service.dart';
 import 'package:mental_warior/services/plate_bar_customization_service.dart';
+import 'package:mental_warior/services/reminder_service.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
@@ -46,6 +48,7 @@ class DatabaseService {
         GoalService().createGoalTable(db);
         BookService().createbookTable(db);
         CategoryService().createCategoryTable(db);
+        ReminderService().createReminderTable(db); // Added reminders table
         WorkoutService().createWorkoutTables(db); // Added workout tables
         WorkoutService().createActiveWorkoutSessionsTable(
             db); // Added active sessions table
@@ -155,6 +158,10 @@ class DatabaseService {
           await db.execute(
               'ALTER TABLE pending_tasks ADD COLUMN importance INTEGER DEFAULT 2');
         }
+        if (oldVersion < 22) {
+          // Create reminders table for task reminders
+          ReminderService().createReminderTable(db);
+        }
       },
     );
   }
@@ -190,12 +197,13 @@ class TaskService {
         $_taskRepeatEndTypeColumnName TEXT,
         $_taskRepeatEndDateColumnName TEXT,
         $_taskRepeatOccurrencesColumnName INTEGER,
-        $_taskImportanceColumnName INTEGER DEFAULT 2
+        $_taskImportanceColumnName INTEGER DEFAULT 2,
+        reminders TEXT
       ) 
     ''');
   }
 
-  Future<void> addTask(
+  Future<int> addTask(
     String label,
     String deadline,
     String description,
@@ -206,9 +214,10 @@ class TaskService {
     String? repeatEndType,
     String? repeatEndDate,
     int? repeatOccurrences,
+    List<Map<String, dynamic>>? reminders,
   }) async {
     final db = await DatabaseService.instance.database;
-    await db.insert(
+    final taskId = await db.insert(
       _taskTableName,
       {
         _taskLabelColumnName: label,
@@ -222,9 +231,13 @@ class TaskService {
         _taskRepeatEndTypeColumnName: repeatEndType,
         _taskRepeatEndDateColumnName: repeatEndDate,
         _taskRepeatOccurrencesColumnName: repeatOccurrences,
+        'reminders': reminders != null && reminders.isNotEmpty
+            ? jsonEncode(reminders)
+            : null,
       },
     );
     tasksUpdatedNotifier.value = !tasksUpdatedNotifier.value;
+    return taskId;
   }
 
   Future<List<Task>> getTasks() async {
@@ -246,20 +259,36 @@ class TaskService {
 
     return data
         .map(
-          (e) => Task(
-            id: e[_taskIdColumnName] as int,
-            label: e[_taskLabelColumnName] as String,
-            status: e[_taskStatusColumnName] as int,
-            description: e[_taskDescriptionColumnName] as String,
-            deadline: e[_taskDeadlineColumnName] as String,
-            category: e[_taskCategoryColumnName] as String,
-            importance: e[_taskImportanceColumnName] as int? ?? 3,
-            repeatFrequency: e[_taskRepeatFrequencyColumnName] as String?,
-            repeatInterval: e[_taskRepeatIntervalColumnName] as int?,
-            repeatEndType: e[_taskRepeatEndTypeColumnName] as String?,
-            repeatEndDate: e[_taskRepeatEndDateColumnName] as String?,
-            repeatOccurrences: e[_taskRepeatOccurrencesColumnName] as int?,
-          ),
+      (e) {
+        List<Map<String, dynamic>>? reminders;
+        final remindersJson = e['reminders'] as String?;
+        if (remindersJson != null && remindersJson.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(remindersJson);
+            reminders = (decoded as List)
+                .map((item) => Map<String, dynamic>.from(item as Map))
+                .toList();
+          } catch (error) {
+            print('Error parsing reminders: $error');
+          }
+        }
+
+        return Task(
+          id: e[_taskIdColumnName] as int,
+          label: e[_taskLabelColumnName] as String,
+          status: e[_taskStatusColumnName] as int,
+          description: e[_taskDescriptionColumnName] as String,
+          deadline: e[_taskDeadlineColumnName] as String,
+          category: e[_taskCategoryColumnName] as String,
+          importance: e[_taskImportanceColumnName] as int? ?? 3,
+          repeatFrequency: e[_taskRepeatFrequencyColumnName] as String?,
+          repeatInterval: e[_taskRepeatIntervalColumnName] as int?,
+          repeatEndType: e[_taskRepeatEndTypeColumnName] as String?,
+          repeatEndDate: e[_taskRepeatEndDateColumnName] as String?,
+          repeatOccurrences: e[_taskRepeatOccurrencesColumnName] as int?,
+          reminders: reminders,
+        );
+      },
         )
         .toList();
   }
