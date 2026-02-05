@@ -10,6 +10,7 @@ import 'package:mental_warior/widgets/xp_gain_bubble.dart';
 import 'package:mental_warior/widgets/level_up_animation.dart';
 import 'package:mental_warior/utils/app_theme.dart';
 
+
 class CategoriesPage extends StatefulWidget {
   const CategoriesPage({super.key});
 
@@ -607,6 +608,565 @@ class _CategoriesPageState extends State<CategoriesPage>
       TaskService.tasksUpdatedNotifier.value =
           !TaskService.tasksUpdatedNotifier.value;
     }
+  }
+
+  void _showReminderOptionsDialog(
+    BuildContext context,
+    StateSetter modalSetState,
+    String dueDate,
+  ) {
+    List<Map<String, dynamic>> selectedReminders = [];
+    List<Map<String, dynamic>> reminderOptions = [
+      {
+        'title': 'The day before at set time',
+        'value': 1,
+        'unit': 'days',
+        'time': 'at set time',
+      },
+      {
+        'title': '3 days before at 9 AM',
+        'value': 3,
+        'unit': 'days',
+        'time': 'at 9 AM',
+      },
+      {
+        'title': '1 week before at 9 AM',
+        'value': 1,
+        'unit': 'weeks',
+        'time': 'at 9 AM',
+      },
+      {
+        'title': '2 weeks before at 9 AM',
+        'value': 2,
+        'unit': 'weeks',
+        'time': 'at 9 AM',
+      },
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 32.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Set Reminders',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Select one or more reminders',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    ),
+                    const SizedBox(height: 16),
+                    // Reminder options with checkboxes
+                    ...reminderOptions
+                        .map((reminder) => [
+                              _buildReminderCheckbox(
+                                setModalState,
+                                selectedReminders,
+                                reminder['title'],
+                                {
+                                  'value': reminder['value'],
+                                  'unit': reminder['unit'],
+                                  'time': reminder['time']
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                            ])
+                        .expand((x) => x)
+                        .toList(),
+                    const SizedBox(height: 12),
+                    Divider(color: Colors.grey[700]),
+                    const SizedBox(height: 12),
+                    Material(
+                      color: Colors.grey[850],
+                      borderRadius: BorderRadius.circular(8),
+                      child: InkWell(
+                        onTap: () {
+                          _showCustomReminderDialog(
+                              context,
+                              dueDate,
+                              setModalState,
+                              selectedReminders,
+                              reminderOptions);
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(Icons.add_circle_outline,
+                                  color: Colors.blue[400], size: 24),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Add Custom Reminder',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Action buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(color: Colors.grey[400]),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue[400],
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            onPressed: selectedReminders.isEmpty
+                                ? null
+                                : () {
+                                    Navigator.pop(context);
+                                    _processSelectedReminders(
+                                        context, dueDate, selectedReminders);
+                                  },
+                            child: const Text(
+                              'Save',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildReminderCheckbox(
+    StateSetter setModalState,
+    List<Map<String, dynamic>> selectedReminders,
+    String title,
+    Map<String, dynamic> reminderData,
+  ) {
+    final isSelected = selectedReminders.any((r) => r['title'] == title);
+
+    return Material(
+      color: Colors.grey[850],
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: () {
+          setModalState(() {
+            if (isSelected) {
+              selectedReminders.removeWhere((r) => r['title'] == title);
+            } else {
+              selectedReminders.add({
+                'title': title,
+                ...reminderData,
+              });
+            }
+          });
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: isSelected ? Colors.blue[400]! : Colors.grey[600]!,
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(4),
+                  color: isSelected ? Colors.blue[400] : Colors.transparent,
+                ),
+                child: isSelected
+                    ? Icon(Icons.check, size: 18, color: Colors.white)
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _processSelectedReminders(
+    BuildContext context,
+    String dueDate,
+    List<Map<String, dynamic>> selectedReminders,
+  ) async {
+    for (final reminder in selectedReminders) {
+      await _addReminder(
+        dueDate,
+        reminder['value'],
+        reminder['unit'],
+        reminder['time'],
+      );
+    }
+  }
+
+  void _showCustomReminderDialog(
+    BuildContext context,
+    String dueDate,
+    StateSetter? setModalState,
+    List<Map<String, dynamic>>? selectedReminders,
+    List<Map<String, dynamic>>? reminderOptions,
+  ) {
+    int value = 1;
+    String unit = 'Days'; // Days, Weeks, Months
+    TimeOfDay timeOfDay = const TimeOfDay(hour: 9, minute: 0);
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setState) {
+            return AlertDialog(
+              backgroundColor: Colors.grey[900],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: Text(
+                'Set Custom Reminder',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 12),
+                    // Time unit and value input section
+                    Column(
+                      children: [
+                        Text(
+                          'Time Before',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: Colors.blue[400]!, width: 1.5),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(Icons.remove,
+                                        color: Colors.blue[400]),
+                                    onPressed: () {
+                                      setState(() {
+                                        if (value > 1) value--;
+                                      });
+                                    },
+                                  ),
+                                  Text(
+                                    value.toString(),
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(Icons.add,
+                                        color: Colors.blue[400]),
+                                    onPressed: () {
+                                      setState(() {
+                                        if (value < 99) value++;
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                              Divider(color: Colors.grey[700], height: 1),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          unit = 'Days';
+                                        });
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 12),
+                                        decoration: BoxDecoration(
+                                          color: unit == 'Days'
+                                              ? Colors.blue[400]
+                                                  ?.withOpacity(0.3)
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          'Days',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: unit == 'Days'
+                                                ? Colors.blue[300]
+                                                : Colors.grey[400],
+                                            fontWeight: unit == 'Days'
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          unit = 'Weeks';
+                                        });
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 12),
+                                        decoration: BoxDecoration(
+                                          color: unit == 'Weeks'
+                                              ? Colors.blue[400]
+                                                  ?.withOpacity(0.3)
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          'Weeks',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: unit == 'Weeks'
+                                                ? Colors.blue[300]
+                                                : Colors.grey[400],
+                                            fontWeight: unit == 'Weeks'
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          unit = 'Months';
+                                        });
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            vertical: 12),
+                                        decoration: BoxDecoration(
+                                          color: unit == 'Months'
+                                              ? Colors.blue[400]
+                                                  ?.withOpacity(0.3)
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          'Months',
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: unit == 'Months'
+                                                ? Colors.blue[300]
+                                                : Colors.grey[400],
+                                            fontWeight: unit == 'Months'
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    // Time input section
+                    Column(
+                      children: [
+                        Text(
+                          'Time of Day',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        GestureDetector(
+                          onTap: () async {
+                            final TimeOfDay? picked = await showTimePicker(
+                              context: context,
+                              initialTime: timeOfDay,
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                timeOfDay = picked;
+                              });
+                            }
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color: Colors.blue[400]!, width: 1.5),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.schedule,
+                                    color: Colors.blue[400], size: 24),
+                                const SizedBox(width: 12),
+                                Text(
+                                  timeOfDay.format(context),
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: Colors.grey[500]),
+                  ),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[400],
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: () {
+                    final customReminder = {
+                      'title': '$value $unit at ${timeOfDay.format(context)}',
+                      'value': value,
+                      'unit': unit.toLowerCase(),
+                      'time': timeOfDay.format(context),
+                    };
+
+                    if (setModalState != null &&
+                        selectedReminders != null &&
+                        reminderOptions != null) {
+                      setModalState(() {
+                        reminderOptions.add(customReminder);
+                        selectedReminders.add(customReminder);
+                      });
+                      Navigator.pop(context);
+                    } else {
+                      Navigator.pop(context);
+                      _addReminder(dueDate, value, unit.toLowerCase(),
+                          timeOfDay.format(context));
+                    }
+                  },
+                  child:
+                      const Text('Add', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _addReminder(
+      String dueDate, int time, String unit, String timeNote) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Reminder set for $time $unit before due date at $timeNote',
+          style: const TextStyle(color: Colors.white),
+        ),
+        backgroundColor: Colors.green[600],
+        duration: const Duration(seconds: 2),
+      ),
+    );
+    // TODO: Implement actual reminder scheduling with notification system
   }
 }
 
@@ -1944,7 +2504,5 @@ class OptimizedTaskCard extends StatelessWidget {
       }),
     );
   }
-
-
 
 }

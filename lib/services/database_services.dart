@@ -1221,7 +1221,11 @@ class WorkoutService {
   }
 
   // Add a new workout
-  Future<int> addWorkout(String name, String date, int duration) async {
+  Future<int> addWorkout(
+    String name,
+    String date,
+    int duration,
+  ) async {
     final db = await DatabaseService.instance.database;
     final workoutId = await db.insert(
       _workoutTableName,

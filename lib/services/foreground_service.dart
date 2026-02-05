@@ -85,6 +85,15 @@ class WorkoutForegroundTaskHandler extends TaskHandler {
     if (newElapsedSeconds != _elapsedSeconds) {
       _elapsedSeconds = newElapsedSeconds;
       
+      // Update notification with current time
+      final formattedTime =
+          WorkoutForegroundService._formatDuration(_elapsedSeconds);
+      final workoutName = _workoutName ?? 'Workout';
+      FlutterForegroundTask.updateService(
+        notificationTitle: 'Workout in Progress',
+        notificationText: '$workoutName • $formattedTime',
+      );
+      
       // Save data every 60 seconds, but only if not destroyed
       // Note: Main auto-save is now handled by WorkoutSessionPage every 60 seconds
       // This is just a backup save for when the foreground service is running independently
@@ -274,12 +283,13 @@ class WorkoutForegroundService {
   static Future<void> initialize() async {
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'workout_foreground_service',
-        channelName: 'Workout Foreground Service',
-        channelDescription: 'This notification appears when the workout is running in the background.',
-        channelImportance: NotificationChannelImportance.MIN,
-        priority: NotificationPriority.MIN,
-        visibility: NotificationVisibility.VISIBILITY_SECRET, // Hide notification
+        channelId:
+            'workout_foreground_service_hidden', // Keep same ID to avoid duplicate channels
+        channelName: 'Active Workout',
+        channelDescription: 'Shows your current workout progress',
+        channelImportance: NotificationChannelImportance.LOW,
+        priority: NotificationPriority.LOW,
+        showWhen: false,
       ),
       iosNotificationOptions: const IOSNotificationOptions(
         showNotification: false, // Disable notification display
@@ -297,15 +307,27 @@ class WorkoutForegroundService {
 
   /// Start the foreground service for an active workout
   static Future<bool> startWorkoutService(String workoutName, {DateTime? startTime, Map<String, dynamic>? workoutData, int? workoutId, bool? isTemporary}) async {
-    if (_isServiceRunning) return true;
+    if (_isServiceRunning) {
+      // If service is already running, just update the notification
+      final elapsedSeconds = startTime != null
+          ? DateTime.now().difference(startTime).inSeconds
+          : 0;
+      final formattedTime = _formatDuration(elapsedSeconds);
+      await FlutterForegroundTask.updateService(
+        notificationTitle: 'Workout in Progress',
+        notificationText: '$workoutName • $formattedTime',
+      );
+      return true;
+    }
 
     // Save workout data before starting service
     await _storeWorkoutData(workoutName, startTime, workoutData: workoutData, workoutId: workoutId, isTemporary: isTemporary);
 
     try {
+      final formattedTime = _formatDuration(0);
       await FlutterForegroundTask.startService(
-        notificationTitle: '',
-        notificationText: '',
+        notificationTitle: 'Workout in Progress',
+        notificationText: '$workoutName • $formattedTime',
         callback: startCallback,
       );
       
@@ -513,5 +535,12 @@ class WorkoutForegroundService {
     } catch (e) {
       print('Error clearing workout data: $e');
     }
+  }
+
+  /// Format duration in MM:SS format
+  static String _formatDuration(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainingSeconds = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 }

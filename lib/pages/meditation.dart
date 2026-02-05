@@ -75,45 +75,51 @@ class MeditationPageState extends State<MeditationPage>
                 ),
                 size: Size.infinite,
               ),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                          AppTheme.accent.withOpacity(0.02),
-                          AppTheme.accent.withOpacity(0.005),
-                  ],
+              Center(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [
+                              AppTheme.accent.withOpacity(0.02),
+                              AppTheme.accent.withOpacity(0.005),
+                            ],
+                          ),
+                        ),
+                        child: Icon(Icons.spa_outlined,
+                            size: 70, color: AppTheme.accent),
+                      ),
+                      SizedBox(height: 24),
+                      Text(
+                        "Recharge Your Mind",
+                        style: AppTheme.displayLarge,
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        "Choose your meditation mode",
+                        style: AppTheme.bodyMedium
+                            .copyWith(color: AppTheme.textSecondary),
+                      ),
+                      SizedBox(height: 40),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildModeButton(
+                              "Guided", Icons.headset, AppTheme.accent),
+                          SizedBox(width: 20),
+                          _buildModeButton("Unguided", Icons.self_improvement,
+                              AppTheme.success),
+                        ],
+                      )
+                    ],
+                  ),
                 ),
               ),
-              child: Icon(Icons.spa_outlined, size: 70, color: AppTheme.accent),
-            ),
-            SizedBox(height: 24),
-            Text(
-              "Recharge Your Mind",
-              style: AppTheme.displayLarge,
-            ),
-            SizedBox(height: 8),
-            Text(
-              "Choose your meditation mode",
-              style:
-                  AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
-            ),
-            SizedBox(height: 40),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildModeButton("Guided", Icons.headset, AppTheme.accent),
-                SizedBox(width: 20),
-                _buildModeButton(
-                    "Unguided", Icons.self_improvement, AppTheme.success),
-              ],
-                  )
-                ],
-            ),
             ],
           );
         },
@@ -171,100 +177,102 @@ class MeditationPageState extends State<MeditationPage>
           shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  "Select Duration",
-                  style: AppTheme.headlineMedium.copyWith(
-                    color: AppTheme.accent,
-                    fontWeight: FontWeight.bold,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    "Select Duration",
+                    style: AppTheme.headlineMedium.copyWith(
+                      color: AppTheme.accent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ...durations.map((duration) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  _startMeditation(duration);
-                                },
-                                borderRadius: AppTheme.borderRadiusMd,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 14),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.surfaceLight,
-                                    borderRadius: AppTheme.borderRadiusMd,
-                                    border: Border.all(
-                                      color: AppTheme.surfaceBorder,
-                                      width: 1,
+                  const SizedBox(height: 24),
+                  SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ...durations.map((duration) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _startMeditation(duration);
+                                  },
+                                  borderRadius: AppTheme.borderRadiusMd,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 14),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.surfaceLight,
+                                      borderRadius: AppTheme.borderRadiusMd,
+                                      border: Border.all(
+                                        color: AppTheme.surfaceBorder,
+                                        width: 1,
+                                      ),
                                     ),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      "$duration minutes",
-                                      style: AppTheme.bodyMedium.copyWith(
-                                        color: AppTheme.textPrimary,
-                                        fontWeight: FontWeight.w500,
+                                    child: Center(
+                                      child: Text(
+                                        "$duration minutes",
+                                        style: AppTheme.bodyMedium.copyWith(
+                                          color: AppTheme.textPrimary,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          )),
-                      const SizedBox(height: 8),
-                      Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.pop(context);
-                            _showCustomTimePicker();
-                          },
-                          borderRadius: AppTheme.borderRadiusMd,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 14),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  AppTheme.accent.withOpacity(0.02),
-                                  AppTheme.accent.withOpacity(0.005),
-                                ],
+                            )),
+                        const SizedBox(height: 8),
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.pop(context);
+                              _showCustomTimePicker();
+                            },
+                            borderRadius: AppTheme.borderRadiusMd,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 14),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    AppTheme.accent.withOpacity(0.02),
+                                    AppTheme.accent.withOpacity(0.005),
+                                  ],
+                                ),
+                                borderRadius: AppTheme.borderRadiusMd,
+                                border: Border.all(
+                                  color: AppTheme.accent.withOpacity(0.08),
+                                  width: 1.5,
+                                ),
                               ),
-                              borderRadius: AppTheme.borderRadiusMd,
-                              border: Border.all(
-                                color: AppTheme.accent.withOpacity(0.08),
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Center(
-                              child: Text(
-                                "Custom",
-                                style: AppTheme.bodyMedium.copyWith(
-                                  color: AppTheme.accent,
-                                  fontWeight: FontWeight.w600,
+                              child: Center(
+                                child: Text(
+                                  "Custom",
+                                  style: AppTheme.bodyMedium.copyWith(
+                                    color: AppTheme.accent,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );

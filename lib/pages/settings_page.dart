@@ -6,6 +6,10 @@ import 'package:mental_warior/services/plate_bar_customization_service.dart';
 import 'package:mental_warior/utils/app_theme.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -115,19 +119,37 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Settings',
-                  style: AppTheme.headlineMedium.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 28,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Customize your experience',
-                  style: AppTheme.bodyMedium.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Settings',
+                            style: AppTheme.displayLarge.copyWith(
+                              height: 1.2,
+                              fontSize: 28,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Customize your experience',
+                            style: AppTheme.bodyMedium.copyWith(
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _loadSettings,
+                      icon: Icon(Icons.refresh_rounded, color: AppTheme.accent),
+                      iconSize: 24,
+                      tooltip: 'Reload settings',
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -159,18 +181,18 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                   ),
                 ]),
-                const SizedBox(height: 32),
+                const SizedBox(height: 40),
 
                 // Workout Section
                 _buildSectionHeader('Workout', Icons.fitness_center),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 
                 // Goals
                 _buildSubsectionHeader('Goals', Icons.flag_outlined),
                 _buildSettingsCard([
                   _buildWeeklyGoalTile(),
                 ]),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
                 // Rest Timer
                 _buildSubsectionHeader('Rest Timer', Icons.timer_outlined),
@@ -199,7 +221,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                   ),
                 ]),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
                 // Units
                 _buildSubsectionHeader('Units', Icons.straighten_outlined),
@@ -208,7 +230,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   _buildDivider(),
                   _buildMeasurementUnitTile(),
                 ]),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
                 // Workout Session
                 _buildSubsectionHeader(
@@ -236,7 +258,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     },
                   ),
                 ]),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
                 // Personal Records
                 _buildSubsectionHeader(
@@ -253,7 +275,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ],
                 ]),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
                 // Plate Calculator
                 _buildSubsectionHeader(
@@ -266,7 +288,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     () => _navigateToPlateBarCustomization(),
                   ),
                 ]),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
                 // Data
                 _buildSubsectionHeader('Data', Icons.storage_outlined),
@@ -282,7 +304,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     'Import Workout Data',
                     'Restore workouts from a file',
                     Icons.download_outlined,
-                    () => _showComingSoonSnackbar(),
+                    () => _importWorkoutData(),
                   ),
                   _buildDivider(),
                   _buildActionTile(
@@ -293,11 +315,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     isDestructive: true,
                   ),
                 ]),
-                const SizedBox(height: 32),
+                const SizedBox(height: 40),
 
                 // General Section
                 _buildSectionHeader('General', Icons.tune_outlined),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 _buildSettingsCard([
                   _buildSettingsTile(
                     'Notifications',
@@ -324,16 +346,30 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildSectionHeader(String title, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 16, top: 8),
       child: Row(
         children: [
-          Icon(icon, color: AppTheme.accent, size: 20),
-          const SizedBox(width: 8),
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Icon(
+              icon,
+              color: AppTheme.accent,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 10),
           Text(
             title,
             style: AppTheme.labelLarge.copyWith(
-              color: AppTheme.accent,
-              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              letterSpacing: 0.3,
             ),
           ),
         ],
@@ -343,17 +379,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildSubsectionHeader(String title, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, top: 8),
+      padding: const EdgeInsets.only(bottom: 10, top: 12),
       child: Row(
         children: [
-          Icon(icon, color: AppTheme.textSecondary, size: 16),
-          const SizedBox(width: 6),
+          Icon(icon, color: AppTheme.accent.withOpacity(0.7), size: 16),
+          const SizedBox(width: 8),
           Text(
             title,
             style: AppTheme.bodyMedium.copyWith(
               color: AppTheme.textSecondary,
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.w600,
               fontSize: 13,
+              letterSpacing: 0.2,
             ),
           ),
         ],
@@ -364,21 +401,28 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildSettingsCard(List<Widget> children) {
     return Card(
       color: AppTheme.surface,
+      elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: AppTheme.borderRadiusMd,
         side: BorderSide(
-          color: AppTheme.surfaceBorder.withOpacity(0.5),
+          color: AppTheme.surfaceBorder.withOpacity(0.6),
           width: 1,
         ),
       ),
-      child: Column(children: children),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: AppTheme.borderRadiusMd,
+          boxShadow: AppTheme.shadowMd,
+        ),
+        child: Column(children: children),
+      ),
     );
   }
 
   Widget _buildDivider() {
     return Divider(
       height: 1,
-      color: AppTheme.surfaceBorder,
+      color: AppTheme.surfaceBorder.withOpacity(0.4),
       indent: 16,
       endIndent: 16,
     );
@@ -390,35 +434,50 @@ class _SettingsPageState extends State<SettingsPage> {
     IconData icon, {
     VoidCallback? onTap,
   }) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: AppTheme.accent.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(8),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        splashColor: AppTheme.accent.withOpacity(0.1),
+        highlightColor: AppTheme.accent.withOpacity(0.08),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppTheme.accent.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              icon,
+              color: AppTheme.accent,
+              size: 20,
+            ),
+          ),
+          title: Text(
+            title,
+            style: AppTheme.bodyMedium.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.textSecondary,
+              height: 1.3,
+            ),
+          ),
+          trailing: Icon(
+            Icons.chevron_right,
+            color: AppTheme.accent,
+            size: 20,
+          ),
         ),
-        child: Icon(
-          icon,
-          color: AppTheme.accent,
-          size: 20,
-        ),
       ),
-      title: Text(
-        title,
-        style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w500),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
-      ),
-      trailing: Icon(
-        Icons.chevron_right,
-        color: AppTheme.textSecondary.withOpacity(0.5),
-        size: 20,
-      ),
-      onTap: onTap,
     );
   }
 
@@ -429,12 +488,27 @@ class _SettingsPageState extends State<SettingsPage> {
     void Function(bool) onChanged,
   ) {
     return SwitchListTile(
-      title: Text(title, style: AppTheme.bodyMedium),
-      subtitle: Text(subtitle,
-          style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      title: Text(
+        title,
+        style: AppTheme.bodyMedium.copyWith(
+          fontWeight: FontWeight.w600,
+          color: AppTheme.textPrimary,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: AppTheme.bodySmall.copyWith(
+          color: AppTheme.textSecondary,
+          height: 1.3,
+        ),
+      ),
       value: value,
       onChanged: onChanged,
       activeColor: AppTheme.accent,
+      activeTrackColor: AppTheme.accent.withOpacity(0.3),
+      inactiveThumbColor: AppTheme.textTertiary,
+      inactiveTrackColor: AppTheme.surfaceBorder.withOpacity(0.3),
     );
   }
 
@@ -445,52 +519,105 @@ class _SettingsPageState extends State<SettingsPage> {
     VoidCallback onTap, {
     bool isDestructive = false,
   }) {
-    return ListTile(
-      leading: Icon(icon,
-          color: isDestructive ? AppTheme.error : AppTheme.textSecondary),
-      title: Text(
-        title,
-        style: AppTheme.bodyMedium.copyWith(
-            color: isDestructive ? AppTheme.error : AppTheme.textPrimary),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        splashColor:
+            (isDestructive ? AppTheme.error : AppTheme.accent).withOpacity(0.1),
+        highlightColor: (isDestructive ? AppTheme.error : AppTheme.accent)
+            .withOpacity(0.08),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: (isDestructive ? AppTheme.error : AppTheme.textSecondary)
+                  .withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              icon,
+              color: isDestructive ? AppTheme.error : AppTheme.accent,
+              size: 20,
+            ),
+          ),
+          title: Text(
+            title,
+            style: AppTheme.bodyMedium.copyWith(
+              color: isDestructive ? AppTheme.error : AppTheme.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          subtitle: Text(
+            subtitle,
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.textSecondary,
+              height: 1.3,
+            ),
+          ),
+          trailing: Icon(
+            Icons.chevron_right,
+            color: AppTheme.accent,
+            size: 20,
+          ),
+        ),
       ),
-      subtitle: Text(
-        subtitle,
-        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
-      ),
-      trailing: Icon(Icons.chevron_right, color: AppTheme.textTertiary),
-      onTap: onTap,
     );
   }
 
   Widget _buildWeeklyGoalTile() {
-    return ListTile(
-      title: Text('Weekly Workout Goal', style: AppTheme.bodyMedium),
-      subtitle: Text(
-        '$_weeklyWorkoutGoal workouts per week',
-        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.accent.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '$_weeklyWorkoutGoal',
-              style: TextStyle(
-                color: AppTheme.accent,
-                fontWeight: FontWeight.bold,
-              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _showWeeklyGoalDialog,
+        borderRadius: BorderRadius.circular(8),
+        splashColor: AppTheme.accent.withOpacity(0.1),
+        highlightColor: AppTheme.accent.withOpacity(0.08),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          title: Text(
+            'Weekly Workout Goal',
+            style: AppTheme.bodyMedium.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: AppTheme.textTertiary),
-        ],
+          subtitle: Text(
+            '$_weeklyWorkoutGoal workouts per week',
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.textSecondary,
+              height: 1.3,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$_weeklyWorkoutGoal',
+                  style: AppTheme.bodySmall.copyWith(
+                    color: AppTheme.accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: AppTheme.accent, size: 20),
+            ],
+          ),
+        ),
       ),
-      onTap: _showWeeklyGoalDialog,
     );
   }
 
@@ -501,100 +628,160 @@ class _SettingsPageState extends State<SettingsPage> {
         ? '$minutes:${seconds.toString().padLeft(2, '0')}'
         : '$seconds sec';
 
-    return ListTile(
-      title: Text('Default Rest Time', style: AppTheme.bodyMedium),
-      subtitle: Text(
-        'Time between sets',
-        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.accent.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              displayTime,
-              style: TextStyle(
-                color: AppTheme.accent,
-                fontWeight: FontWeight.bold,
-              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _showRestTimerDialog,
+        borderRadius: BorderRadius.circular(8),
+        splashColor: AppTheme.accent.withOpacity(0.1),
+        highlightColor: AppTheme.accent.withOpacity(0.08),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          title: Text(
+            'Default Rest Time',
+            style: AppTheme.bodyMedium.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: AppTheme.textTertiary),
-        ],
+          subtitle: Text(
+            'Time between sets',
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.textSecondary,
+              height: 1.3,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  displayTime,
+                  style: AppTheme.bodySmall.copyWith(
+                    color: AppTheme.accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: AppTheme.accent, size: 20),
+            ],
+          ),
+        ),
       ),
-      onTap: _showRestTimerDialog,
     );
   }
 
   Widget _buildWeightUnitTile() {
     final currentUnit = _showWeightInLbs ? 'lbs' : 'kg';
-    return ListTile(
-      title: Text('Weight Unit', style: AppTheme.bodyMedium),
-      subtitle: Text(
-        'Unit for displaying weight',
-        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.accent.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              currentUnit,
-              style: TextStyle(
-                color: AppTheme.accent,
-                fontWeight: FontWeight.bold,
-              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _showWeightUnitDialog,
+        borderRadius: BorderRadius.circular(8),
+        splashColor: AppTheme.accent.withOpacity(0.1),
+        highlightColor: AppTheme.accent.withOpacity(0.08),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          title: Text(
+            'Weight Unit',
+            style: AppTheme.bodyMedium.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: AppTheme.textTertiary),
-        ],
+          subtitle: Text(
+            'Unit for displaying weight',
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.textSecondary,
+              height: 1.3,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  currentUnit,
+                  style: AppTheme.bodySmall.copyWith(
+                    color: AppTheme.accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: AppTheme.accent, size: 20),
+            ],
+          ),
+        ),
       ),
-      onTap: _showWeightUnitDialog,
     );
   }
 
   Widget _buildMeasurementUnitTile() {
     final currentUnit = _useMeasurementInInches ? 'in' : 'cm';
-    return ListTile(
-      title: Text('Body Measurement Unit', style: AppTheme.bodyMedium),
-      subtitle: Text(
-        'Unit for body measurements',
-        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.accent.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              currentUnit,
-              style: TextStyle(
-                color: AppTheme.accent,
-                fontWeight: FontWeight.bold,
-              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _showMeasurementUnitDialog,
+        borderRadius: BorderRadius.circular(8),
+        splashColor: AppTheme.accent.withOpacity(0.1),
+        highlightColor: AppTheme.accent.withOpacity(0.08),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          title: Text(
+            'Body Measurement Unit',
+            style: AppTheme.bodyMedium.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: AppTheme.textTertiary),
-        ],
+          subtitle: Text(
+            'Unit for body measurements',
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.textSecondary,
+              height: 1.3,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  currentUnit,
+                  style: AppTheme.bodySmall.copyWith(
+                    color: AppTheme.accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: AppTheme.textTertiary, size: 20),
+            ],
+          ),
+        ),
       ),
-      onTap: _showMeasurementUnitDialog,
     );
   }
 
@@ -610,34 +797,54 @@ class _SettingsPageState extends State<SettingsPage> {
             ? 'Show PRs for specific exercises'
             : 'PRs hidden on workout page';
 
-    return ListTile(
-      title: Text('PR Display Mode', style: AppTheme.bodyMedium),
-      subtitle: Text(
-        subtitle,
-        style: AppTheme.bodySmall.copyWith(color: AppTheme.textSecondary),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.accent.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              displayText,
-              style: TextStyle(
-                color: AppTheme.accent,
-                fontWeight: FontWeight.bold,
-              ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _showPRDisplayModeDialog,
+        borderRadius: BorderRadius.circular(8),
+        splashColor: AppTheme.accent.withOpacity(0.1),
+        highlightColor: AppTheme.accent.withOpacity(0.08),
+        child: ListTile(
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          title: Text(
+            'PR Display Mode',
+            style: AppTheme.bodyMedium.copyWith(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right, color: AppTheme.textTertiary),
-        ],
+          subtitle: Text(
+            subtitle,
+            style: AppTheme.bodySmall.copyWith(
+              color: AppTheme.textSecondary,
+              height: 1.3,
+            ),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  displayText,
+                  style: AppTheme.bodySmall.copyWith(
+                    color: AppTheme.accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right, color: AppTheme.accent, size: 20),
+            ],
+          ),
+        ),
       ),
-      onTap: _showPRDisplayModeDialog,
     );
   }
 
@@ -1070,7 +1277,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.text_fields, color: AppTheme.textSecondary),
+                      Icon(Icons.text_fields, color: AppTheme.accent),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -1692,7 +1899,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios, color: AppTheme.textTertiary, size: 16),
+            Icon(Icons.arrow_forward_ios, color: AppTheme.accent, size: 16),
           ],
         ),
       ),
@@ -1700,6 +1907,33 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _exportWorkoutData(String format) async {
+    // Request storage permission first
+    if (Platform.isAndroid) {
+      // For Android 13+ (API 33+), we don't need storage permission for app-specific directories
+      // But for older versions, we need to request it
+      final androidInfo = await DeviceInfoPlugin().androidInfo;
+      if (androidInfo.version.sdkInt < 33) {
+        final status = await Permission.storage.request();
+        if (!status.isGranted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content:
+                    const Text('Storage permission is required to export data'),
+                backgroundColor: AppTheme.error,
+                action: SnackBarAction(
+                  label: 'Settings',
+                  textColor: Colors.white,
+                  onPressed: () => openAppSettings(),
+                ),
+              ),
+            );
+          }
+          return;
+        }
+      }
+    }
+
     // Show loading dialog
     showDialog(
       context: context,
@@ -1735,54 +1969,96 @@ class _SettingsPageState extends State<SettingsPage> {
 
       String fileContent;
       String fileName;
+      String mimeType;
       final timestamp = DateFormat('yyyy-MM-dd_HHmmss').format(DateTime.now());
 
       if (format == 'json') {
         fileContent = _generateJsonExport(workouts);
         fileName = 'mental_warrior_workouts_$timestamp.json';
+        mimeType = 'application/json';
       } else {
         fileContent = _generateCsvExport(workouts);
         fileName = 'mental_warrior_workouts_$timestamp.csv';
+        mimeType = 'text/csv';
       }
 
-      // Get the downloads directory
-      Directory? directory;
-      try {
-        if (Platform.isAndroid) {
-          // For Android, try to get the Download directory
-          directory = Directory('/storage/emulated/0/Download');
-          
-          // If that doesn't exist, try using getExternalStorageDirectory
+      // Use app's documents directory which is always accessible
+      Directory directory;
+      if (Platform.isAndroid) {
+        // For Android, use the app's external files directory
+        // This is accessible without special permissions
+        final externalDir = await getExternalStorageDirectory();
+        if (externalDir != null) {
+          // Create a "Downloads" or "Exports" folder in the app's directory
+          directory = Directory('${externalDir.path}/Exports');
           if (!await directory.exists()) {
-            final extDir = await getExternalStorageDirectory();
-            if (extDir != null) {
-              // Go up from app-specific external files directory to Download
-              final parts = extDir.path.split('/');
-              final downloadPath = '/${parts.take(parts.length - 3).join('/')}/Download';
-              directory = Directory(downloadPath);
+            await directory.create(recursive: true);
+          }
+        } else {
+          // Fallback to app documents directory
+          directory = await getApplicationDocumentsDirectory();
+        }
+      } else if (Platform.isIOS) {
+        directory = await getApplicationDocumentsDirectory();
+      } else {
+        final downloadsDir = await getDownloadsDirectory();
+        directory = downloadsDir ?? await getApplicationDocumentsDirectory();
+      }
+
+      final file = File('${directory.path}/$fileName');
+      await file.writeAsString(fileContent);
+      
+      // Debug: Verify file was written
+      final fileExists = await file.exists();
+      final fileSize = await file.length();
+      debugPrint('Export file created: $fileExists');
+      debugPrint('Export file path: ${file.path}');
+      debugPrint('Export file size: $fileSize bytes');
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        
+        // Automatically trigger share dialog to save to Downloads
+        try {
+          final result = await Share.shareXFiles(
+            [XFile(file.path, mimeType: mimeType)],
+            subject: 'Mental Warrior Workout Data',
+            text: 'Export from Mental Warrior - $fileName',
+          );
+
+          debugPrint('Share result: ${result.status}');
+
+          if (mounted) {
+            if (result.status == ShareResultStatus.success) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('$fileName saved successfully'),
+                  backgroundColor: AppTheme.accent,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+            } else if (result.status == ShareResultStatus.dismissed) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Export cancelled'),
+                  backgroundColor: AppTheme.textSecondary,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
             }
           }
-        } else if (Platform.isIOS) {
-          directory = await getApplicationDocumentsDirectory();
-        } else {
-          directory = await getDownloadsDirectory();
+        } catch (e) {
+          debugPrint('Error sharing file: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('File created at: ${file.path}'),
+                backgroundColor: AppTheme.accent,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
         }
-      } catch (e) {
-        debugPrint('Error getting directory: $e');
-        // Fallback to app documents directory
-        directory = await getApplicationDocumentsDirectory();
-      }
-
-      if (directory != null && await directory.exists()) {
-        final file = File('${directory.path}/$fileName');
-        await file.writeAsString(fileContent);
-
-        if (mounted) {
-          Navigator.pop(context); // Close loading dialog
-          _showExportSuccessDialog(fileName, file.path);
-        }
-      } else {
-        throw Exception('Could not access storage directory. Directory: $directory');
       }
     } catch (e) {
       if (mounted) {
@@ -1842,7 +2118,8 @@ class _SettingsPageState extends State<SettingsPage> {
     final buffer = StringBuffer();
     
     // CSV Header
-    buffer.writeln('Workout Date,Workout Name,Duration (min),Exercise Name,Equipment,Set Number,Weight,Reps,Rest Time (sec),Completed,Is PR,Set Type,Volume,Notes');
+    buffer.writeln(
+        'Workout ID,Workout Date,Workout Name,Duration (min),Exercise Name,Equipment,Set Number,Weight,Reps,Rest Time (sec),Completed,Is PR,Set Type,Volume,Notes');
     
     // CSV Data
     for (var workout in workouts) {
@@ -1851,6 +2128,7 @@ class _SettingsPageState extends State<SettingsPage> {
       for (var exercise in workout.exercises) {
         for (var set in exercise.sets) {
           final row = [
+            workout.id.toString(),
             workout.date,
             _escapeCsv(workout.name),
             durationMin,
@@ -1881,7 +2159,282 @@ class _SettingsPageState extends State<SettingsPage> {
     return value;
   }
 
-  void _showExportSuccessDialog(String fileName, String filePath) {
+
+
+  // ==================== IMPORT METHODS ====================
+
+  Future<void> _importWorkoutData() async {
+    try {
+      // Pick file
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json', 'csv'],
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) {
+        return; // User cancelled
+      }
+
+      final file = File(result.files.single.path!);
+      final fileName = result.files.single.name;
+      final extension = fileName.split('.').last.toLowerCase();
+
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: AppTheme.accent),
+              const SizedBox(height: 16),
+              Text('Importing workout data...', style: AppTheme.bodyMedium),
+            ],
+          ),
+        ),
+      );
+
+      int importedCount = 0;
+
+      if (extension == 'json') {
+        importedCount = await _importFromJson(file);
+      } else if (extension == 'csv') {
+        importedCount = await _importFromCsv(file);
+      } else {
+        Navigator.of(context).pop(); // Close loading dialog
+        _showErrorDialog(
+            'Unsupported file format. Please use JSON or CSV files.');
+        return;
+      }
+
+      Navigator.of(context).pop(); // Close loading dialog
+
+      if (importedCount > 0) {
+        _showImportSuccessDialog(importedCount);
+      } else {
+        _showErrorDialog('No workout data found in the file.');
+      }
+    } catch (e) {
+      debugPrint('Error importing workout data: $e');
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop(); // Close loading dialog if still open
+      }
+      _showErrorDialog('Failed to import workout data: ${e.toString()}');
+    }
+  }
+
+  Future<int> _importFromJson(File file) async {
+    try {
+      final content = await file.readAsString();
+      final data = jsonDecode(content) as Map<String, dynamic>;
+
+      if (!data.containsKey('workouts')) {
+        throw Exception('Invalid JSON format: missing "workouts" field');
+      }
+
+      final workouts = data['workouts'] as List<dynamic>;
+      final workoutService = WorkoutService();
+      int importedCount = 0;
+
+      for (var workoutData in workouts) {
+        try {
+          // Insert workout
+          final workoutId = await workoutService.addWorkout(
+            workoutData['name'] ?? 'Imported Workout',
+            workoutData['date'] ?? DateTime.now().toString().split(' ')[0],
+            workoutData['duration'] ?? 0,
+          );
+
+          // Insert exercises
+          if (workoutData.containsKey('exercises')) {
+            final exercises = workoutData['exercises'] as List<dynamic>;
+
+            for (var exerciseData in exercises) {
+              final exerciseId = await workoutService.addExercise(
+                workoutId,
+                exerciseData['name'] ?? 'Unknown Exercise',
+                exerciseData['equipment'] ?? 'Unknown',
+                notes: exerciseData['notes'],
+                supersetGroup: exerciseData['superset_group'],
+              );
+
+              // Mark exercise as finished if specified
+              if (exerciseData['finished'] == true) {
+                final db = await DatabaseService.instance.database;
+                await db.update(
+                  'exercises',
+                  {'finished': 1},
+                  where: 'id = ?',
+                  whereArgs: [exerciseId],
+                );
+              }
+
+              // Insert sets
+              if (exerciseData.containsKey('sets')) {
+                final sets = exerciseData['sets'] as List<dynamic>;
+
+                for (var setData in sets) {
+                  final setId = await workoutService.addSet(
+                    exerciseId,
+                    setData['set_number'] ?? 1,
+                    (setData['weight'] ?? 0.0).toDouble(),
+                    setData['reps'] ?? 0,
+                    setData['rest_time'] ?? 90,
+                    setType: setData['set_type'] ?? 'normal',
+                  );
+
+                  // Mark set as completed if specified
+                  if (setData['completed'] == true) {
+                    await workoutService.updateSetStatus(setId, true);
+                  }
+                }
+              }
+            }
+          }
+
+          importedCount++;
+        } catch (e) {
+          debugPrint('Error importing workout: $e');
+          // Continue with next workout
+        }
+      }
+
+      return importedCount;
+    } catch (e) {
+      debugPrint('Error parsing JSON: $e');
+      throw Exception('Invalid JSON format: ${e.toString()}');
+    }
+  }
+
+  Future<int> _importFromCsv(File file) async {
+    try {
+      final content = await file.readAsString();
+      final lines =
+          content.split('\n').where((line) => line.trim().isNotEmpty).toList();
+
+      if (lines.isEmpty) {
+        throw Exception('CSV file is empty');
+      }
+
+      // Skip header row
+      if (lines.length < 2) {
+        throw Exception('CSV file has no data rows');
+      }
+
+      final workoutService = WorkoutService();
+      final Map<String, int> workoutIds = {}; // Map workout key to workoutId
+      final Map<String, int> exerciseIds = {}; // Map exercise key to exerciseId
+      int importedCount = 0;
+
+      for (int i = 1; i < lines.length; i++) {
+        try {
+          final row = _parseCsvRow(lines[i]);
+          if (row.length < 14)
+            continue; // Skip incomplete rows (now includes workout ID)
+
+          final originalWorkoutId = row[0]; // Original workout ID from export
+          final workoutDate = row[1];
+          final workoutName = row[2];
+          final workoutDuration = int.tryParse(row[3]) ?? 0;
+          final exerciseName = row[4];
+          final equipment = row[5];
+          final setNumber = int.tryParse(row[6]) ?? 1;
+          final weight = double.tryParse(row[7]) ?? 0.0;
+          final reps = int.tryParse(row[8]) ?? 0;
+          final restTime = int.tryParse(row[9]) ?? 90;
+          final completed = row[10].toLowerCase() == 'yes' || row[10] == '1';
+          final setType = row[12].isNotEmpty ? row[12] : 'normal';
+          final notes = row.length > 14 ? row[14] : null;
+
+          // Create unique keys using original workout ID to differentiate workouts on same day
+          final workoutKey = '$originalWorkoutId|$workoutDate|$workoutName';
+          final exerciseKey = '$workoutKey|$exerciseName|$equipment';
+
+          // Insert workout if not exists
+          if (!workoutIds.containsKey(workoutKey)) {
+            final workoutId = await workoutService.addWorkout(
+              workoutName,
+              workoutDate,
+              workoutDuration,
+            );
+            workoutIds[workoutKey] = workoutId;
+          }
+
+          // Insert exercise if not exists
+          if (!exerciseIds.containsKey(exerciseKey)) {
+            final exerciseId = await workoutService.addExercise(
+              workoutIds[workoutKey]!,
+              exerciseName,
+              equipment,
+              notes: notes,
+            );
+            exerciseIds[exerciseKey] = exerciseId;
+          }
+
+          // Insert set
+          final setId = await workoutService.addSet(
+            exerciseIds[exerciseKey]!,
+            setNumber,
+            weight,
+            reps,
+            restTime,
+            setType: setType,
+          );
+
+          // Mark set as completed if specified
+          if (completed) {
+            await workoutService.updateSetStatus(setId, true);
+          }
+        } catch (e) {
+          debugPrint('Error importing CSV row ${i + 1}: $e');
+          // Continue with next row
+        }
+      }
+
+      importedCount = workoutIds.length;
+      return importedCount;
+    } catch (e) {
+      debugPrint('Error parsing CSV: $e');
+      throw Exception('Invalid CSV format: ${e.toString()}');
+    }
+  }
+
+  List<String> _parseCsvRow(String row) {
+    final List<String> result = [];
+    bool inQuotes = false;
+    StringBuffer current = StringBuffer();
+
+    for (int i = 0; i < row.length; i++) {
+      final char = row[i];
+
+      if (char == '"') {
+        if (inQuotes && i + 1 < row.length && row[i + 1] == '"') {
+          // Escaped quote
+          current.write('"');
+          i++; // Skip next quote
+        } else {
+          // Toggle quote mode
+          inQuotes = !inQuotes;
+        }
+      } else if (char == ',' && !inQuotes) {
+        // Field separator
+        result.add(current.toString());
+        current = StringBuffer();
+      } else {
+        current.write(char);
+      }
+    }
+
+    // Add last field
+    result.add(current.toString());
+
+    return result;
+  }
+
+  void _showImportSuccessDialog(int count) {
     showDialog(
       context: context,
       builder: (context) {
@@ -1891,7 +2444,7 @@ class _SettingsPageState extends State<SettingsPage> {
             children: [
               Icon(Icons.check_circle, color: AppTheme.accent, size: 28),
               const SizedBox(width: 12),
-              Text('Export Successful', style: AppTheme.headlineSmall),
+              Text('Import Successful', style: AppTheme.headlineSmall),
             ],
           ),
           content: Column(
@@ -1899,52 +2452,28 @@ class _SettingsPageState extends State<SettingsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Your workout data has been exported successfully.',
-                style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
+                'Successfully imported $count workout${count != 1 ? 's' : ''} from the file.',
+                style:
+                    AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.surfaceLight,
+                  color: AppTheme.surfaceLight.withOpacity(0.5),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.surfaceBorder.withOpacity(0.5)),
+                  border: Border.all(color: AppTheme.accent.withOpacity(0.3)),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Icon(Icons.insert_drive_file, color: AppTheme.accent, size: 16),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            fileName,
-                            style: AppTheme.bodySmall.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Location:',
-                      style: AppTheme.bodySmall.copyWith(
-                        color: AppTheme.textSecondary,
-                        fontSize: 11,
+                    Icon(Icons.info_outline, color: AppTheme.accent, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Your workout history has been updated.',
+                        style: AppTheme.bodySmall
+                            .copyWith(color: AppTheme.textSecondary),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      filePath,
-                      style: AppTheme.bodySmall.copyWith(
-                        color: AppTheme.textSecondary,
-                        fontSize: 10,
-                      ),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -1952,10 +2481,39 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
           actions: [
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
-              child: const Text('Done'),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK',
+                  style: AppTheme.bodyMedium.copyWith(color: AppTheme.accent)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: Row(
+            children: [
+              Icon(Icons.error_outline, color: AppTheme.accent, size: 28),
+              const SizedBox(width: 12),
+              Text('Import Failed', style: AppTheme.headlineSmall),
+            ],
+          ),
+          content: Text(
+            message,
+            style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK',
+                  style: AppTheme.bodyMedium.copyWith(color: AppTheme.accent)),
             ),
           ],
         );
@@ -1970,11 +2528,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
 
 
-  void _showComingSoonSnackbar() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Coming soon!')),
-    );
-  }
 
   void _showClearHistoryDialog() {
     showDialog(
@@ -2301,32 +2854,88 @@ class _PlateBarCustomizationPageImplState
 
     return Scaffold(
       backgroundColor: AppTheme.background,
-      appBar: AppBar(
-        title: Text('Customize Plates & Bars',
-            style: AppTheme.headlineSmall),
-        backgroundColor: AppTheme.surface,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: AppTheme.accent),
-          onPressed: () => Navigator.pop(context),
-        ),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: AppTheme.accent,
-          labelColor: AppTheme.accent,
-          unselectedLabelColor: AppTheme.textSecondary,
-          tabs: [
-            Tab(text: 'Plates ($unitLabel)'),
-            Tab(text: 'Bars ($unitLabel)'),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Reset to defaults',
-            onPressed: _isLoading ? null : _resetCurrentTabToDefaults,
-            icon: Icon(Icons.restart_alt, color: AppTheme.accent),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(200),
+        child: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          flexibleSpace: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  AppTheme.accent.withOpacity(0.15),
+                  AppTheme.background,
+                ],
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top bar with back button
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.arrow_back,
+                            color: AppTheme.accent, size: 24),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      IconButton(
+                        tooltip: 'Reset to defaults',
+                        onPressed:
+                            _isLoading ? null : _resetCurrentTabToDefaults,
+                        icon: Icon(Icons.restart_alt,
+                            color: AppTheme.accent, size: 24),
+                      ),
+                    ],
+                  ),
+                ),
+                // Title
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Customize Plates & Bars',
+                        style: AppTheme.displayLarge.copyWith(
+                          fontSize: 24,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Adjust weights, colors, and bar types for your workouts',
+                        style: AppTheme.bodyMedium.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Tabs
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: TabBar(
+                    controller: _tabController,
+                    indicatorColor: AppTheme.accent,
+                    labelColor: AppTheme.accent,
+                    unselectedLabelColor: AppTheme.textSecondary,
+                    indicatorSize: TabBarIndicatorSize.label,
+                    tabs: [
+                      Tab(text: 'Plates ($unitLabel)'),
+                      Tab(text: 'Bars ($unitLabel)'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
       floatingActionButton: _isLoading ? null : _buildCustomFAB(),
       body: _isLoading
@@ -2348,43 +2957,31 @@ class _PlateBarCustomizationPageImplState
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(100),
+        splashColor: AppTheme.accent.withOpacity(0.2),
+        highlightColor: AppTheme.accent.withOpacity(0.15),
+        onTap: () {
+          if (_tabController.index == 0) {
+            _addPlate();
+          } else {
+            _addBar();
+          }
+        },
         child: Container(
           width: 56,
           height: 56,
           decoration: BoxDecoration(
-            color: Colors.black,
+            color: AppTheme.surface,
             border: Border.all(
               color: AppTheme.accent.withOpacity(0.6),
-              width: 2,
+              width: 1.5,
             ),
             borderRadius: BorderRadius.circular(100),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.accent.withOpacity(0.15),
-                blurRadius: 16,
-                offset: const Offset(0, 8),
-              ),
-              BoxShadow(
-                color: Colors.black.withOpacity(0.2),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            boxShadow: AppTheme.shadowMd,
           ),
-          child: InkWell(
-            onTap: () {
-              if (_tabController.index == 0) {
-                _addPlate();
-              } else {
-                _addBar();
-              }
-            },
-            borderRadius: BorderRadius.circular(100),
-            child: const Icon(
-              Icons.add_rounded,
-              color: Colors.white,
-              size: 28,
-            ),
+          child: Icon(
+            Icons.add_rounded,
+            color: AppTheme.accent,
+            size: 28,
           ),
         ),
       ),
@@ -2407,85 +3004,90 @@ class _PlateBarCustomizationPageImplState
       itemBuilder: (context, index) {
         final plate = _plates[index];
         final color = Color(plate.color);
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => _editPlate(plate),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppTheme.surfaceBorder.withOpacity(0.5),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: color.withOpacity(0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${_formatNumber(plate.weight)} $_unit',
-                          style: AppTheme.bodyMedium.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Color: ${plate.label}',
-                          style: AppTheme.bodySmall.copyWith(
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+        return Card(
+          color: AppTheme.surface,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: AppTheme.surfaceBorder.withOpacity(0.6),
+              width: 1,
+            ),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: AppTheme.shadowMd,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                splashColor: AppTheme.accent.withOpacity(0.1),
+                highlightColor: AppTheme.accent.withOpacity(0.08),
+                onTap: () => _editPlate(plate),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
                     children: [
-                      IconButton(
-                        tooltip: 'Edit',
-                        onPressed: () => _editPlate(plate),
-                        icon: Icon(Icons.edit_rounded,
-                            color: AppTheme.accent, size: 20),
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: color.withOpacity(0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
                       ),
-                      IconButton(
-                        tooltip: 'Delete',
-                        onPressed: () => _deletePlate(plate),
-                        icon: Icon(Icons.delete_outline,
-                            color: AppTheme.error, size: 20),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${_formatNumber(plate.weight)} $_unit',
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Color: ${plate.label}',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Edit',
+                            onPressed: () => _editPlate(plate),
+                            icon: Icon(Icons.edit_rounded,
+                                color: AppTheme.accent, size: 20),
+                          ),
+                          IconButton(
+                            tooltip: 'Delete',
+                            onPressed: () => _deletePlate(plate),
+                            icon: Icon(Icons.delete_outline,
+                                color: AppTheme.error, size: 20),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
@@ -2514,86 +3116,89 @@ class _PlateBarCustomizationPageImplState
           _barIconCodePointFor(name: bar.name, shape: bar.shape),
           fontFamily: 'MaterialIcons',
         );
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: isNoBar ? null : () => _editBar(bar),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppTheme.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: AppTheme.surfaceBorder.withOpacity(0.5),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppTheme.accent.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(icon, color: AppTheme.accent, size: 24),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          bar.name,
-                          style: AppTheme.bodyMedium.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${_formatNumber(bar.weight)} $_unit • ${bar.shape}',
-                          style: AppTheme.bodySmall.copyWith(
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+        return Card(
+          color: AppTheme.surface,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: AppTheme.surfaceBorder.withOpacity(0.6),
+              width: 1,
+            ),
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: AppTheme.shadowMd,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                splashColor: AppTheme.accent.withOpacity(0.1),
+                highlightColor: AppTheme.accent.withOpacity(0.08),
+                onTap: isNoBar ? null : () => _editBar(bar),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
                     children: [
-                      IconButton(
-                        tooltip: 'Edit',
-                        onPressed: isNoBar ? null : () => _editBar(bar),
-                        icon: Icon(
-                          Icons.edit_rounded,
-                          color:
-                              isNoBar ? Colors.grey[700] : AppTheme.accent,
-                          size: 20,
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          icon,
+                          color: AppTheme.accent,
+                          size: 22,
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Delete',
-                        onPressed: isNoBar ? null : () => _deleteBar(bar),
-                        icon: Icon(
-                          Icons.delete_outline,
-                          color: isNoBar ? Colors.grey[700] : AppTheme.error,
-                          size: 20,
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              bar.name,
+                              style: AppTheme.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${_formatNumber(bar.weight)} $_unit',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                      if (!isNoBar)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: 'Edit',
+                              onPressed: () => _editBar(bar),
+                              icon: Icon(Icons.edit_rounded,
+                                  color: AppTheme.accent, size: 20),
+                            ),
+                            IconButton(
+                              tooltip: 'Delete',
+                              onPressed: () => _deleteBar(bar),
+                              icon: Icon(Icons.delete_outline,
+                                  color: AppTheme.error, size: 20),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
           ),

@@ -417,8 +417,9 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
         ),
         body: Container(
           decoration: AppTheme.gradientBackground(),
-            child: SafeArea(
-              child: Center(
+          child: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -519,45 +520,48 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
                     const SizedBox(height: 64),
 
                     // Control buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (remainingSeconds > 0) ...[
-                      // Pause/Resume button
-                      _buildControlButton(
-                        icon: isPaused
-                            ? Icons.play_arrow_rounded
-                            : Icons.pause_rounded,
-                        color: isPaused ? AppTheme.success : AppTheme.warning,
-                        onPressed: isPaused ? resumeTimer : pauseTimer,
-                        label: isPaused ? "Resume" : "Pause",
-                      ),
-                      const SizedBox(width: 32),
-                      // Stop button
-                      _buildControlButton(
-                        icon: Icons.stop_rounded,
-                        color: AppTheme.error,
-                        onPressed: showTerminateConfirmationDialog,
-                        label: "Stop",
-                      ),
-                    ] else ...[
-                      // Complete button
-                      _buildControlButton(
-                        icon: Icons.check_rounded,
-                        color: AppTheme.success,
-                        onPressed: completeMeditation,
-                        label: "Complete",
-                        large: true,
-                      ),
-                    ],
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (remainingSeconds > 0) ...[
+                          // Pause/Resume button
+                          _buildControlButton(
+                            icon: isPaused
+                                ? Icons.play_arrow_rounded
+                                : Icons.pause_rounded,
+                            color:
+                                isPaused ? AppTheme.success : AppTheme.warning,
+                            onPressed: isPaused ? resumeTimer : pauseTimer,
+                            label: isPaused ? "Resume" : "Pause",
+                          ),
+                          const SizedBox(width: 32),
+                          // Stop button
+                          _buildControlButton(
+                            icon: Icons.stop_rounded,
+                            color: AppTheme.error,
+                            onPressed: showTerminateConfirmationDialog,
+                            label: "Stop",
+                          ),
+                        ] else ...[
+                          // Complete button
+                          _buildControlButton(
+                            icon: Icons.check_rounded,
+                            color: AppTheme.success,
+                            onPressed: completeMeditation,
+                            label: "Complete",
+                            large: true,
+                          ),
+                        ],
+                      ],
+                    ),
                   ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
       ),
-        ));
+    );
   }
 
   Widget _buildControlButton({

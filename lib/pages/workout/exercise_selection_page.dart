@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/data/exercises_data.dart';
-import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
-import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/create_exercise_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/utils/app_theme.dart';

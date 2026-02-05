@@ -457,8 +457,9 @@ class WorkoutPageState extends State<WorkoutPage>
         shape: RoundedRectangleBorder(
           borderRadius: AppTheme.borderRadiusLg,
           side: BorderSide(
-            color: const Color(0xFFFFD700), // Gold yellow border
-            width: 2,
+            color: const Color(
+                0xFF5A4F1B), // Updated border color to match PR color
+            width: 1,
           ),
         ),
         child: InkWell(
@@ -472,9 +473,9 @@ class WorkoutPageState extends State<WorkoutPage>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFFFFD700)
+                  const Color.fromARGB(255, 109, 94, 10)
                       .withOpacity(0.15), // Bright gold for glare
-                  const Color(0xFFFFD700).withOpacity(0.08),
+                  const Color.fromARGB(255, 156, 136, 18).withOpacity(0.08),
                   const Color(0xFFFFA500).withOpacity(0.04), // Orange-gold fade
                 ],
               ),
@@ -496,7 +497,7 @@ class WorkoutPageState extends State<WorkoutPage>
                         color: Colors.transparent,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: const Color(0xFFFFD700).withOpacity(0.8),
+                          color: const Color(0xFF5A4F1B).withOpacity(0.8),
                           width: 1.2,
                         ),
                       ),
@@ -504,12 +505,12 @@ class WorkoutPageState extends State<WorkoutPage>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.star,
-                              size: 11, color: const Color(0xFFFFD700)),
+                              size: 11, color: const Color(0xFF8B7E2B)),
                           const SizedBox(width: 4),
                           Text(
                             'PR',
                             style: AppTheme.bodySmall.copyWith(
-                              color: const Color(0xFFFFD700),
+                              color: const Color(0xFF8B7E2B),
                               fontSize: 9,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.5,
@@ -532,7 +533,7 @@ class WorkoutPageState extends State<WorkoutPage>
                 Text(
                   exerciseName,
                   style: AppTheme.bodyMedium.copyWith(
-                    color: AppTheme.textPrimary,
+                    color: AppTheme.textSecondary,
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
                     height: 1.3,
@@ -548,7 +549,7 @@ class WorkoutPageState extends State<WorkoutPage>
                     color: Colors.transparent,
                     borderRadius: AppTheme.borderRadiusMd,
                     border: Border.all(
-                      color: const Color(0xFFFFD700).withOpacity(0.6),
+                      color: const Color(0xFF5A4F1B).withOpacity(0.6),
                       width: 1.2,
                     ),
                   ),
@@ -560,7 +561,7 @@ class WorkoutPageState extends State<WorkoutPage>
                             ? '${weight.toStringAsFixed(weight.truncateToDouble() == weight ? 0 : 1)}'
                             : 'BW',
                         style: AppTheme.bodyMedium.copyWith(
-                          color: const Color(0xFFFFD700),
+                          color: const Color(0xFF8B7E2B),
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -568,7 +569,7 @@ class WorkoutPageState extends State<WorkoutPage>
                       Text(
                         ' $_weightUnit',
                         style: AppTheme.bodySmall.copyWith(
-                          color: const Color(0xFFFFD700).withOpacity(0.75),
+                          color: const Color(0xFF8B7E2B).withOpacity(0.75),
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
                         ),
@@ -576,7 +577,7 @@ class WorkoutPageState extends State<WorkoutPage>
                       Text(
                         ' × ',
                         style: AppTheme.bodySmall.copyWith(
-                          color: const Color(0xFFFFD700).withOpacity(0.5),
+                          color: const Color(0xFF8B7E2B).withOpacity(0.5),
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
                         ),
@@ -584,7 +585,7 @@ class WorkoutPageState extends State<WorkoutPage>
                       Text(
                         '$reps',
                         style: AppTheme.bodyMedium.copyWith(
-                          color: const Color(0xFFFFD700)
+                          color: const Color(0xFF8B7E2B)
                               .withOpacity(0.9), // Adjusted gold for reps
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -593,7 +594,7 @@ class WorkoutPageState extends State<WorkoutPage>
                       Text(
                         ' reps',
                         style: AppTheme.bodySmall.copyWith(
-                          color: const Color(0xFFFFD700).withOpacity(0.9),
+                          color: const Color(0xFF8B7E2B).withOpacity(0.9),
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
                         ),
@@ -1019,12 +1020,12 @@ class WorkoutPageState extends State<WorkoutPage>
                 decoration: BoxDecoration(
                   borderRadius: AppTheme.borderRadiusMd,
                   border: Border.all(
-                    color: AppTheme.warning.withOpacity(0.08),
+                    color: const Color(0xFF5A4F1B).withOpacity(0.08),
                     width: 1.5,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: AppTheme.warning.withOpacity(0.12),
+                      color: const Color(0xFF5A4F1B).withOpacity(0.12),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -1057,7 +1058,7 @@ class WorkoutPageState extends State<WorkoutPage>
             ),
           ),
           const SizedBox(height: 32),
-          // PRs Section - Carousel (only show if PRs exist and mode is not 'none')
+          // PRs Section - Responsive layout (only show if PRs exist and mode is not 'none')
           if (_personalRecords.isNotEmpty && _prDisplayMode != 'none') ...[
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1075,39 +1076,72 @@ class WorkoutPageState extends State<WorkoutPage>
                   ),
                 ),
                 const SizedBox(height: 12),
-                SizedBox(
-                  height: 128,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    physics: const PageScrollPhysics(),
+                if (_personalRecords.length == 1)
+                  // For 1 PR: full width
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: SizedBox(
+                      height: 128,
+                      child: _buildPRCard(0),
+                    ),
+                  )
+                else if (_personalRecords.length == 2)
+                  // For 2 PRs: side-by-side with equal width
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
-                      children: List.generate(
-                        _personalRecords.length > 5
-                            ? 5
-                            : _personalRecords.length,
-                        (index) {
-                          final isFirst = index == 0;
-                          final isLast = index ==
-                              (_personalRecords.length > 5
-                                  ? 4
-                                  : _personalRecords.length - 1);
-                          return Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              isFirst ? 16 : 8,
-                              0,
-                              isLast ? 16 : 8,
-                              0,
-                            ),
-                            child: SizedBox(
-                              width: 240,
-                              child: _buildPRCard(index),
-                            ),
-                          );
-                        },
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 128,
+                            child: _buildPRCard(0),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SizedBox(
+                            height: 128,
+                            child: _buildPRCard(1),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  // For 3+ PRs: carousel layout
+                  SizedBox(
+                    height: 128,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const PageScrollPhysics(),
+                      child: Row(
+                        children: List.generate(
+                          _personalRecords.length > 5
+                              ? 5
+                              : _personalRecords.length,
+                          (index) {
+                            final isFirst = index == 0;
+                            final isLast = index ==
+                                (_personalRecords.length > 5
+                                    ? 4
+                                    : _personalRecords.length - 1);
+                            return Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                isFirst ? 16 : 8,
+                                0,
+                                isLast ? 16 : 8,
+                                0,
+                              ),
+                              child: SizedBox(
+                                width: 240,
+                                child: _buildPRCard(index),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   ),
-                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -2463,6 +2497,7 @@ class WorkoutPageState extends State<WorkoutPage>
 
     return Scaffold(
       backgroundColor: AppTheme.background,
+     
       resizeToAvoidBottomInset: false,
       appBar: null,
       body: _isLoading

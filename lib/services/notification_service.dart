@@ -35,8 +35,10 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
 
+    // NOTE: Active workout notifications are now handled by foreground_service.dart
+    // to avoid duplicate notifications. This listener is disabled.
     // Listen to active workout changes
-    WorkoutService.activeWorkoutNotifier.addListener(_onActiveWorkoutChanged);
+    // WorkoutService.activeWorkoutNotifier.addListener(_onActiveWorkoutChanged);
   }
 
   /// Handle notification tap
@@ -46,7 +48,11 @@ class NotificationService {
   }
 
   /// Listen to active workout changes and update notification accordingly
+  /// DISABLED: This functionality has been moved to foreground_service.dart
+  /// to avoid duplicate notifications
   static void _onActiveWorkoutChanged() {
+    // Disabled - see foreground_service.dart for active workout notifications
+    /*
     final activeWorkout = WorkoutService.activeWorkoutNotifier.value;
     
     if (activeWorkout != null) {
@@ -56,11 +62,16 @@ class NotificationService {
       // Cancel active workout notification
       _cancelActiveWorkoutNotification();
     }
+    */
   }
 
   /// Show persistent notification for active workout
+  /// DISABLED: This functionality has been moved to foreground_service.dart
   static Future<void> _showActiveWorkoutNotification(
       Map<String, dynamic> activeWorkout) async {
+    // Disabled - active workout notifications now handled by foreground service
+    return;
+    /*
     final workoutName = activeWorkout['name'] as String;
     final duration = activeWorkout['duration'] as int;
     final formattedTime = _formatTime(duration);
@@ -111,19 +122,28 @@ class NotificationService {
       platformChannelSpecifics,
       payload: 'active_workout',
     );
+    */
   }
 
   /// Cancel the active workout notification
+  /// DISABLED: This functionality has been moved to foreground_service.dart
   static Future<void> _cancelActiveWorkoutNotification() async {
-    await _flutterLocalNotificationsPlugin.cancel(_activeWorkoutNotificationId);
+    // Disabled - see foreground_service.dart
+    return;
+    // await _flutterLocalNotificationsPlugin.cancel(_activeWorkoutNotificationId);
   }
 
   /// Update the notification with new workout data (called periodically)
+  /// DISABLED: This functionality has been moved to foreground_service.dart
   static Future<void> updateActiveWorkoutNotification() async {
+    // Disabled - active workout notifications now handled by foreground service
+    return;
+    /*
     final activeWorkout = WorkoutService.activeWorkoutNotifier.value;
     if (activeWorkout != null) {
       await _showActiveWorkoutNotification(activeWorkout);
     }
+    */
   }
 
   /// Format time duration in MM:SS format
@@ -195,6 +215,7 @@ class NotificationService {
 
   /// Dispose resources
   static void dispose() {
-    WorkoutService.activeWorkoutNotifier.removeListener(_onActiveWorkoutChanged);
+    // Active workout listener is disabled - see initialize() method
+    // WorkoutService.activeWorkoutNotifier.removeListener(_onActiveWorkoutChanged);
   }
 }
