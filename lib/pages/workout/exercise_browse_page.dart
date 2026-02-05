@@ -315,34 +315,39 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
 
   void _viewExerciseDetails(Map<String, dynamic> exercise) {
     final apiId = exercise['apiId'] ?? exercise['id'];
-    if (apiId.toString().startsWith('custom_')) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => CustomExerciseDetailPage(
+    final page = apiId.toString().startsWith('custom_')
+        ? CustomExerciseDetailPage(
             exerciseId: exercise['id'].toString().trim(),
             exerciseName: exercise['name'],
             exerciseEquipment: exercise['equipment'] ?? '',
-          ),
-        ),
-      );
-    } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ExerciseDetailPage(
+          )
+        : ExerciseDetailPage(
             exerciseId: exercise['id'].toString().trim(),
-          ),
-          settings: RouteSettings(
-            arguments: {
-              'exerciseName': exercise['name'],
-              'exerciseEquipment': exercise['equipment'] ?? '',
-              'isTemporary': false,
-            },
-          ),
-        ),
-      );
-    }
+          );
+
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => page,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          const curve = Curves.ease;
+
+          var tween =
+              Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+          var offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _openCreateExercise() async {

@@ -45,14 +45,16 @@ class WorkoutPageState extends State<WorkoutPage>
 
   // Scroll offset for gradient fade effect
   double _scrollOffset = 0.0;
+  // Active tab index for synchronization
+  int _activeTabIndex = 0;
   // Scroll controllers for all tabs
   final ScrollController _workoutScrollController = ScrollController();
   final ScrollController _historyScrollController = ScrollController();
   final ScrollController _exerciseScrollController = ScrollController();
   final ScrollController _measurementScrollController = ScrollController();
 
-  // Track which tab is currently active
-  int _activeTabIndex = 0;
+  // Page controller for bouncy tab switching
+  late PageController _pageController;
   Timer? _scrollThrottleTimer;
   int _weeklyWorkoutGoal = 5; // Default goal
   bool _showWeightInLbs = false;
@@ -93,13 +95,38 @@ class WorkoutPageState extends State<WorkoutPage>
       _activeTabIndex = _tabController.index;
       _scrollOffset = 0.0;
     });
+    // Sync page controller with tab controller
+    if (_pageController.page?.round() != _tabController.index) {
+      _pageController.animateToPage(
+        _tabController.index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _onPageChange() {
+    // Update active tab index when page changes
+    final page = _pageController.page?.round() ?? 0;
+    if (page != _activeTabIndex) {
+      setState(() {
+        _activeTabIndex = page;
+        _scrollOffset = 0.0;
+      });
+      // Sync tab controller with page controller
+      if (_tabController.index != page) {
+        _tabController.animateTo(page);
+      }
+    }
   }
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _pageController = PageController();
     _tabController.addListener(_onTabChange);
+    _pageController.addListener(_onPageChange);
     _workoutScrollController.addListener(_onScroll);
     _historyScrollController.addListener(_onScroll);
     _exerciseScrollController.addListener(_onScroll);
@@ -134,6 +161,8 @@ class WorkoutPageState extends State<WorkoutPage>
     _scrollThrottleTimer?.cancel();
     _tabController.removeListener(_onTabChange);
     _tabController.dispose();
+    _pageController.removeListener(_onPageChange);
+    _pageController.dispose();
     _workoutScrollController.removeListener(_onScroll);
     _workoutScrollController.dispose();
     _historyScrollController.removeListener(_onScroll);
@@ -654,16 +683,27 @@ class WorkoutPageState extends State<WorkoutPage>
   void _showChangeGoalDialog() {
     int tempGoal = _weeklyWorkoutGoal;
 
-    showDialog(
+    showGeneralDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Set Weekly Workout Goal'),
-          content: StatefulBuilder(
-            builder: (BuildContext context, StateSetter setState) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black.withOpacity(0.5),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (BuildContext context, Animation<double> animation,
+          Animation<double> secondaryAnimation) {
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.0, end: 1.0).animate(
+            CurvedAnimation(parent: animation, curve: Curves.elasticOut),
+          ),
+          child: FadeTransition(
+            opacity: animation,
+            child: AlertDialog(
+              title: const Text('Set Weekly Workout Goal'),
+              content: StatefulBuilder(
+                builder: (BuildContext context, StateSetter setState) {
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                   const Text(
                       'How many workouts do you aim to complete each week?'),
                   const SizedBox(height: 16),
@@ -718,6 +758,16 @@ class WorkoutPageState extends State<WorkoutPage>
               },
             ),
           ],
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+              .animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+          child: child,
         );
       },
     );
@@ -727,34 +777,57 @@ class WorkoutPageState extends State<WorkoutPage>
     // Check if there's an active workout already
     if (WorkoutService.activeWorkoutNotifier.value != null) {
       // Show confirmation dialog
-      bool shouldContinue = await showDialog(
+      bool shouldContinue = await showGeneralDialog(
             context: context,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                backgroundColor: const Color(0xFF26272B),
-                title: const Text('Active Workout Found',
-                    style: TextStyle(color: Colors.white)),
-                content: const Text(
-                  'You already have an active workout. Starting a new workout will discard the current one. Do you want to continue?',
-                  style: TextStyle(color: Colors.white70),
+            barrierDismissible: true,
+            barrierLabel:
+                MaterialLocalizations.of(context).modalBarrierDismissLabel,
+            barrierColor: Colors.black.withOpacity(0.5),
+            transitionDuration: const Duration(milliseconds: 300),
+            pageBuilder: (BuildContext context, Animation<double> animation,
+                Animation<double> secondaryAnimation) {
+              return ScaleTransition(
+                scale: Tween<double>(begin: 0.0, end: 1.0).animate(
+                  CurvedAnimation(parent: animation, curve: Curves.elasticOut),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () =>
-                        Navigator.pop(context, false), // Don't continue
-                    child: const Text('Cancel',
-                        style: TextStyle(color: Colors.white70)),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
+                child: FadeTransition(
+                  opacity: animation,
+                  child: AlertDialog(
+                    backgroundColor: const Color(0xFF26272B),
+                    title: const Text('Active Workout Found',
+                        style: TextStyle(color: Colors.white)),
+                    content: const Text(
+                      'You already have an active workout. Starting a new workout will discard the current one. Do you want to continue?',
+                      style: TextStyle(color: Colors.white70),
                     ),
-                    onPressed: () => Navigator.pop(
-                        context, true), // Continue with new workout
-                    child: const Text('Discard & Start New'),
+                    actions: [
+                      TextButton(
+                        onPressed: () =>
+                            Navigator.pop(context, false), // Don't continue
+                        child: const Text('Cancel',
+                            style: TextStyle(color: Colors.white70)),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () => Navigator.pop(
+                            context, true), // Continue with new workout
+                        child: const Text('Discard & Start New'),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              );
+            },
+            transitionBuilder: (context, animation, secondaryAnimation, child) {
+              return SlideTransition(
+                position:
+                    Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+                        .animate(CurvedAnimation(
+                            parent: animation, curve: Curves.easeOut)),
+                child: child,
               );
             },
           ) ??
@@ -785,12 +858,27 @@ class WorkoutPageState extends State<WorkoutPage>
       // Navigate to the workout session page with the temporary ID
       await Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => WorkoutSessionPage(
-            workoutId: tempWorkoutId,
-            readOnly: false,
-            isTemporary: true, // Indicate this is a temporary workout
-          ),
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 500),
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return WorkoutSessionPage(
+              workoutId: tempWorkoutId,
+              readOnly: false,
+              isTemporary: true,
+            );
+          },
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return SlideTransition(
+              position:
+                  Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+                      .animate(CurvedAnimation(
+                          parent: animation, curve: Curves.easeInOut)),
+              child: FadeTransition(
+                opacity: animation,
+                child: child,
+              ),
+            );
+          },
         ),
       );
 
@@ -806,10 +894,24 @@ class WorkoutPageState extends State<WorkoutPage>
   void _viewWorkoutDetails(int workoutId) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => WorkoutDetailsPage(
-          workoutId: workoutId,
-        ),
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 500),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return WorkoutDetailsPage(
+            workoutId: workoutId,
+          );
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return SlideTransition(
+            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+                .animate(CurvedAnimation(
+                    parent: animation, curve: Curves.easeInOut)),
+            child: FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+          );
+        },
       ),
     );
   }
@@ -1319,6 +1421,10 @@ class WorkoutPageState extends State<WorkoutPage>
       shape: RoundedRectangleBorder(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
+      transitionAnimationController: AnimationController(
+        duration: const Duration(milliseconds: 400),
+        vsync: this,
+      ),
       builder: (context) {
         return SafeArea(
           child: Column(
@@ -1437,32 +1543,55 @@ class WorkoutPageState extends State<WorkoutPage>
   Future<void> _startWorkoutFromSavedTemplate(WorkoutTemplate template) async {
     // Check if there's an active workout already
     if (WorkoutService.activeWorkoutNotifier.value != null) {
-      bool shouldContinue = await showDialog(
+      bool shouldContinue = await showGeneralDialog(
             context: context,
-            builder: (BuildContext context) {
-              return AlertDialog(
-                backgroundColor: const Color(0xFF26272B),
-                title: const Text('Active Workout Found',
-                    style: TextStyle(color: Colors.white)),
-                content: const Text(
-                  'You already have an active workout. Starting a new workout will discard the current one. Do you want to continue?',
-                  style: TextStyle(color: Colors.white70),
+            barrierDismissible: true,
+            barrierLabel:
+                MaterialLocalizations.of(context).modalBarrierDismissLabel,
+            barrierColor: Colors.black.withOpacity(0.5),
+            transitionDuration: const Duration(milliseconds: 300),
+            pageBuilder: (BuildContext context, Animation<double> animation,
+                Animation<double> secondaryAnimation) {
+              return ScaleTransition(
+                scale: Tween<double>(begin: 0.0, end: 1.0).animate(
+                  CurvedAnimation(parent: animation, curve: Curves.elasticOut),
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('Cancel',
-                        style: TextStyle(color: Colors.white70)),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
+                child: FadeTransition(
+                  opacity: animation,
+                  child: AlertDialog(
+                    backgroundColor: const Color(0xFF26272B),
+                    title: const Text('Active Workout Found',
+                        style: TextStyle(color: Colors.white)),
+                    content: const Text(
+                      'You already have an active workout. Starting a new workout will discard the current one. Do you want to continue?',
+                      style: TextStyle(color: Colors.white70),
                     ),
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('Discard & Start New'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Cancel',
+                            style: TextStyle(color: Colors.white70)),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Discard & Start New'),
+                      ),
+                    ],
                   ),
-                ],
+                ),
+              );
+            },
+            transitionBuilder: (context, animation, secondaryAnimation, child) {
+              return SlideTransition(
+                position:
+                    Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+                        .animate(CurvedAnimation(
+                            parent: animation, curve: Curves.easeOut)),
+                child: child,
               );
             },
           ) ??
@@ -1506,12 +1635,27 @@ class WorkoutPageState extends State<WorkoutPage>
 
       await Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => WorkoutSessionPage(
-            workoutId: tempWorkoutId,
-            readOnly: false,
-            isTemporary: true,
-          ),
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 500),
+          pageBuilder: (context, animation, secondaryAnimation) {
+            return WorkoutSessionPage(
+              workoutId: tempWorkoutId,
+              readOnly: false,
+              isTemporary: true,
+            );
+          },
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return SlideTransition(
+              position:
+                  Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+                      .animate(CurvedAnimation(
+                          parent: animation, curve: Curves.easeInOut)),
+              child: FadeTransition(
+                opacity: animation,
+                child: child,
+              ),
+            );
+          },
         ),
       );
 
@@ -1539,13 +1683,23 @@ class WorkoutPageState extends State<WorkoutPage>
       const Color(0xFF3B82F6), // Blue
     ];
 
-    showDialog(
+    showGeneralDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return Dialog(
-              backgroundColor: AppTheme.surface,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black.withOpacity(0.5),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.0, end: 1.0).animate(
+            CurvedAnimation(parent: animation, curve: Curves.elasticOut),
+          ),
+          child: FadeTransition(
+            opacity: animation,
+            child: StatefulBuilder(
+              builder: (context, setDialogState) {
+                return Dialog(
+                  backgroundColor: AppTheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: AppTheme.borderRadiusLg,
               ),
@@ -1760,8 +1914,18 @@ class WorkoutPageState extends State<WorkoutPage>
                   ],
                 ),
               ),
-            );
-          },
+                );
+              },
+            ),
+          ),
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+              .animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+          child: child,
         );
       },
     );
@@ -1774,6 +1938,10 @@ class WorkoutPageState extends State<WorkoutPage>
       backgroundColor: AppTheme.surface,
       shape: RoundedRectangleBorder(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      transitionAnimationController: AnimationController(
+        duration: const Duration(milliseconds: 400),
+        vsync: this,
       ),
       builder: (context) {
         return SafeArea(
@@ -1847,6 +2015,8 @@ class WorkoutPageState extends State<WorkoutPage>
         );
       },
     );
+
+    
   }
 
   // Show options for a folder (edit, delete)
@@ -1856,6 +2026,10 @@ class WorkoutPageState extends State<WorkoutPage>
       backgroundColor: AppTheme.surface,
       shape: RoundedRectangleBorder(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      transitionAnimationController: AnimationController(
+        duration: const Duration(milliseconds: 400),
+        vsync: this,
       ),
       builder: (context) {
         return SafeArea(
@@ -1928,45 +2102,66 @@ class WorkoutPageState extends State<WorkoutPage>
   void _showRenameFolderDialog(TemplateFolder folder) {
     final nameController = TextEditingController(text: folder.name);
 
-    showDialog(
+    showGeneralDialog(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF26272B),
-          title: const Text('Rename Folder',
-              style: TextStyle(color: Colors.white)),
-          content: TextField(
-            controller: nameController,
-            autofocus: true,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: 'Folder name',
-              hintStyle: const TextStyle(color: Colors.grey),
-              filled: true,
-              fillColor: const Color(0xFF1a1a1a),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide.none,
+      barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black.withOpacity(0.5),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.0, end: 1.0).animate(
+            CurvedAnimation(parent: animation, curve: Curves.elasticOut),
+          ),
+          child: FadeTransition(
+            opacity: animation,
+            child: AlertDialog(
+              backgroundColor: const Color(0xFF26272B),
+              title: const Text('Rename Folder',
+                  style: TextStyle(color: Colors.white)),
+              content: TextField(
+                controller: nameController,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Folder name',
+                  hintStyle: const TextStyle(color: Colors.grey),
+                  filled: true,
+                  fillColor: const Color(0xFF1a1a1a),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
               ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = nameController.text.trim();
+                    if (name.isNotEmpty) {
+                      await _templateService.updateFolder(folder.id,
+                          name: name);
+                      Navigator.pop(context);
+                      _loadFolders();
+                    }
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                if (name.isNotEmpty) {
-                  await _templateService.updateFolder(folder.id, name: name);
-                  Navigator.pop(context);
-                  _loadFolders();
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+              .animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+          child: child,
         );
       },
     );
@@ -1975,8 +2170,22 @@ class WorkoutPageState extends State<WorkoutPage>
   void _showCreateTemplateDialog() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => const TemplateEditorPage(),
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 500),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return const TemplateEditorPage();
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return SlideTransition(
+            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+                .animate(CurvedAnimation(
+                    parent: animation, curve: Curves.easeInOut)),
+            child: FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+          );
+        },
       ),
     ).then((_) {
       // Refresh templates when returning
@@ -2291,6 +2500,13 @@ class WorkoutPageState extends State<WorkoutPage>
                             controller: _tabController,
                             isScrollable: true,
                             tabAlignment: TabAlignment.center,
+                            onTap: (index) {
+                              _pageController.animateToPage(
+                                index,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            },
                             tabs: const [
                               Tab(text: 'Workout'),
                               Tab(text: 'History'),
@@ -2312,8 +2528,12 @@ class WorkoutPageState extends State<WorkoutPage>
                   ),
                   // Tab content
                   Expanded(
-                    child: TabBarView(
-                      controller: _tabController,
+                    child: PageView(
+                      controller: _pageController,
+                      physics: const BouncingScrollPhysics(),
+                      onPageChanged: (index) {
+                        _tabController.animateTo(index);
+                      },
                       children: [
                         _buildWorkoutTab(),
                         _buildHistoryTab(),

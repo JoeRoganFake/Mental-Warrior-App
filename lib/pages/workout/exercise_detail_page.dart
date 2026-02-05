@@ -47,6 +47,7 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
   String? _stickyNote;
   bool _showWeightInLbs = false;
   String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';
+  DateTime? _lastHistoryLoad;
 
   @override
   void initState() {
@@ -63,8 +64,13 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
       if (_tabController.index == 1 ||
           _tabController.index == 2 ||
           _tabController.index == 3) {
-        // Reload history when viewing History (index 1), Charts (index 2), or Records (index 3) tab
-        _loadExerciseHistory();
+        // Only reload if we haven't loaded history yet or if it's been more than 30 seconds
+        final now = DateTime.now();
+        if (_exerciseHistory.isEmpty ||
+            (_lastHistoryLoad != null &&
+                now.difference(_lastHistoryLoad!).inSeconds > 30)) {
+          _loadExerciseHistory();
+        }
       }
     });
   }
@@ -426,11 +432,13 @@ class _ExerciseDetailPageState extends State<ExerciseDetailPage>
       setState(() {
         _exerciseHistory = history;
         _isLoadingHistory = false;
+        _lastHistoryLoad = DateTime.now();
       });
     } catch (e) {
       print('❌ Error loading exercise history: $e');
       setState(() {
         _isLoadingHistory = false;
+        _lastHistoryLoad = DateTime.now();
       });
     }
   }

@@ -17,6 +17,7 @@ import 'package:mental_warior/pages/meditation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:mental_warior/services/background_task_manager.dart';
 import 'package:mental_warior/pages/workout/workout_page.dart';
+import 'package:mental_warior/pages/settings_page.dart';
 import 'package:mental_warior/widgets/active_workout_bar.dart';
 import 'package:mental_warior/widgets/xp_bar.dart';
 import 'package:mental_warior/widgets/level_up_animation.dart';
@@ -119,6 +120,8 @@ class HomePageState extends State<HomePage>
         return const CategoriesPage();
       case 3:
         return const WorkoutPage(); // Added workout page
+      case 4:
+        return const SettingsPage(); // Added settings page
       default:
         return _HomePageContent();
     }
@@ -207,8 +210,15 @@ class HomePageState extends State<HomePage>
                       : AppTheme.textSecondary),
               label: 'Workout',
             ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings,
+                  color: _currentIndex == 4
+                      ? AppTheme.accent
+                      : AppTheme.textSecondary),
+              label: 'Settings',
+            ),
           ],
-          type: BottomNavigationBarType.fixed, // Required for more than 3 items
+          type: BottomNavigationBarType.fixed, // Required for more than 4 items
         ),
       ),
     );

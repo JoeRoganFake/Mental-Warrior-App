@@ -2025,6 +2025,34 @@ class WorkoutService {
     return (result.first['count'] as int?) ?? 0;
   }
 
+  // Clear all workout history - removes all workouts, exercises, sets, active sessions, and temp workouts
+  Future<void> clearAllWorkoutHistory() async {
+    final db = await DatabaseService.instance.database;
+
+    // Stop any active foreground service
+    await WorkoutForegroundService.stopWorkoutService();
+    await WorkoutForegroundService.clearSavedWorkoutData();
+
+    // Clear active workout notifier
+    activeWorkoutNotifier.value = null;
+
+    // Clear all temporary workouts from memory
+    tempWorkoutsNotifier.value.clear();
+    tempWorkoutsNotifier.value = {};
+    _tempIdCounter = 0;
+
+    // Delete all workouts (CASCADE will handle exercises and sets)
+    await db.delete(_workoutTableName);
+
+    // Delete all active workout sessions
+    await clearActiveWorkoutSessions();
+
+    // Notify listeners
+    workoutsUpdatedNotifier.value = !workoutsUpdatedNotifier.value;
+
+    print('All workout history cleared successfully');
+  }
+
   // Delete a workout and all related exercises and sets
   Future<void> deleteWorkout(int workoutId) async {
     final db = await DatabaseService.instance.database;

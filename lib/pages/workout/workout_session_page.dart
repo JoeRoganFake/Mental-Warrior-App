@@ -1418,8 +1418,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
         if (newTimeRemaining <= 0) {
           timer.cancel();
           _restTimer = null;
-          // Play the boxing bell sound when timer finishes - this will work even in background
-          _playBoxingBellSound();
+          // Cancel rest timer which will handle the boxing bell sound
           if (mounted && !_isDisposing) {
             setState(() {
               _currentRestSetId = null;
@@ -1427,6 +1426,12 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             });
           }
           _updateActiveNotifier();
+          // Use post-frame callback to ensure proper sequencing
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!_isDisposing) {
+              _cancelRestTimer(playSound: true);
+            }
+          });
         }
       }
     });
@@ -1448,8 +1453,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       }
     }
 
-    // Only update UI state if widget is still mounted
-    if (mounted && !_isDisposing) {
+    // Only update UI state if widget is still mounted and values haven't been cleared yet
+    if (mounted && !_isDisposing && _currentRestSetId != null) {
       setState(() {
         _restTimeRemaining = 0;
         _currentRestSetId = null;
@@ -2424,140 +2429,130 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
       ExerciseSet set, BuildContext buttonContext) async {
     if (widget.readOnly) return;
 
-    // Get the position of the tapped button
-    final RenderBox button = buttonContext.findRenderObject() as RenderBox;
-    final RenderBox overlay =
-        Navigator.of(context).overlay!.context.findRenderObject() as RenderBox;
-
-    final RelativeRect position = RelativeRect.fromRect(
-      Rect.fromPoints(
-        button.localToGlobal(Offset(0, button.size.height), ancestor: overlay),
-        button.localToGlobal(button.size.bottomRight(Offset.zero),
-            ancestor: overlay),
-      ),
-      Offset.zero & overlay.size,
-    );
-
-    final selectedType = await showMenu<SetType>(
+    final selectedType = await showDialog<SetType>(
       context: context,
-      position: position,
-      color: _surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      items: [
-        PopupMenuItem<SetType>(
-          value: SetType.normal,
-          child: _buildSetTypeMenuItem(
-            'Normal',
-            'Regular set',
-            set.setType == SetType.normal,
-            showHelp: false,
-          ),
+      builder: (context) => AlertDialog(
+        backgroundColor: _surfaceColor,
+        title: Text('Set Type', style: AppTheme.headlineSmall),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildSetTypeOption(
+              'Normal',
+              'Regular set',
+              SetType.normal,
+              set.setType == SetType.normal,
+              showHelp: false,
+            ),
+            _buildSetTypeOption(
+              'Warm-up',
+              'Preparation set',
+              SetType.warmup,
+              set.setType == SetType.warmup,
+              showHelp: true,
+              context: context,
+            ),
+            _buildSetTypeOption(
+              'Drop Set',
+              'Reduced weight set',
+              SetType.dropset,
+              set.setType == SetType.dropset,
+              showHelp: true,
+              context: context,
+            ),
+            _buildSetTypeOption(
+              'Failure',
+              'To muscular failure',
+              SetType.failure,
+              set.setType == SetType.failure,
+              showHelp: true,
+              context: context,
+            ),
+          ],
         ),
-        PopupMenuItem<SetType>(
-          value: SetType.warmup,
-          child: _buildSetTypeMenuItem(
-            'Warm-up',
-            'Preparation set',
-            set.setType == SetType.warmup,
-            showHelp: true,
-          ),
-        ),
-        PopupMenuItem<SetType>(
-          value: SetType.dropset,
-          child: _buildSetTypeMenuItem(
-            'Drop Set',
-            'Reduced weight set',
-            set.setType == SetType.dropset,
-            showHelp: true,
-          ),
-        ),
-        PopupMenuItem<SetType>(
-          value: SetType.failure,
-          child: _buildSetTypeMenuItem(
-            'Failure',
-            'To muscular failure',
-            set.setType == SetType.failure,
-            showHelp: true,
-          ),
-        ),
-      ],
+      ),
     );
 
     if (selectedType != null && selectedType != set.setType) {
+      Navigator.pop(context);
       await _updateSetType(set.id, selectedType);
     }
   }
 
-  /// Build a set type menu item
-  Widget _buildSetTypeMenuItem(String title, String subtitle, bool isSelected,
-      {bool showHelp = true}) {
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      child: Row(
-        children: [
-          Icon(
-            isSelected
-                ? Icons.radio_button_checked
-                : Icons.radio_button_unchecked,
-            color: isSelected
-                ? _primaryColor
-                : _textSecondaryColor.withOpacity(0.5),
-            size: 20,
-          ),
-          SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                color: _textPrimaryColor,
-                fontSize: 15,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
+  /// Build a set type option for the dialog
+  Widget _buildSetTypeOption(
+    String title,
+    String subtitle,
+    SetType type,
+    bool isSelected, {
+    bool showHelp = false,
+    BuildContext? context,
+  }) {
+    return InkWell(
+      onTap: () {
+        Navigator.pop(context ?? this.context, type);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppTheme.accent.withOpacity(0.15)
+              : Colors.transparent,
+          border: Border(
+            bottom: BorderSide(
+              color: AppTheme.surfaceBorder,
+              width: 0.5,
             ),
           ),
-          if (showHelp)
-            GestureDetector(
-              onTap: () {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    backgroundColor: _surfaceColor,
-                    title: Text(
-                      title,
-                      style: TextStyle(
-                        color: _textPrimaryColor,
-                        fontWeight: FontWeight.bold,
-                      ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTheme.bodyMedium.copyWith(
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.w500,
+                      color:
+                          isSelected ? AppTheme.accent : AppTheme.textPrimary,
                     ),
-                    content: Text(
-                      _getSetTypeDescription(title),
-                      style: TextStyle(
-                        color: _textSecondaryColor,
-                        fontSize: 15,
-                      ),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(
-                          'Got it',
-                          style: TextStyle(color: _primaryColor),
-                        ),
-                      ),
-                    ],
                   ),
-                );
-              },
-              child: Icon(
-                Icons.help_outline,
-                color: _textSecondaryColor,
-                size: 18,
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: AppTheme.bodySmall.copyWith(
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  if (showHelp) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _getSetTypeDescription(title),
+                      style: AppTheme.bodySmall.copyWith(
+                        color: AppTheme.textTertiary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-        ],
+            if (isSelected)
+              Icon(
+                Icons.check_circle,
+                color: AppTheme.accent,
+                size: 20,
+              ),
+          ],
+        ),
       ),
     );
   }
+
 
   /// Get detailed description for set types
   String _getSetTypeDescription(String type) {
@@ -3933,6 +3928,261 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             ),
             actions: [
               if (!widget.readOnly)
+                ValueListenableBuilder<int>(
+                  valueListenable: _restRemainingNotifier,
+                  builder: (context, value, _) {
+                    final bool timerActive = value > 0;
+                    if (timerActive) {
+                      // Show countdown in AppBar
+                      final mins = (value ~/ 60).toString().padLeft(2, '0');
+                      final secs = (value % 60).toString().padLeft(2, '0');
+                      return GestureDetector(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => RestTimerPage(
+                                originalDuration: value,
+                                remaining: _restRemainingNotifier,
+                                isPaused: _restPausedNotifier,
+                                onPause: _togglePauseRest,
+                                onIncrement: _incrementRest,
+                                onDecrement: _decrementRest,
+                                onSkip: _cancelRestTimer,
+                              ),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Row(
+                            children: [
+                              Icon(Icons.timer, color: _primaryColor),
+                              SizedBox(width: 4),
+                              Text('$mins:$secs',
+                                  style: TextStyle(
+                                      color: _primaryColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18)),
+                            ],
+                          ),
+                        ),
+                      );
+                    } else {
+                      // Show timer icon to start new timer
+                      return IconButton(
+                        icon: Icon(Icons.timer, color: _primaryColor),
+                        tooltip: 'Start Custom Rest Timer',
+                        onPressed: () async {
+                          int? pickedSeconds = await showDialog<int>(
+                            context: context,
+                            builder: (context) {
+                              int tempSeconds = _defaultRestTime;
+                              final ValueNotifier<int> totalSeconds =
+                                  ValueNotifier(tempSeconds);
+                              return AlertDialog(
+                                backgroundColor: _surfaceColor,
+                                title: Text('Custom Rest Timer',
+                                    style: TextStyle(color: _textPrimaryColor)),
+                                content: SizedBox(
+                                  width: 280,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text('Minutes : Seconds',
+                                          style: TextStyle(
+                                              color: _textSecondaryColor,
+                                              fontSize: 16)),
+                                      SizedBox(height: 16),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          // Minutes column
+                                          Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                icon: Icon(Icons.arrow_drop_up,
+                                                    color: _primaryColor,
+                                                    size: 36),
+                                                onPressed: () {
+                                                  totalSeconds.value += 60;
+                                                },
+                                              ),
+                                              Container(
+                                                width: 60,
+                                                height: 50,
+                                                alignment: Alignment.center,
+                                                decoration: BoxDecoration(
+                                                  color: _inputBgColor,
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                                child:
+                                                    ValueListenableBuilder<int>(
+                                                  valueListenable: totalSeconds,
+                                                  builder: (_, value, __) {
+                                                    final mins = (value ~/ 60)
+                                                        .toString()
+                                                        .padLeft(2, '0');
+                                                    return Text(
+                                                      mins,
+                                                      style: TextStyle(
+                                                          fontSize: 24,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color:
+                                                              _textPrimaryColor),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: Icon(
+                                                    Icons.arrow_drop_down,
+                                                    color: _primaryColor,
+                                                    size: 36),
+                                                onPressed: () {
+                                                  if (totalSeconds.value >=
+                                                      60) {
+                                                    totalSeconds.value -= 60;
+                                                  }
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                          SizedBox(width: 16),
+                                          Text(':',
+                                              style: TextStyle(
+                                                  fontSize: 24,
+                                                  color: _textPrimaryColor)),
+                                          SizedBox(width: 16),
+                                          // Seconds column
+                                          Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                icon: Icon(Icons.arrow_drop_up,
+                                                    color: _primaryColor,
+                                                    size: 36),
+                                                onPressed: () {
+                                                  if (totalSeconds.value % 60 <
+                                                      59) {
+                                                    totalSeconds.value += 1;
+                                                  } else {
+                                                    totalSeconds.value =
+                                                        totalSeconds.value - 59;
+                                                  }
+                                                },
+                                              ),
+                                              Container(
+                                                width: 60,
+                                                height: 50,
+                                                alignment: Alignment.center,
+                                                decoration: BoxDecoration(
+                                                  color: _inputBgColor,
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                ),
+                                                child:
+                                                    ValueListenableBuilder<int>(
+                                                  valueListenable: totalSeconds,
+                                                  builder: (_, value, __) {
+                                                    final secs = (value % 60)
+                                                        .toString()
+                                                        .padLeft(2, '0');
+                                                    return Text(
+                                                      secs,
+                                                      style: TextStyle(
+                                                          fontSize: 24,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          color:
+                                                              _textPrimaryColor),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: Icon(
+                                                    Icons.arrow_drop_down,
+                                                    color: _primaryColor,
+                                                    size: 36),
+                                                onPressed: () {
+                                                  if (totalSeconds.value % 60 >
+                                                      0) {
+                                                    totalSeconds.value -= 1;
+                                                  } else if (totalSeconds
+                                                          .value >=
+                                                      60) {
+                                                    totalSeconds.value =
+                                                        totalSeconds.value -
+                                                            60 +
+                                                            59;
+                                                  }
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: Text('Cancel',
+                                        style: TextStyle(
+                                            color: _textSecondaryColor)),
+                                  ),
+                                  OutlinedButton.icon(
+                                    icon: Icon(Icons.play_arrow,
+                                        color: _primaryColor),
+                                    style: OutlinedButton.styleFrom(
+                                        side: BorderSide(color: _primaryColor)),
+                                    onPressed: () {
+                                      Navigator.pop(
+                                          context, totalSeconds.value);
+                                    },
+                                    label: Text('Start',
+                                        style: TextStyle(color: _primaryColor)),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                          if (pickedSeconds != null &&
+                              pickedSeconds > 0 &&
+                              _workout != null &&
+                              _workout!.exercises.isNotEmpty) {
+                            for (var set in _workout!.exercises.first.sets) {
+                              _startRestTimerForSet(set.id, pickedSeconds);
+                            }
+                            await Future.delayed(
+                                const Duration(milliseconds: 100));
+                            if (context.mounted) {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => RestTimerPage(
+                                    originalDuration: pickedSeconds,
+                                    remaining: _restRemainingNotifier,
+                                    isPaused: _restPausedNotifier,
+                                    onPause: _togglePauseRest,
+                                    onIncrement: _incrementRest,
+                                    onDecrement: _decrementRest,
+                                    onSkip: _cancelRestTimer,
+                                  ),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                      );
+                    }
+                  },
+                ),
+              if (!widget.readOnly)
                 TextButton.icon(
                   icon: Icon(Icons.check, color: _successColor),
                   label: Text(
@@ -4620,28 +4870,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                           ),
                         ),
                       if (!widget.readOnly)
-                        PopupMenuButton<String>(
+                        IconButton(
                           icon: Icon(Icons.more_vert, color: _textPrimaryColor),
-                          color: _surfaceColor,
-                          onSelected: (value) async {
-                            if (value == 'discard') {
-                              await _discardWorkout();
-                            }
+                          onPressed: () {
+                            _showWorkoutMenu();
                           },
-                          itemBuilder: (context) => [
-                            PopupMenuItem<String>(
-                              value: 'discard',
-                              child: Row(
-                                children: [
-                                  Icon(Icons.delete_outline,
-                                      color: _dangerColor),
-                                  SizedBox(width: 8),
-                                  Text('Discard Workout',
-                                      style: TextStyle(color: _dangerColor)),
-                                ],
-                              ),
-                            ),
-                          ],
                         ),
                     ],
                   ),
@@ -5472,120 +5705,11 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                             // Options menu
                             // Show options menu only for non-default exercises
                             if (!widget.readOnly)
-                              PopupMenuButton<String>(
-                                key: ValueKey(
-                                    'exercise_menu_${exercise.id}'), // Unique key to avoid hero tag conflicts
+                              IconButton(
                                 icon: Icon(Icons.more_vert,
                                     color: _textSecondaryColor),
-                                enabled: true,
-                                offset: Offset(0, 0),
-                                color: Colors.black,
-                                elevation: 8,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                onSelected: (String value) {
-                                  if (value == 'edit') {
-                                    _editExercise(exercise);
-                                  } else if (value == 'delete') {
-                                    _confirmDeleteExercise(exercise);
-                                  } else if (value == 'set_rest') {
-                                    _showSetRestDialog(exercise);
-                                  } else if (value == 'add_note') {
-                                    _toggleExerciseNote(exercise.id);
-                                  } else if (value == 'create_superset') {
-                                    _openSupersetSelection(exercise);
-                                  } else if (value == 'remove_superset') {
-                                    _removeFromSuperset(exercise.id);
-                                  } else if (value == 'replace') {
-                                    _replaceExercise(exercise);
-                                  }
-                                },
-                                itemBuilder: (BuildContext context) {
-                                  final bool isInSuperset = supersetId != null;
-                                  return <PopupMenuEntry<String>>[
-                                    // Show Edit only for custom exercises (with ##CUSTOM:true## marker)
-                                    if (isCustomExercise)
-                                      PopupMenuItem<String>(
-                                        value: 'edit',
-                                        child: ListTile(
-                                          contentPadding: EdgeInsets.zero,
-                                          leading: Icon(Icons.edit,
-                                              color: _primaryColor),
-                                          title: Text('Edit Exercise',
-                                              style: TextStyle(
-                                                  color: _textPrimaryColor)),
-                                        ),
-                                      ),
-                                    PopupMenuItem<String>(
-                                      value: 'replace',
-                                      child: ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: Icon(Icons.swap_horiz,
-                                            color: _primaryColor),
-                                        title: Text('Replace Exercise',
-                                            style: TextStyle(
-                                                color: _textPrimaryColor)),
-                                      ),
-                                    ),
-                                    PopupMenuItem<String>(
-                                      value: 'set_rest',
-                                      child: ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: Icon(Icons.timer,
-                                            color: _primaryColor),
-                                        title: Text('Set Rest Time',
-                                            style: TextStyle(
-                                                color: _textPrimaryColor)),
-                                      ),
-                                    ),
-                                    PopupMenuItem<String>(
-                                      value: 'add_note',
-                                      child: ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: Icon(Icons.note_add,
-                                            color: _primaryColor),
-                                        title: Text('Add Note',
-                                            style: TextStyle(
-                                                color: _textPrimaryColor)),
-                                      ),
-                                    ),
-                                    if (isInSuperset)
-                                      PopupMenuItem<String>(
-                                        value: 'remove_superset',
-                                        child: ListTile(
-                                          contentPadding: EdgeInsets.zero,
-                                          leading: Icon(Icons.link_off,
-                                              color: const Color(0xFFFF9800)),
-                                          title: Text('Remove from Superset',
-                                              style: TextStyle(
-                                                  color: _textPrimaryColor)),
-                                        ),
-                                      )
-                                    else
-                                      PopupMenuItem<String>(
-                                        value: 'create_superset',
-                                        child: ListTile(
-                                          contentPadding: EdgeInsets.zero,
-                                          leading: Icon(Icons.link,
-                                              color: _primaryColor),
-                                          title: Text('Create Superset',
-                                              style: TextStyle(
-                                                  color: _textPrimaryColor)),
-                                        ),
-                                      ),
-                                    PopupMenuItem<String>(
-                                      value: 'delete',
-                                      child: ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: Icon(Icons.delete,
-                                            color: _dangerColor),
-                                        title: Text('Delete Exercise',
-                                            style: TextStyle(
-                                                color: _textPrimaryColor)),
-                                      ),
-                                    ),
-                                  ];
+                                onPressed: () {
+                                  _showExerciseMenu(exercise, supersetId);
                                 },
                               )
                             else
@@ -5875,7 +5999,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
               // Weight and Reps columns (align with headers)
               Expanded(
-                flex: 2,
+                  flex: 2,
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8.0),
                   child: GestureDetector(
@@ -5969,7 +6093,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                 ),
               ),
               Expanded(
-                flex: 2,
+                  flex: 1,
                 child: Padding(
                   padding: EdgeInsets.symmetric(horizontal: 8.0),
                   child: TextField(
@@ -6118,20 +6242,19 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
               backgroundColor: _surfaceColor,
               title: Text('Set Rest Time',
                   style: TextStyle(color: _textPrimaryColor)),
-              content: SizedBox(
-                height: 260,
-                width: 280,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Minutes : Seconds',
-                      style:
-                          TextStyle(color: _textSecondaryColor, fontSize: 16),
-                    ),
-                    SizedBox(height: 16),
-                    Expanded(
-                      child: Row(
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: 280,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Minutes : Seconds',
+                        style:
+                            TextStyle(color: _textSecondaryColor, fontSize: 16),
+                      ),
+                      SizedBox(height: 16),
+                      Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           // Minutes column
@@ -6162,9 +6285,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                     return Text(
                                       mins,
                                       style: TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                          color: _textPrimaryColor),
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                        color: _textPrimaryColor,
+                                      ),
                                     );
                                   },
                                 ),
@@ -6218,9 +6342,10 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                                     return Text(
                                       secs,
                                       style: TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                          color: _textPrimaryColor),
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                        color: _textPrimaryColor,
+                                      ),
                                     );
                                   },
                                 ),
@@ -6242,8 +6367,8 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -6254,17 +6379,19 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                   child: Text('Cancel',
                       style: TextStyle(color: _textSecondaryColor)),
                 ),
-                ElevatedButton(
-                  style:
-                      ElevatedButton.styleFrom(backgroundColor: _primaryColor),
-                  onPressed: () async {
-                    final rest = totalSeconds.value;
+                OutlinedButton.icon(
+                  icon: Icon(Icons.play_arrow, color: _primaryColor),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: _primaryColor),
+                  ),
+                  onPressed: () {
                     Navigator.pop(context);
+                    // Start the rest timer for all sets in the exercise
                     for (var set in exercise.sets) {
-                      await _updateSetData(set.id, set.weight, set.reps, rest);
+                      _startRestTimerForSet(set.id, totalSeconds.value);
                     }
                   },
-                  child: Text('Save'),
+                  label: Text('Start', style: TextStyle(color: _primaryColor)),
                 ),
               ],
             ));
@@ -6612,6 +6739,153 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
 
     // Auto-save the workout state
     _updateActiveNotifier();
+  }
+
+  // Show workout options menu
+  void _showWorkoutMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _surfaceColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Workout Options',
+                style: TextStyle(
+                  color: _textPrimaryColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            // Discard option
+            ListTile(
+              leading: Icon(Icons.delete_outline, color: _dangerColor),
+              title: Text('Discard Workout',
+                  style: TextStyle(color: _dangerColor)),
+              onTap: () {
+                Navigator.pop(context);
+                _discardWorkout();
+              },
+            ),
+            SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Toggle exercise note visibility
+  void _showExerciseMenu(Exercise exercise, String? supersetId) {
+    final bool isCustomExercise = exercise.name.contains('##CUSTOM:true##');
+    final bool isInSuperset = supersetId != null;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _surfaceColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'Exercise Options',
+                style: TextStyle(
+                  color: _textPrimaryColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            // Edit option - only for custom exercises
+            if (isCustomExercise)
+              ListTile(
+                leading: Icon(Icons.edit, color: _primaryColor),
+                title: Text('Edit Exercise',
+                    style: TextStyle(color: _textPrimaryColor)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _editExercise(exercise);
+                },
+              ),
+            // Replace option
+            ListTile(
+              leading: Icon(Icons.swap_horiz, color: _primaryColor),
+              title: Text('Replace Exercise',
+                  style: TextStyle(color: _textPrimaryColor)),
+              onTap: () {
+                Navigator.pop(context);
+                _replaceExercise(exercise);
+              },
+            ),
+            // Set Rest Time option
+            ListTile(
+              leading: Icon(Icons.timer, color: _primaryColor),
+              title: Text('Set Rest Time',
+                  style: TextStyle(color: _textPrimaryColor)),
+              onTap: () {
+                Navigator.pop(context);
+                _showSetRestDialog(exercise);
+              },
+            ),
+            // Add Note option
+            ListTile(
+              leading: Icon(Icons.note_add, color: _primaryColor),
+              title:
+                  Text('Add Note', style: TextStyle(color: _textPrimaryColor)),
+              onTap: () {
+                Navigator.pop(context);
+                _toggleExerciseNote(exercise.id);
+              },
+            ),
+            // Superset option
+            if (isInSuperset)
+              ListTile(
+                leading: Icon(Icons.link_off, color: const Color(0xFFFF9800)),
+                title: Text('Remove from Superset',
+                    style: TextStyle(color: _textPrimaryColor)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _removeFromSuperset(exercise.id);
+                },
+              )
+            else
+              ListTile(
+                leading: Icon(Icons.link, color: _primaryColor),
+                title: Text('Create Superset',
+                    style: TextStyle(color: _textPrimaryColor)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openSupersetSelection(exercise);
+                },
+              ),
+            // Delete option
+            ListTile(
+              leading: Icon(Icons.delete, color: _dangerColor),
+              title: Text('Delete Exercise',
+                  style: TextStyle(color: _dangerColor)),
+              onTap: () {
+                Navigator.pop(context);
+                _confirmDeleteExercise(exercise);
+              },
+            ),
+            SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
   }
 
   // Toggle exercise note visibility

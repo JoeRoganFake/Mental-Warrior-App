@@ -299,12 +299,26 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
   void _editWorkout() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => WorkoutEditPage(
-          key: ValueKey(
-              'edit_${widget.workoutId}_${DateTime.now().millisecondsSinceEpoch}'),
-          workoutId: widget.workoutId,
-        ),
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 500),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return WorkoutEditPage(
+            key: ValueKey(
+                'edit_${widget.workoutId}_${DateTime.now().millisecondsSinceEpoch}'),
+            workoutId: widget.workoutId,
+          );
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return SlideTransition(
+            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+                .animate(CurvedAnimation(
+                    parent: animation, curve: Curves.easeInOut)),
+            child: FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+          );
+        },
       ),
     );
 
@@ -406,10 +420,6 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
         onPressed: () => Navigator.pop(context),
       ),
       actions: [
-        IconButton(
-          icon: Icon(Icons.refresh, color: AppTheme.textPrimary),
-          onPressed: _loadWorkout,
-        ),
         IconButton(
           icon: Icon(Icons.edit, color: AppTheme.textPrimary),
           onPressed: _editWorkout,
