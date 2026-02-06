@@ -323,12 +323,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 _buildSectionHeader('General', Icons.tune_outlined),
                 const SizedBox(height: 16),
                 _buildSettingsCard([
-                  _buildSettingsTile(
-                    'Notifications',
-                    'Manage app notifications',
-                    Icons.notifications_outlined,
-                    onTap: () {},
-                  ),
+                  
                   _buildDivider(),
                   _buildActionTile(
                     'Test Reminder Notifications',
@@ -341,7 +336,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     'About App',
                     'Version 1.0.0',
                     Icons.info_outlined,
-                    onTap: () {},
+                    onTap: () => _navigateToAboutApp(),
                   ),
                 ]),
                 const SizedBox(height: 50),
@@ -2829,6 +2824,16 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
   }
+
+  void _navigateToAboutApp() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const AboutAppPage(),
+      ),
+    );
+  }
+
+  // Notification settings navigation removed
 }
 
 class PlateBarCustomizationPage extends StatelessWidget {
@@ -3800,3 +3805,284 @@ Future<_BarDialogResult?> _showBarDialog(
     },
   );
 }
+
+class AboutAppPage extends StatelessWidget {
+  const AboutAppPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.background,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios, color: AppTheme.accent),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'About App',
+          style: AppTheme.headlineMedium,
+        ),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          child: Column(
+            children: [
+              const SizedBox(height: 20),
+
+              // App Icon & Name
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppTheme.accent.withOpacity(0.2),
+                      AppTheme.accent.withOpacity(0.05),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: AppTheme.accent.withOpacity(0.3),
+                    width: 2,
+                  ),
+                ),
+                child: Icon(
+                  Icons.fitness_center,
+                  size: 60,
+                  color: AppTheme.accent,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              Text(
+                'Mental Warrior',
+                style: AppTheme.displaySmall.copyWith(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              Text(
+                'Version 1.0.0',
+                style: AppTheme.bodyMedium.copyWith(
+                  color: AppTheme.textSecondary,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 8),
+
+              Text(
+                'Build 1',
+                style: AppTheme.bodySmall.copyWith(
+                  color: AppTheme.textTertiary,
+                ),
+              ),
+              const SizedBox(height: 40),
+
+              // About Section
+              Card(
+                color: AppTheme.surface,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: AppTheme.borderRadiusMd,
+                  side: BorderSide(
+                    color: AppTheme.surfaceBorder.withOpacity(0.6),
+                    width: 1,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'About',
+                        style: AppTheme.labelLarge.copyWith(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Mental Warrior is your personal fitness companion designed to help you track workouts, monitor habits, and achieve your fitness goals. With intelligent reminders and detailed analytics, stay motivated on your journey.',
+                        style: AppTheme.bodyMedium.copyWith(
+                          color: AppTheme.textSecondary,
+                          height: 1.6,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Features Section
+              Card(
+                color: AppTheme.surface,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: AppTheme.borderRadiusMd,
+                  side: BorderSide(
+                    color: AppTheme.surfaceBorder.withOpacity(0.6),
+                    width: 1,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Features',
+                        style: AppTheme.labelLarge.copyWith(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildFeatureItem(
+                        icon: Icons.fitness_center,
+                        title: 'Workout Tracking',
+                        description: 'Log exercises, sets, & reps with ease',
+                      ),
+                      const SizedBox(height: 12),
+                      _buildFeatureItem(
+                        icon: Icons.notifications_active,
+                        title: 'Smart Reminders',
+                        description: 'Get reminded about upcoming tasks',
+                      ),
+                      const SizedBox(height: 12),
+                      _buildFeatureItem(
+                        icon: Icons.equalizer,
+                        title: 'Analytics',
+                        description: 'Track progress with detailed statistics',
+                      ),
+                      const SizedBox(height: 12),
+                      _buildFeatureItem(
+                        icon: Icons.settings,
+                        title: 'Customization',
+                        description: 'Personalize plates, bars, & settings',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Info Section
+              Card(
+                color: AppTheme.surface,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: AppTheme.borderRadiusMd,
+                  side: BorderSide(
+                    color: AppTheme.surfaceBorder.withOpacity(0.6),
+                    width: 1,
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildInfoRow('App Version', '1.0.0'),
+                      const SizedBox(height: 12),
+                      _buildInfoRow('Build', '1'),
+                      const SizedBox(height: 12),
+                      _buildInfoRow(
+                          'Platform', Platform.isAndroid ? 'Android' : 'iOS'),
+                      const SizedBox(height: 12),
+                      _buildInfoRow('Release Date', 'February 2026'),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureItem({
+    required IconData icon,
+    required String title,
+    required String description,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: AppTheme.accent.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: AppTheme.accent,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: AppTheme.bodyMedium.copyWith(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: AppTheme.bodySmall.copyWith(
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: AppTheme.bodyMedium.copyWith(
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        Text(
+          value,
+          style: AppTheme.bodyMedium.copyWith(
+            color: AppTheme.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// NotificationSettingsPage and related widgets removed
