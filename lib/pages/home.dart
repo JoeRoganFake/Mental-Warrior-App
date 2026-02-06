@@ -1321,6 +1321,33 @@ class HomePageState extends State<HomePage>
                             ),
                           ),
 
+                        // Show remove button for repeat options when active
+                        if (showRepeat)
+                          Center(
+                            child: TextButton.icon(
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: Colors.red[300],
+                                size: 18,
+                              ),
+                              label: Text(
+                                "Remove Repeat",
+                                style: TextStyle(color: Colors.red[300]),
+                              ),
+                              onPressed: () {
+                                modalSetState(() {
+                                  // Clear all repeat-related fields
+                                  showRepeat = false;
+                                  repeatFrequency = 'day';
+                                  repeatInterval = 1;
+                                  repeatEndType = 'never';
+                                  repeatEndDateController.clear();
+                                  repeatOccurrencesController.text = '30';
+                                });
+                              },
+                            ),
+                          ),
+
                         // Add/Show Reminder button (only shows if a date is selected)
                         if (_showDateTime &&
                             _dateController.text.isNotEmpty &&
@@ -1343,40 +1370,6 @@ class HomePageState extends State<HomePage>
                                   savedReminders,
                                 );
                               },
-                            ),
-                          ),
-
-                        // Show remove button for repeat options when active
-                        if (showRepeat)
-                          Padding(
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 16.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                TextButton.icon(
-                                  icon: Icon(
-                                    Icons.delete_outline,
-                                    color: Colors.red[300],
-                                    size: 18,
-                                  ),
-                                  label: Text(
-                                    "Remove Repeat",
-                                    style: TextStyle(color: Colors.red[300]),
-                                  ),
-                                  onPressed: () {
-                                    modalSetState(() {
-                                      // Clear all repeat-related fields
-                                      showRepeat = false;
-                                      repeatFrequency = 'day';
-                                      repeatInterval = 1;
-                                      repeatEndType = 'never';
-                                      repeatEndDateController.clear();
-                                      repeatOccurrencesController.text = '30';
-                                    });
-                                  },
-                                ),
-                              ],
                             ),
                           ),
 

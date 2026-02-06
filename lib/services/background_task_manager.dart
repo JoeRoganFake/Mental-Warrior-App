@@ -34,6 +34,72 @@ class BackgroundTaskManager {
 
     // Register all tasks
     await _registerBackgroundTasks();
+    
+    // Print schedule
+    _printTaskSchedule();
+
+    // Run reminder check immediately on bootup
+    print('\n🚀 Running initial reminder check on bootup...\n');
+    await checkRemindersCallback();
+  }
+
+  // Print the schedule of all background tasks
+  static void _printTaskSchedule() {
+    print('\n' + '=' * 60);
+    print('📅 BACKGROUND TASKS SCHEDULE');
+    print('=' * 60);
+    print('');
+    print('🌅 Daily Quote Update');
+    print('   ⏰ Schedule: Every day at 00:01 (12:01 AM)');
+    print('   🔁 Frequency: Once per day');
+    print('   📝 Task: Fetch and update daily motivational quote');
+    print('');
+    print('🔄 Habit Reset');
+    print('   ⏰ Schedule: Every day at 00:05 (12:05 AM)');
+    print('   🔁 Frequency: Once per day');
+    print('   📝 Task: Reset all daily habit tracking');
+    print('');
+    print('📋 Pending Tasks Check');
+    print('   ⏰ Schedule: Every day at 00:10 (12:10 AM)');
+    print('   🔁 Frequency: Once per day');
+    print('   📝 Task: Activate tasks that are due today');
+    print('');
+    print('⏰ Reminder Check');
+    print('   ⏰ Schedule: Every 30 minutes (continuous)');
+    print('   🔁 Frequency: 48 times per day');
+    print('   📝 Task: Check for due reminders and send notifications');
+    print('');
+    print('   📌 NEXT 5 REMINDER CHECKS:');
+    final nextChecks = _getNextReminderChecks(5);
+    for (int i = 0; i < nextChecks.length; i++) {
+      print('      ${i + 1}. ${nextChecks[i]}');
+    }
+    print('');
+    print('=' * 60);
+    print('✅ All tasks registered and scheduled successfully');
+    print('=' * 60 + '\n');
+  }
+
+  // Calculate the next N reminder check times
+  static List<String> _getNextReminderChecks(int count) {
+    final now = DateTime.now();
+    final checks = <String>[];
+
+    // Start from the next 5-minute interval
+    int minutesToAdd = 5 - (now.minute % 5);
+    if (minutesToAdd == 0) minutesToAdd = 5;
+
+    var nextCheck = now.add(Duration(minutes: minutesToAdd));
+
+    for (int i = 0; i < count; i++) {
+      final formattedTime =
+          '${nextCheck.hour.toString().padLeft(2, '0')}:${nextCheck.minute.toString().padLeft(2, '0')}';
+      final minutesUntil = nextCheck.difference(now).inMinutes;
+      checks.add('$formattedTime (in ~$minutesUntil min)');
+      nextCheck = nextCheck.add(const Duration(minutes: 5));
+    }
+
+    return checks;
   }
 
   // Register all background tasks with the alarm manager
@@ -77,16 +143,16 @@ class BackgroundTaskManager {
     );
     print("✅ Check pending tasks scheduled");
 
-    // Schedule reminder check task - runs every 5 minutes for testing (change to 30 minutes in production)
+    // Schedule reminder check task - runs every 30 minutes
     await AndroidAlarmManager.periodic(
-      const Duration(minutes: 5),
+      const Duration(minutes: 30),
       BackgroundTaskIds.reminderCheckId,
       checkRemindersCallback,
       exact: false,
       wakeup: true,
       rescheduleOnReboot: true,
     );
-    print("✅ Reminder check task scheduled (every 5 minutes)");
+    print("✅ Reminder check task scheduled (every 30 minutes)");
   }
 
   // Callback for daily quote task
@@ -236,17 +302,75 @@ class BackgroundTaskManager {
       final notificationService = NotificationService();
       
       // Format deadline for display
-      String deadlineText = deadline.isNotEmpty ? deadline.split(' ')[0] : 'soon';
+      String deadlineText = _formatDeadlineForNotification(deadline);
       
       // Show notification (you'll need to implement this method in NotificationService)
       await notificationService.showTaskReminderNotification(
         id: taskId + 5000, // Offset to avoid ID conflicts
-        title: '⏰ Task Reminder',
-        body: '$taskLabel\nDue: $deadlineText',
+        title: 'Task Reminder',
+        body: '$taskLabel\n$deadlineText',
         payload: 'task_$taskId',
       );
     } catch (e) {
-      print('❌ Error showing reminder notification: $e');
+      print('Error showing reminder notification: $e');
+    }
+  }
+
+  // Format deadline as "Tomorrow at HH:mm", "Apr 5", or "Apr 5, 2027" depending on current year
+  static String _formatDeadlineForNotification(String deadline) {
+    try {
+      if (deadline.isEmpty) return 'soon';
+
+      final parts = deadline.split(' ');
+      final datePart = parts[0]; // "2026-02-10"
+      final timePart = parts.length > 1 ? parts[1] : '00:00'; // "14:30"
+
+      final dateParts = datePart.split('-');
+
+      if (dateParts.length != 3) return deadline;
+
+      final year = int.parse(dateParts[0]);
+      final month = int.parse(dateParts[1]);
+      final day = int.parse(dateParts[2]);
+
+      final deadlineDate = DateTime(year, month, day);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+
+      // Check if deadline is tomorrow
+      if (deadlineDate.year == tomorrow.year &&
+          deadlineDate.month == tomorrow.month &&
+          deadlineDate.day == tomorrow.day) {
+        return 'Tomorrow at $timePart';
+      }
+
+      // Month names
+      const monthNames = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec'
+      ];
+
+      final monthName = monthNames[month - 1];
+      final currentYear = DateTime.now().year;
+
+      if (year == currentYear) {
+        return '$monthName $day';
+      } else {
+        return '$monthName $day, $year';
+      }
+    } catch (e) {
+      return deadline;
     }
   }
 
