@@ -4,7 +4,6 @@ import 'package:fl_chart/fl_chart.dart';
 import 'dart:async';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/utils/app_theme.dart';
-import 'package:mental_warior/utils/app_theme.dart';
 
 class BodyMeasurementsPage extends StatefulWidget {
   final bool embedded;
@@ -245,7 +244,7 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
       children: [
         Text(
           'All Measurements',
-          style: AppTheme.headlineSmall?.copyWith(
+          style: AppTheme.headlineSmall.copyWith(
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -323,21 +322,21 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
                   children: [
                     Text(
                       muscleType.name,
-                      style: AppTheme.bodyLarge?.copyWith(
+                      style: AppTheme.bodyLarge.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                     if (measurement != null)
                       Text(
                         DateFormat('MMM d, yyyy').format(measurement.date),
-                        style: AppTheme.bodySmall?.copyWith(
+                        style: AppTheme.bodySmall.copyWith(
                           color: AppTheme.textSecondary,
                         ),
                       )
                     else
                       Text(
                         'Not measured yet',
-                        style: AppTheme.bodySmall?.copyWith(
+                        style: AppTheme.bodySmall.copyWith(
                           color: AppTheme.textSecondary,
                           fontStyle: FontStyle.italic,
                         ),
@@ -352,7 +351,7 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
                   children: [
                     Text(
                       '${measurement.value.toStringAsFixed(1)} ${measurement.unit}',
-                      style: AppTheme.bodyLarge?.copyWith(
+                      style: AppTheme.bodyLarge.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                     ),

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
-import 'package:mental_warior/services/plate_bar_customization_service.dart';
 import 'package:mental_warior/utils/app_theme.dart';
 
 class WorkoutSettingsPage extends StatefulWidget {

@@ -31,6 +31,7 @@ dependencies:
   android_alarm_manager_plus: ^4.0.7
   audioplayers: ^6.2.0
   cached_network_image: ^3.4.1
+  crypto: ^3.0.7
   cupertino_icons: ^1.0.8
   file_picker: ^8.1.6
   fl_chart: ^0.69.0
@@ -42,6 +43,7 @@ dependencies:
   fluttertoast: ^8.2.12
   http: ^1.4.0
   intl: ^0.18.0
+  just_audio: ^0.10.5
   path: ^1.9.0
   path_provider: ^2.1.5
   permission_handler: ^11.4.0
@@ -70,6 +72,7 @@ flutter:
     - assets/audio/BoxingBell.mp3
     - assets/audio/11L-Subtle_mobile_Chime_-1748795262788.mp3
     - assets/audio/fanfare chime.mp3
+    - assets/meditation_sentences/sentences.json
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

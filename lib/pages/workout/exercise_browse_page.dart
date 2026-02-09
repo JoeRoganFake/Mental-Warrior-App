@@ -44,7 +44,6 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
   
   // Performance optimization
   bool _isLoadingExercises = false;
-  bool _isInitialized = false;
 
   // Pagination for better performance
   static const int _itemsPerPage = 50;
@@ -73,7 +72,6 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
         _exercises = widget.preLoadedExercises!;
         _bodyParts = widget.preLoadedBodyParts!;
         _equipmentTypes = widget.preLoadedEquipmentTypes!;
-        _isInitialized = true;
       });
     } else {
       // Only load exercises if not pre-loaded
@@ -121,7 +119,6 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
           _bodyParts = result['bodyParts'];
           _equipmentTypes = result['equipmentTypes'];
           _isLoadingExercises = false;
-          _isInitialized = true;
         });
       }
     } catch (e) {

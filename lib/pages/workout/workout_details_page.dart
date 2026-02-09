@@ -26,14 +26,9 @@ class WorkoutDetailsPageState extends State<WorkoutDetailsPage> {
   bool _isLoading = true;
 
   // Theme colors for prettier styling
-  final Color _backgroundColor = const Color(0xFF0A0A0B);
-  final Color _surfaceColor = const Color(0xFF1A1B1E);
-  final Color _cardColor = const Color(0xFF26272B);
   final Color _primaryColor = const Color(0xFF3F8EFC);
-  final Color _successColor = const Color(0xFF4CAF50);
   final Color _textPrimaryColor = Colors.white;
   final Color _textSecondaryColor = const Color(0xFFBBBBBB);
-  final Color _accentColor = const Color(0xFF7C4DFF);
   
   bool _showWeightInLbs = false;
   String get _weightUnit => _showWeightInLbs ? 'lbs' : 'kg';

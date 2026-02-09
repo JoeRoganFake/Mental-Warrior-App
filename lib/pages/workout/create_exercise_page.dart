@@ -453,15 +453,6 @@ class CreateExercisePageState extends State<CreateExercisePage> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: AppTheme.bodyMedium.copyWith(
-        color: AppTheme.textPrimary,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-  }
 
   Widget _buildTextFormField({
     required TextEditingController controller,

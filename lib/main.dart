@@ -11,6 +11,7 @@ import 'package:mental_warior/services/foreground_service.dart';
 import 'package:mental_warior/utils/app_theme.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+
 // Initialize FlutterLocalNotificationsPlugin
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
     FlutterLocalNotificationsPlugin();

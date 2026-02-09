@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:mental_warior/models/books.dart';
 import 'package:mental_warior/models/categories.dart';
 import 'package:mental_warior/models/goals.dart';
@@ -11,6 +12,7 @@ import 'package:mental_warior/pages/categories_page.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/services/quote_service.dart';
 import 'package:mental_warior/services/reminder_service.dart';
+import 'package:mental_warior/services/tts_service.dart';
 import 'package:mental_warior/utils/functions.dart';
 import 'package:mental_warior/utils/app_theme.dart';
 import 'package:mental_warior/models/tasks.dart';
@@ -63,6 +65,12 @@ class HomePageState extends State<HomePage>
   Category? selectedCategory;
   Quote? _currentDailyQuote;
 
+
+  final TTSService ttsService = TTSService();
+  final AudioPlayer player = AudioPlayer();
+  List<String> awarenessSentences = [];
+
+
   @override
   void initState() {
     super.initState();
@@ -80,6 +88,27 @@ class HomePageState extends State<HomePage>
 
     // Listen for habit updates
     DatabaseService.habitsUpdatedNotifier.addListener(_onHabitsUpdated);
+
+    loadSentences();
+  }
+
+  Future<void> loadSentences() async {
+    final jsonString = await rootBundle
+        .loadString('assets/meditation_sentences/sentences.json');
+    final data = json.decode(jsonString);
+    setState(() {
+      awarenessSentences = List<String>.from(data['awareness']);
+    });
+  }
+
+  Future<void> playSentences() async {
+    for (final sentence in awarenessSentences.take(5)) {
+      // test first 5
+      final audioFile = await ttsService.getOrCreateAudio(sentence);
+      await player.setFilePath(audioFile.path);
+      await player.play();
+      await Future.delayed(const Duration(seconds: 10)); // spacing
+    }
   }
 
   void _onHabitsUpdated() {
@@ -1486,8 +1515,7 @@ class HomePageState extends State<HomePage>
 
                                   // Schedule reminders if any were set
                                   if (savedReminders.isNotEmpty &&
-                                      deadline.isNotEmpty &&
-                                      newTaskId != null) {
+                                      deadline.isNotEmpty) {
                                     try {
                                       final reminderService = ReminderService();
                                       await reminderService.scheduleReminders(
@@ -4610,6 +4638,9 @@ class HomePageState extends State<HomePage>
                     onPressed: () async {
                       await BackgroundTaskManager.runAllTasksNow();
                       _loadStoredQuote();
+                      playSentences();
+                      
+
                     },
                     icon: Icon(Icons.refresh_rounded, color: AppTheme.accent),
                     iconSize: 28,

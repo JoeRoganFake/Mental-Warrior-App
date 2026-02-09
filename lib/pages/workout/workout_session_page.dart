@@ -864,7 +864,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
             // Only update the workout name controller if the name actually changed
             // This prevents resetting user input while they're typing
             if (_workoutNameController.text != workout!.name) {
-              _workoutNameController.text = workout!.name;
+              _workoutNameController.text = workout.name;
             }
             // Only set the elapsed seconds during the initial load, not on refreshes
             // This prevents timer resetting when adding exercises
@@ -1829,65 +1829,6 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
     }
   }
 
-  Future<void> _showEditNameDialog() async {
-    if (widget.readOnly) return;
-
-    // Create a temporary controller for the dialog
-    final dialogController = TextEditingController(text: _workout?.name ?? '');
-    String? result;
-
-    try {
-      result = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: _surfaceColor,
-          title: Text('Edit Workout Name',
-              style: TextStyle(color: _textPrimaryColor)),
-          content: TextField(
-            controller: dialogController,
-            autofocus: true,
-            style: TextStyle(color: _textPrimaryColor),
-            decoration: InputDecoration(
-              hintText: 'Enter workout name',
-              hintStyle: TextStyle(color: _textSecondaryColor.withOpacity(0.7)),
-              enabledBorder: UnderlineInputBorder(
-                borderSide:
-                    BorderSide(color: _textSecondaryColor.withOpacity(0.5)),
-              ),
-              focusedBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: _primaryColor),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, null),
-              child:
-                  Text('Cancel', style: TextStyle(color: _textSecondaryColor)),
-            ),
-            TextButton(
-              onPressed: () {
-                final newName = dialogController.text.trim();
-                Navigator.pop(context, newName.isNotEmpty ? newName : null);
-              },
-              child: Text('Save', style: TextStyle(color: _primaryColor)),
-            ),
-          ],
-        ),
-      );
-    } finally {
-      // Always dispose the controller, even if dialog is dismissed by back button
-      // Use a delay to ensure dialog is fully disposed first
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        dialogController.dispose();
-      });
-    }
-
-    // Update the workout name if a valid name was provided
-    if (result != null && result.isNotEmpty) {
-      _updateWorkoutName(result);
-    }
-  }
 
   void _updateWorkoutName(String newName) {
     if (widget.readOnly || _workout == null) return;
@@ -5295,8 +5236,7 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
   }) {
     // Determine exercise type based on markers
     // Only truly custom exercises (with CUSTOM marker) should be editable
-    final bool isCustomExercise =
-        RegExp(r'##CUSTOM:true##').hasMatch(exercise.name);
+    RegExp(r'##CUSTOM:true##').hasMatch(exercise.name);
 
     final bool allSetsCompleted =
         exercise.sets.isNotEmpty && exercise.sets.every((set) => set.completed);
