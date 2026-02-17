@@ -28,7 +28,6 @@ class _LevelUpAnimationState extends State<LevelUpAnimation>
   late AnimationController _raysController;
   
   late Animation<double> _scaleAnimation;
-  late Animation<double> _fadeAnimation;
   late Animation<double> _glowAnimation;
   late Animation<double> _iconScaleAnimation;
   late Animation<double> _textRevealAnimation;
@@ -88,11 +87,6 @@ class _LevelUpAnimationState extends State<LevelUpAnimation>
     ]).animate(_controller);
 
     // Smooth fade animation
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-          parent: _controller,
-          curve: const Interval(0.0, 0.4, curve: Curves.easeOut)),
-    );
 
     // Smooth glow pulse
     _glowAnimation = TweenSequence<double>([
@@ -236,61 +230,7 @@ class _LevelUpAnimationState extends State<LevelUpAnimation>
         onTap: () => Navigator.of(context).pop(),
         child: Stack(
           children: [
-            // Animated backdrop blur
-            AnimatedBuilder(
-              animation: _blurAnimation,
-              builder: (context, child) {
-                return BackdropFilter(
-                  filter: ImageFilter.blur(
-                    sigmaX: _blurAnimation.value,
-                    sigmaY: _blurAnimation.value,
-                  ),
-                  child: Container(
-                    color: Colors.black.withOpacity(0.6 * _fadeAnimation.value),
-                  ),
-                );
-              },
-            ),
-            // Radial rays effect
-            AnimatedBuilder(
-              animation: _raysController,
-              builder: (context, child) {
-                return CustomPaint(
-                  painter: RaysPainter(
-                    progress: _raysController.value,
-                    color: rankColor,
-                    opacity: _fadeAnimation.value * 0.3,
-                  ),
-                  size: Size.infinite,
-                );
-              },
-            ),
-            // Expanding particles
-            AnimatedBuilder(
-              animation: _particleController,
-              builder: (context, child) {
-                return CustomPaint(
-                  painter: ParticlePainter(
-                    particles: _particles,
-                    progress: _particleController.value,
-                  ),
-                  size: Size.infinite,
-                );
-              },
-            ),
-            // Floating shimmer particles
-            AnimatedBuilder(
-              animation: _shimmerController,
-              builder: (context, child) {
-                return CustomPaint(
-                  painter: FloatingParticlePainter(
-                    particles: _floatingParticles,
-                    progress: _shimmerController.value,
-                  ),
-                  size: Size.infinite,
-                );
-              },
-            ),
+            // ...existing code...
             // Main content
             Center(
               child: AnimatedBuilder(
@@ -298,256 +238,191 @@ class _LevelUpAnimationState extends State<LevelUpAnimation>
                 builder: (context, child) {
                   return Transform.scale(
                     scale: _scaleAnimation.value,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Central glow with multiple layers
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // Outer glow
-                            Container(
-                              width: 280 * _glowAnimation.value,
-                              height: 280 * _glowAnimation.value,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: RadialGradient(
-                                  colors: [
-                                    rankColor.withOpacity(
-                                        0.15 * _glowAnimation.value),
-                                    Colors.transparent,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // ...existing code (all children of the Column)...
+                          // Central glow with multiple layers
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // ...existing code...
+                            ],
+                          ),
+                          const SizedBox(height: 48),
+                          // "Rank Advanced" text with elegant reveal
+                          Transform.translate(
+                            offset: Offset(
+                                0, 20 * (1 - _textRevealAnimation.value)),
+                            child: Opacity(
+                              opacity: _textRevealAnimation.value,
+                              child: Text(
+                                'Rank Advanced',
+                                style: AppTheme.displayLarge.copyWith(
+                                  letterSpacing: 3,
+                                  shadows: [
+                                    Shadow(
+                                      color: rankColor.withOpacity(0.5),
+                                      blurRadius: 15,
+                                    ),
                                   ],
                                 ),
                               ),
                             ),
-                            // Middle glow ring
-                            Container(
-                              width: 180 * _glowAnimation.value,
-                              height: 180 * _glowAnimation.value,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: RadialGradient(
-                                  colors: [
-                                    rankColor.withOpacity(
-                                        0.3 * _glowAnimation.value),
-                                    Colors.transparent,
-                                  ],
-                                ),
-                              ),
-                            ),
-                            // Icon container with elegant scaling
-                            Transform.scale(
-                              scale: _iconScaleAnimation.value,
+                          ),
+                          const SizedBox(height: 32),
+                          // New level with elegant card
+                          Transform.translate(
+                            offset: Offset(
+                                0, 20 * (1 - _levelRevealAnimation.value)),
+                            child: Opacity(
+                              opacity: _levelRevealAnimation.value,
                               child: Container(
-                                width: 140,
-                                height: 140,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 32,
+                                  vertical: 16,
+                                ),
                                 decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
                                   gradient: LinearGradient(
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                     colors: [
-                                      rankColor.withOpacity(0.9),
-                                      rankColor.withOpacity(0.6),
+                                      rankColor.withOpacity(0.25),
+                                      rankColor.withOpacity(0.15),
                                     ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: rankColor.withOpacity(0.5),
+                                    width: 1.5,
                                   ),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: rankColor.withOpacity(0.5),
-                                      blurRadius: 30,
-                                      spreadRadius: 8,
-                                    ),
-                                    BoxShadow(
-                                      color: Colors.white.withOpacity(0.3),
-                                      blurRadius: 15,
+                                      color: rankColor.withOpacity(0.3),
+                                      blurRadius: 20,
                                       spreadRadius: 2,
                                     ),
                                   ],
                                 ),
-                                child: Icon(
-                                  Icons.auto_awesome,
-                                  size: 70,
-                                  color: Colors.white,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Rank',
+                                      style: AppTheme.bodyLarge.copyWith(
+                                        letterSpacing: 2,
+                                        color: AppTheme.textPrimary
+                                            .withOpacity(0.8),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 20,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            rankColor,
+                                            rankColor.withOpacity(0.7),
+                                          ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        '${widget.newLevel}',
+                                        style: AppTheme.displayMedium.copyWith(
+                                          letterSpacing: 0.5,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 48),
-
-                        // "Rank Advanced" text with elegant reveal
-                        Transform.translate(
-                          offset:
-                              Offset(0, 20 * (1 - _textRevealAnimation.value)),
-                          child: Opacity(
-                            opacity: _textRevealAnimation.value,
-                            child: Text(
-                              'Rank Advanced',
-                              style: AppTheme.displayLarge.copyWith(
-                                letterSpacing: 3,
-                                shadows: [
-                                  Shadow(
-                                    color: rankColor.withOpacity(0.5),
-                                    blurRadius: 15,
-                                  ),
-                                ],
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 32),
-
-                        // New level with elegant card
-                        Transform.translate(
-                          offset:
-                              Offset(0, 20 * (1 - _levelRevealAnimation.value)),
-                          child: Opacity(
-                            opacity: _levelRevealAnimation.value,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 32,
-                                vertical: 16,
-                              ),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    rankColor.withOpacity(0.25),
-                                    rankColor.withOpacity(0.15),
+                          const SizedBox(height: 24),
+                          // Rank badge with elegant styling
+                          Transform.translate(
+                            offset: Offset(
+                                0, 20 * (1 - _rankRevealAnimation.value)),
+                            child: Opacity(
+                              opacity: _rankRevealAnimation.value,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 28,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.3),
+                                  borderRadius: BorderRadius.circular(24),
+                                  border: Border.all(
+                                    color: rankColor.withOpacity(0.6),
+                                    width: 2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: rankColor.withOpacity(0.2),
+                                      blurRadius: 12,
+                                    ),
                                   ],
                                 ),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: rankColor.withOpacity(0.5),
-                                  width: 1.5,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: rankColor.withOpacity(0.3),
-                                    blurRadius: 20,
-                                    spreadRadius: 2,
+                                child: Text(
+                                  widget.newRank.toUpperCase(),
+                                  style: AppTheme.displaySmall.copyWith(
+                                    letterSpacing: 3,
+                                    color: rankColor,
                                   ),
-                                ],
+                                ),
                               ),
+                            ),
+                          ),
+                          const SizedBox(height: 28),
+                          // XP gained with subtle animation
+                          Transform.translate(
+                            offset:
+                                Offset(0, 20 * (1 - _xpRevealAnimation.value)),
+                            child: Opacity(
+                              opacity: _xpRevealAnimation.value * 0.8,
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(
-                                    'Rank',
-                                    style: AppTheme.bodyLarge.copyWith(
-                                      letterSpacing: 2,
-                                      color:
-                                          AppTheme.textPrimary.withOpacity(0.8),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          rankColor,
-                                          rankColor.withOpacity(0.7),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      '${widget.newLevel}',
-                                      style: AppTheme.displayMedium.copyWith(
-                                        letterSpacing: 0.5,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Rank badge with elegant styling
-                        Transform.translate(
-                          offset:
-                              Offset(0, 20 * (1 - _rankRevealAnimation.value)),
-                          child: Opacity(
-                            opacity: _rankRevealAnimation.value,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 28,
-                                vertical: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.3),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: rankColor.withOpacity(0.6),
-                                  width: 2,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: rankColor.withOpacity(0.2),
-                                    blurRadius: 12,
-                                  ),
-                                ],
-                              ),
-                              child: Text(
-                                widget.newRank.toUpperCase(),
-                                style: AppTheme.displaySmall.copyWith(
-                                  letterSpacing: 3,
-                                  color: rankColor,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 28),
-
-                        // XP gained with subtle animation
-                        Transform.translate(
-                          offset:
-                              Offset(0, 20 * (1 - _xpRevealAnimation.value)),
-                          child: Opacity(
-                            opacity: _xpRevealAnimation.value * 0.8,
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.add_circle_outline,
-                                  size: 18,
-                                  color: AppTheme.textSecondary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '${widget.xpGained} XP',
-                                  style: AppTheme.titleMedium.copyWith(
+                                  Icon(
+                                    Icons.add_circle_outline,
+                                    size: 18,
                                     color: AppTheme.textSecondary,
-                                    letterSpacing: 1.5,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '${widget.xpGained} XP',
+                                    style: AppTheme.titleMedium.copyWith(
+                                      color: AppTheme.textSecondary,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 56),
-
-                        // Tap to continue hint with fade
-                        Opacity(
-                          opacity: _xpRevealAnimation.value * 0.5,
-                          child: Text(
-                            'Tap to continue',
-                            style: AppTheme.bodySmall.copyWith(
-                              color: AppTheme.textTertiary.withOpacity(0.6),
-                              letterSpacing: 1,
+                          const SizedBox(height: 56),
+                          // Tap to continue hint with fade
+                          Opacity(
+                            opacity: _xpRevealAnimation.value * 0.5,
+                            child: Text(
+                              'Tap to continue',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: AppTheme.textTertiary.withOpacity(0.6),
+                                letterSpacing: 1,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 },

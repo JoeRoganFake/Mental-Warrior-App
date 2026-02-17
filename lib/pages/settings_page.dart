@@ -915,97 +915,99 @@ class _SettingsPageState extends State<SettingsPage> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: AppTheme.surface,
-              title: Text('Default Rest Time', style: AppTheme.headlineSmall),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.accent.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _formatRestTime(tempSeconds),
-                      style: TextStyle(
-                        color: AppTheme.accent,
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Slider(
-                    value: tempSeconds.toDouble(),
-                    min: 15,
-                    max: 600,
-                    divisions: 39,
-                    activeColor: AppTheme.accent,
-                    onChanged: (value) {
-                      setDialogState(() => tempSeconds = value.round());
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Quick Select',
-                      style: TextStyle(color: AppTheme.textSecondary)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: presets.map((seconds) {
-                      final isSelected = tempSeconds == seconds;
-                      return GestureDetector(
-                        onTap: () =>
-                            setDialogState(() => tempSeconds = seconds),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color:
-                                isSelected
-                                ? AppTheme.accent
-                                : AppTheme.surfaceLight,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            _formatRestTime(seconds),
-                            style: TextStyle(
-                              color:
-                                  isSelected
-                                  ? Colors.white
-                                  : AppTheme.textTertiary,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
+            return Center(
+              child: SingleChildScrollView(
+                child: AlertDialog(
+                  backgroundColor: AppTheme.surface,
+                  title:
+                      Text('Default Rest Time', style: AppTheme.headlineSmall),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          _formatRestTime(tempSeconds),
+                          style: TextStyle(
+                            color: AppTheme.accent,
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      );
-                    }).toList(),
+                      ),
+                      const SizedBox(height: 20),
+                      Slider(
+                        value: tempSeconds.toDouble(),
+                        min: 15,
+                        max: 600,
+                        divisions: 39,
+                        activeColor: AppTheme.accent,
+                        onChanged: (value) {
+                          setDialogState(() => tempSeconds = value.round());
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Text('Quick Select',
+                          style: TextStyle(color: AppTheme.textSecondary)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: presets.map((seconds) {
+                          final isSelected = tempSeconds == seconds;
+                          return GestureDetector(
+                            onTap: () =>
+                                setDialogState(() => tempSeconds = seconds),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppTheme.accent
+                                    : AppTheme.surfaceLight,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                _formatRestTime(seconds),
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : AppTheme.textTertiary,
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
                   ),
-                ],
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text('Cancel',
+                          style: TextStyle(color: AppTheme.textSecondary)),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        setState(() => _defaultRestTimer = tempSeconds);
+                        await _saveSetting(() =>
+                            _settingsService.setDefaultRestTimer(tempSeconds));
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.accent),
+                      child: const Text('Apply'),
+                    ),
+                  ],
+                ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('Cancel',
-                      style: TextStyle(color: AppTheme.textSecondary)),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    setState(() => _defaultRestTimer = tempSeconds);
-                    await _saveSetting(() =>
-                        _settingsService.setDefaultRestTimer(tempSeconds));
-                    Navigator.pop(context);
-                  },
-                  style:
-                      ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accent),
-                  child: const Text('Apply'),
-                ),
-              ],
             );
           },
         );
@@ -1404,56 +1406,62 @@ class _SettingsPageState extends State<SettingsPage> {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppTheme.surface,
-          title: Text('PR Display Mode', style: AppTheme.headlineSmall),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildUnitOption(
-                'Random Daily',
-                '5 random PRs that change every day',
-                _prDisplayMode == 'random',
-                () async {
-                  setState(() {
-                    _prDisplayMode = 'random';
-                    _pinnedExercises.clear();
-                  });
-                  await _saveSetting(
-                      () => _settingsService.setPrDisplayMode('random'));
-                  await _saveSetting(() => _settingsService.setPinnedExercises([]));
-                  Navigator.pop(context);
-                },
+        return Center(
+          child: SingleChildScrollView(
+            child: AlertDialog(
+              backgroundColor: AppTheme.surface,
+              title: Text('PR Display Mode', style: AppTheme.headlineSmall),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildUnitOption(
+                    'Random Daily',
+                    '5 random PRs that change every day',
+                    _prDisplayMode == 'random',
+                    () async {
+                      setState(() {
+                        _prDisplayMode = 'random';
+                        _pinnedExercises.clear();
+                      });
+                      await _saveSetting(
+                          () => _settingsService.setPrDisplayMode('random'));
+                      await _saveSetting(
+                          () => _settingsService.setPinnedExercises([]));
+                      Navigator.pop(context);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildUnitOption(
+                    'Pinned Exercises',
+                    'Show specific exercises you choose',
+                    _prDisplayMode == 'pinned',
+                    () async {
+                      setState(() => _prDisplayMode = 'pinned');
+                      await _saveSetting(
+                          () => _settingsService.setPrDisplayMode('pinned'));
+                      Navigator.pop(context);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildUnitOption(
+                    'None',
+                    'Don\'t show PRs on workout page',
+                    _prDisplayMode == 'none',
+                    () async {
+                      setState(() {
+                        _prDisplayMode = 'none';
+                        _pinnedExercises.clear();
+                      });
+                      await _saveSetting(
+                          () => _settingsService.setPrDisplayMode('none'));
+                      await _saveSetting(
+                          () => _settingsService.setPinnedExercises([]));
+                      Navigator.pop(context);
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              _buildUnitOption(
-                'Pinned Exercises',
-                'Show specific exercises you choose',
-                _prDisplayMode == 'pinned',
-                () async {
-                  setState(() => _prDisplayMode = 'pinned');
-                  await _saveSetting(
-                      () => _settingsService.setPrDisplayMode('pinned'));
-                  Navigator.pop(context);
-                },
-              ),
-              const SizedBox(height: 12),
-              _buildUnitOption(
-                'None',
-                'Don\'t show PRs on workout page',
-                _prDisplayMode == 'none',
-                () async {
-                  setState(() {
-                    _prDisplayMode = 'none';
-                    _pinnedExercises.clear();
-                  });
-                  await _saveSetting(
-                      () => _settingsService.setPrDisplayMode('none'));
-                  await _saveSetting(() => _settingsService.setPinnedExercises([]));
-                  Navigator.pop(context);
-                },
-              ),
-            ],
+            ),
           ),
         );
       },
@@ -1783,45 +1791,51 @@ class _SettingsPageState extends State<SettingsPage> {
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppTheme.surface,
-          title: Text('Export Workout Data', style: AppTheme.headlineSmall),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Choose export format:',
-                style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
+        return Center(
+          child: SingleChildScrollView(
+            child: AlertDialog(
+              backgroundColor: AppTheme.surface,
+              title: Text('Export Workout Data', style: AppTheme.headlineSmall),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Choose export format:',
+                    style: AppTheme.bodyMedium
+                        .copyWith(color: AppTheme.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildExportOption(
+                    'JSON Format',
+                    'Structured data format, easy to re-import',
+                    Icons.code,
+                    () {
+                      Navigator.pop(context);
+                      _exportWorkoutData('json');
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _buildExportOption(
+                    'CSV Format',
+                    'Spreadsheet format for Excel/Google Sheets',
+                    Icons.table_chart,
+                    () {
+                      Navigator.pop(context);
+                      _exportWorkoutData('csv');
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              _buildExportOption(
-                'JSON Format',
-                'Structured data format, easy to re-import',
-                Icons.code,
-                () {
-                  Navigator.pop(context);
-                  _exportWorkoutData('json');
-                },
-              ),
-              const SizedBox(height: 12),
-              _buildExportOption(
-                'CSV Format',
-                'Spreadsheet format for Excel/Google Sheets',
-                Icons.table_chart,
-                () {
-                  Navigator.pop(context);
-                  _exportWorkoutData('csv');
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel',
+                      style: TextStyle(color: AppTheme.textSecondary)),
+                ),
+              ],
             ),
-          ],
+          ),
         );
       },
     );
@@ -2860,7 +2874,7 @@ class _PlateBarCustomizationPageImplState
               children: [
                 // Top bar with back button
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 16, 8, 0),
+                  padding: const EdgeInsets.fromLTRB(8, 30, 8, 0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [

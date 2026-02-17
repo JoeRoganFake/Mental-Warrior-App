@@ -3144,223 +3144,245 @@ class HomePageState extends State<HomePage>
     return showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (context) => Dialog(
-        backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-          child: Form(
-            key: goalFormKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header
-                Text(
-                  "New Long-Term Goal",
-                  style: AppTheme.headlineMedium.copyWith(
-                    color: AppTheme.accent,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 14),
-                // Goal Label Field
-                TextFormField(
-                  controller: _labelController,
-                  autofocus: true,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return "*Field is required";
-                    }
-                    return null;
-                  },
-                  style:
-                      AppTheme.bodyLarge.copyWith(color: AppTheme.textPrimary),
-                  decoration: InputDecoration(
-                    labelText: "Goal",
-                    labelStyle: AppTheme.bodyMedium
-                        .copyWith(color: AppTheme.textSecondary),
-                    prefixIcon: const Icon(Icons.flag, color: AppTheme.accent),
-                    filled: true,
-                    fillColor: AppTheme.surfaceLight,
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: AppTheme.borderRadiusMd,
-                      borderSide: BorderSide(color: AppTheme.surfaceBorder),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: AppTheme.borderRadiusMd,
-                      borderSide:
-                          BorderSide(color: AppTheme.accent, width: 1.5),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: AppTheme.borderRadiusMd,
-                      borderSide: BorderSide(color: AppTheme.error),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: AppTheme.borderRadiusMd,
-                      borderSide: BorderSide(color: AppTheme.error, width: 1.5),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Description Field
-                TextFormField(
-                  controller: _descriptionController,
-                  maxLines: 3,
-                  keyboardType: TextInputType.multiline,
-                  style:
-                      AppTheme.bodyLarge.copyWith(color: AppTheme.textPrimary),
-                  decoration: InputDecoration(
-                    labelText: "Description",
-                    labelStyle: AppTheme.bodyMedium
-                        .copyWith(color: AppTheme.textSecondary),
-                    prefixIcon:
-                        const Icon(Icons.description, color: AppTheme.accent),
-                    filled: true,
-                    fillColor: AppTheme.surfaceLight,
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: AppTheme.borderRadiusMd,
-                      borderSide: BorderSide(color: AppTheme.surfaceBorder),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: AppTheme.borderRadiusMd,
-                      borderSide:
-                          BorderSide(color: AppTheme.accent, width: 1.5),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Due Date Field
-                TextFormField(
-                  controller: _dateController,
-                  readOnly: true,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return "*Field is required";
-                    }
-                    return null;
-                  },
-                  onTap: () {
-                    Functions.dateAndTimePicker(context, _dateController,
-                        onlyDate: true);
-                  },
-                  style:
-                      AppTheme.bodyLarge.copyWith(color: AppTheme.textPrimary),
-                  decoration: InputDecoration(
-                    labelText: "Target Date",
-                    labelStyle: AppTheme.bodyMedium
-                        .copyWith(color: AppTheme.textSecondary),
-                    prefixIcon: const Icon(Icons.calendar_month,
-                        color: AppTheme.accent),
-                    filled: true,
-                    fillColor: AppTheme.surfaceLight,
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: AppTheme.borderRadiusMd,
-                      borderSide: BorderSide(color: AppTheme.surfaceBorder),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: AppTheme.borderRadiusMd,
-                      borderSide:
-                          BorderSide(color: AppTheme.accent, width: 1.5),
-                    ),
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: AppTheme.borderRadiusMd,
-                      borderSide: BorderSide(color: AppTheme.error),
-                    ),
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: AppTheme.borderRadiusMd,
-                      borderSide: BorderSide(color: AppTheme.error, width: 1.5),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Action buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.textSecondary,
-                          side: BorderSide(
-                              color: AppTheme.textSecondary.withOpacity(0.12)),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+      builder: (context) {
+        final double maxHeight = MediaQuery.of(context).size.height * 0.8;
+        return Dialog(
+          backgroundColor: AppTheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: maxHeight,
+              ),
+              child: SingleChildScrollView(
+                child: Form(
+                  key: goalFormKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header
+                      Text(
+                        "New Long-Term Goal",
+                        style: AppTheme.headlineMedium.copyWith(
+                          color: AppTheme.accent,
+                          fontWeight: FontWeight.bold,
                         ),
-                        child: const Text('Cancel'),
+                        textAlign: TextAlign.center,
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (goalFormKey.currentState!.validate()) {
-                            showDialog(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                backgroundColor: AppTheme.surface,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: AppTheme.borderRadiusLg),
-                                title: Text(
-                                  "Confirm Goal",
-                                  style: AppTheme.headlineMedium
-                                      .copyWith(color: AppTheme.textPrimary),
-                                ),
-                                content: Text(
-                                  "Are you sure that goal '${_labelController.text}' is achievable by ${_dateController.text}?\n\nLong-term goals are not easily updated. Think about it first!",
-                                  style: AppTheme.bodyMedium
-                                      .copyWith(color: AppTheme.textSecondary),
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: Text("Cancel",
-                                        style: AppTheme.bodyMedium),
-                                  ),
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppTheme.accent,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                    onPressed: () {
-                                      _goalService.addGoal(
-                                        _labelController.text,
-                                        _dateController.text,
-                                        _descriptionController.text,
-                                      );
-                                      Navigator.pop(
-                                          context); // Close confirmation
-                                      Navigator.pop(context); // Close form
-                                      setState(() {});
-                                    },
-                                    child: const Text("Confirm"),
-                                  ),
-                                ],
-                              ),
-                            );
+                      const SizedBox(height: 14),
+                      // Goal Label Field
+                      TextFormField(
+                        controller: _labelController,
+                        autofocus: true,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return "*Field is required";
                           }
+                          return null;
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.accent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
-                        child: Text(
-                          'Add Goal',
-                          style: AppTheme.bodyMedium.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                        style: AppTheme.bodyLarge
+                            .copyWith(color: AppTheme.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: "Goal",
+                          labelStyle: AppTheme.bodyMedium
+                              .copyWith(color: AppTheme.textSecondary),
+                          prefixIcon:
+                              const Icon(Icons.flag, color: AppTheme.accent),
+                          filled: true,
+                          fillColor: AppTheme.surfaceLight,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: AppTheme.borderRadiusMd,
+                            borderSide:
+                                BorderSide(color: AppTheme.surfaceBorder),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: AppTheme.borderRadiusMd,
+                            borderSide:
+                                BorderSide(color: AppTheme.accent, width: 1.5),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: AppTheme.borderRadiusMd,
+                            borderSide: BorderSide(color: AppTheme.error),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: AppTheme.borderRadiusMd,
+                            borderSide:
+                                BorderSide(color: AppTheme.error, width: 1.5),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 12),
+                      // Description Field
+                      TextFormField(
+                        controller: _descriptionController,
+                        maxLines: 3,
+                        keyboardType: TextInputType.multiline,
+                        style: AppTheme.bodyLarge
+                            .copyWith(color: AppTheme.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: "Description",
+                          labelStyle: AppTheme.bodyMedium
+                              .copyWith(color: AppTheme.textSecondary),
+                          prefixIcon: const Icon(Icons.description,
+                              color: AppTheme.accent),
+                          filled: true,
+                          fillColor: AppTheme.surfaceLight,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: AppTheme.borderRadiusMd,
+                            borderSide:
+                                BorderSide(color: AppTheme.surfaceBorder),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: AppTheme.borderRadiusMd,
+                            borderSide:
+                                BorderSide(color: AppTheme.accent, width: 1.5),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Due Date Field
+                      TextFormField(
+                        controller: _dateController,
+                        readOnly: true,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return "*Field is required";
+                          }
+                          return null;
+                        },
+                        onTap: () {
+                          Functions.dateAndTimePicker(context, _dateController,
+                              onlyDate: true);
+                        },
+                        style: AppTheme.bodyLarge
+                            .copyWith(color: AppTheme.textPrimary),
+                        decoration: InputDecoration(
+                          labelText: "Target Date",
+                          labelStyle: AppTheme.bodyMedium
+                              .copyWith(color: AppTheme.textSecondary),
+                          prefixIcon: const Icon(Icons.calendar_month,
+                              color: AppTheme.accent),
+                          filled: true,
+                          fillColor: AppTheme.surfaceLight,
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: AppTheme.borderRadiusMd,
+                            borderSide:
+                                BorderSide(color: AppTheme.surfaceBorder),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: AppTheme.borderRadiusMd,
+                            borderSide:
+                                BorderSide(color: AppTheme.accent, width: 1.5),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: AppTheme.borderRadiusMd,
+                            borderSide: BorderSide(color: AppTheme.error),
+                          ),
+                          focusedErrorBorder: OutlineInputBorder(
+                            borderRadius: AppTheme.borderRadiusMd,
+                            borderSide:
+                                BorderSide(color: AppTheme.error, width: 1.5),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Action buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppTheme.textSecondary,
+                                side: BorderSide(
+                                    color: AppTheme.textSecondary
+                                        .withOpacity(0.12)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                if (goalFormKey.currentState!.validate()) {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      backgroundColor: AppTheme.surface,
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              AppTheme.borderRadiusLg),
+                                      title: Text(
+                                        "Confirm Goal",
+                                        style: AppTheme.headlineMedium.copyWith(
+                                            color: AppTheme.textPrimary),
+                                      ),
+                                      content: Text(
+                                        "Are you sure that goal '${_labelController.text}' is achievable by ${_dateController.text}?\n\nLong-term goals are not easily updated. Think about it first!",
+                                        style: AppTheme.bodyMedium.copyWith(
+                                            color: AppTheme.textSecondary),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(context),
+                                          child: Text("Cancel",
+                                              style: AppTheme.bodyMedium),
+                                        ),
+                                        ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppTheme.accent,
+                                            foregroundColor: Colors.white,
+                                          ),
+                                          onPressed: () {
+                                            _goalService.addGoal(
+                                              _labelController.text,
+                                              _dateController.text,
+                                              _descriptionController.text,
+                                            );
+                                            Navigator.pop(
+                                                context); // Close confirmation
+                                            Navigator.pop(
+                                                context); // Close form
+                                            setState(() {});
+                                          },
+                                          child: const Text("Confirm"),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.accent,
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                              child: Text(
+                                'Add Goal',
+                                style: AppTheme.bodyMedium.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     ).then((_) {
       Future.delayed(const Duration(milliseconds: 100), () {
         _labelController.clear();

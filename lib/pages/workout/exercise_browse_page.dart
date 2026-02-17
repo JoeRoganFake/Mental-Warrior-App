@@ -285,10 +285,6 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage>
   }
   
   // Get paginated subset for display
-  List<Map<String, dynamic>> get _displayedExercises {
-    final filtered = _filteredExercises;
-    return filtered.take(_displayCount).toList();
-  }
 
   bool get _hasMoreItems => _filteredExercises.length > _displayCount;
 

@@ -3920,176 +3920,200 @@ class WorkoutSessionPageState extends State<WorkoutSessionPage>
                               int tempSeconds = _defaultRestTime;
                               final ValueNotifier<int> totalSeconds =
                                   ValueNotifier(tempSeconds);
-                              return AlertDialog(
-                                backgroundColor: _surfaceColor,
-                                title: Text('Custom Rest Timer',
-                                    style: TextStyle(color: _textPrimaryColor)),
-                                content: SizedBox(
-                                  width: 280,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text('Minutes : Seconds',
-                                          style: TextStyle(
-                                              color: _textSecondaryColor,
-                                              fontSize: 16)),
-                                      SizedBox(height: 16),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
+                              return Center(
+                                child: SingleChildScrollView(
+                                  child: AlertDialog(
+                                    backgroundColor: _surfaceColor,
+                                    title: Text('Custom Rest Timer',
+                                        style: TextStyle(
+                                            color: _textPrimaryColor)),
+                                    content: SizedBox(
+                                      width: 280,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          // Minutes column
-                                          Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              IconButton(
-                                                icon: Icon(Icons.arrow_drop_up,
-                                                    color: _primaryColor,
-                                                    size: 36),
-                                                onPressed: () {
-                                                  totalSeconds.value += 60;
-                                                },
-                                              ),
-                                              Container(
-                                                width: 60,
-                                                height: 50,
-                                                alignment: Alignment.center,
-                                                decoration: BoxDecoration(
-                                                  color: _inputBgColor,
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                child:
-                                                    ValueListenableBuilder<int>(
-                                                  valueListenable: totalSeconds,
-                                                  builder: (_, value, __) {
-                                                    final mins = (value ~/ 60)
-                                                        .toString()
-                                                        .padLeft(2, '0');
-                                                    return Text(
-                                                      mins,
-                                                      style: TextStyle(
-                                                          fontSize: 24,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color:
-                                                              _textPrimaryColor),
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                              IconButton(
-                                                icon: Icon(
-                                                    Icons.arrow_drop_down,
-                                                    color: _primaryColor,
-                                                    size: 36),
-                                                onPressed: () {
-                                                  if (totalSeconds.value >=
-                                                      60) {
-                                                    totalSeconds.value -= 60;
-                                                  }
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                          SizedBox(width: 16),
-                                          Text(':',
+                                          Text('Minutes : Seconds',
                                               style: TextStyle(
-                                                  fontSize: 24,
-                                                  color: _textPrimaryColor)),
-                                          SizedBox(width: 16),
-                                          // Seconds column
-                                          Column(
-                                            mainAxisSize: MainAxisSize.min,
+                                                  color: _textSecondaryColor,
+                                                  fontSize: 16)),
+                                          SizedBox(height: 16),
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
-                                              IconButton(
-                                                icon: Icon(Icons.arrow_drop_up,
-                                                    color: _primaryColor,
-                                                    size: 36),
-                                                onPressed: () {
-                                                  if (totalSeconds.value % 60 <
-                                                      59) {
-                                                    totalSeconds.value += 1;
-                                                  } else {
-                                                    totalSeconds.value =
-                                                        totalSeconds.value - 59;
-                                                  }
-                                                },
+                                              // Minutes column
+                                              Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    icon: Icon(
+                                                        Icons.arrow_drop_up,
+                                                        color: _primaryColor,
+                                                        size: 36),
+                                                    onPressed: () {
+                                                      totalSeconds.value += 60;
+                                                    },
+                                                  ),
+                                                  Container(
+                                                    width: 60,
+                                                    height: 50,
+                                                    alignment: Alignment.center,
+                                                    decoration: BoxDecoration(
+                                                      color: _inputBgColor,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                    ),
+                                                    child:
+                                                        ValueListenableBuilder<
+                                                            int>(
+                                                      valueListenable:
+                                                          totalSeconds,
+                                                      builder: (_, value, __) {
+                                                        final mins = (value ~/
+                                                                60)
+                                                            .toString()
+                                                            .padLeft(2, '0');
+                                                        return Text(
+                                                          mins,
+                                                          style: TextStyle(
+                                                              fontSize: 24,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              color:
+                                                                  _textPrimaryColor),
+                                                        );
+                                                      },
+                                                    ),
+                                                  ),
+                                                  IconButton(
+                                                    icon: Icon(
+                                                        Icons.arrow_drop_down,
+                                                        color: _primaryColor,
+                                                        size: 36),
+                                                    onPressed: () {
+                                                      if (totalSeconds.value >=
+                                                          60) {
+                                                        totalSeconds.value -=
+                                                            60;
+                                                      }
+                                                    },
+                                                  ),
+                                                ],
                                               ),
-                                              Container(
-                                                width: 60,
-                                                height: 50,
-                                                alignment: Alignment.center,
-                                                decoration: BoxDecoration(
-                                                  color: _inputBgColor,
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                child:
-                                                    ValueListenableBuilder<int>(
-                                                  valueListenable: totalSeconds,
-                                                  builder: (_, value, __) {
-                                                    final secs = (value % 60)
-                                                        .toString()
-                                                        .padLeft(2, '0');
-                                                    return Text(
-                                                      secs,
-                                                      style: TextStyle(
-                                                          fontSize: 24,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          color:
-                                                              _textPrimaryColor),
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                              IconButton(
-                                                icon: Icon(
-                                                    Icons.arrow_drop_down,
-                                                    color: _primaryColor,
-                                                    size: 36),
-                                                onPressed: () {
-                                                  if (totalSeconds.value % 60 >
-                                                      0) {
-                                                    totalSeconds.value -= 1;
-                                                  } else if (totalSeconds
-                                                          .value >=
-                                                      60) {
-                                                    totalSeconds.value =
-                                                        totalSeconds.value -
-                                                            60 +
-                                                            59;
-                                                  }
-                                                },
+                                              SizedBox(width: 16),
+                                              Text(':',
+                                                  style: TextStyle(
+                                                      fontSize: 24,
+                                                      color:
+                                                          _textPrimaryColor)),
+                                              SizedBox(width: 16),
+                                              // Seconds column
+                                              Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    icon: Icon(
+                                                        Icons.arrow_drop_up,
+                                                        color: _primaryColor,
+                                                        size: 36),
+                                                    onPressed: () {
+                                                      if (totalSeconds.value %
+                                                              60 <
+                                                          59) {
+                                                        totalSeconds.value += 1;
+                                                      } else {
+                                                        totalSeconds.value =
+                                                            totalSeconds.value -
+                                                                59;
+                                                      }
+                                                    },
+                                                  ),
+                                                  Container(
+                                                    width: 60,
+                                                    height: 50,
+                                                    alignment: Alignment.center,
+                                                    decoration: BoxDecoration(
+                                                      color: _inputBgColor,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                    ),
+                                                    child:
+                                                        ValueListenableBuilder<
+                                                            int>(
+                                                      valueListenable:
+                                                          totalSeconds,
+                                                      builder: (_, value, __) {
+                                                        final secs = (value %
+                                                                60)
+                                                            .toString()
+                                                            .padLeft(2, '0');
+                                                        return Text(
+                                                          secs,
+                                                          style: TextStyle(
+                                                              fontSize: 24,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .bold,
+                                                              color:
+                                                                  _textPrimaryColor),
+                                                        );
+                                                      },
+                                                    ),
+                                                  ),
+                                                  IconButton(
+                                                    icon: Icon(
+                                                        Icons.arrow_drop_down,
+                                                        color: _primaryColor,
+                                                        size: 36),
+                                                    onPressed: () {
+                                                      if (totalSeconds.value %
+                                                              60 >
+                                                          0) {
+                                                        totalSeconds.value -= 1;
+                                                      } else if (totalSeconds
+                                                              .value >=
+                                                          60) {
+                                                        totalSeconds.value =
+                                                            totalSeconds.value -
+                                                                60 +
+                                                                59;
+                                                      }
+                                                    },
+                                                  ),
+                                                ],
                                               ),
                                             ],
                                           ),
                                         ],
                                       ),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: Text('Cancel',
+                                            style: TextStyle(
+                                                color: _textSecondaryColor)),
+                                      ),
+                                      OutlinedButton.icon(
+                                        icon: Icon(Icons.play_arrow,
+                                            color: _primaryColor),
+                                        style: OutlinedButton.styleFrom(
+                                            side: BorderSide(
+                                                color: _primaryColor)),
+                                        onPressed: () {
+                                          Navigator.pop(
+                                              context, totalSeconds.value);
+                                        },
+                                        label: Text('Start',
+                                            style: TextStyle(
+                                                color: _primaryColor)),
+                                      ),
                                     ],
                                   ),
                                 ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: Text('Cancel',
-                                        style: TextStyle(
-                                            color: _textSecondaryColor)),
-                                  ),
-                                  OutlinedButton.icon(
-                                    icon: Icon(Icons.play_arrow,
-                                        color: _primaryColor),
-                                    style: OutlinedButton.styleFrom(
-                                        side: BorderSide(color: _primaryColor)),
-                                    onPressed: () {
-                                      Navigator.pop(
-                                          context, totalSeconds.value);
-                                    },
-                                    label: Text('Start',
-                                        style: TextStyle(color: _primaryColor)),
-                                  ),
-                                ],
                               );
                             },
                           );

@@ -23,55 +23,50 @@ class RestTimerPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bgGradient = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        AppTheme.surface,
-        AppTheme.background,
-      ],
-    );
 
     return Scaffold(
       backgroundColor: AppTheme.background,
       body: SafeArea(
-        child: Container(
-          decoration: BoxDecoration(gradient: bgGradient),
-          child: ValueListenableBuilder<int>(
-            valueListenable: remaining,
-            builder: (context, value, child) {
-              final progress = value / originalDuration;
-              Duration format(int sec) => Duration(seconds: sec);
-              final minutes = format(value).inMinutes;
-              final secs = format(value).inSeconds % 60;
-              
-              final timeColor = value <= 0
-                  ? AppTheme.success // Green when finished
-                  : value <= 10
-                      ? AppTheme.error // Red when almost done
-                      : AppTheme.textPrimary; // White normally
-              
-              return Stack(
-                children: [
-                  // Back button
-                  Positioned(
-                    top: 16,
-                    left: 16,
-                    child: IconButton(
-                      icon:
-                          Icon(Icons.arrow_back, color: AppTheme.textSecondary),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ),
+        child: Stack(
+          children: [
+            // Back button always at the top left, above all content
+            Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  top: MediaQuery.of(context).padding.top + 4,
+                  left: 4,
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.arrow_back, color: AppTheme.textSecondary),
+                  onPressed: () => Navigator.pop(context),
+                  iconSize: 32,
+                ),
+              ),
+            ),
+            // Main content centered
+            Center(
+              child: SingleChildScrollView(
+                child: ValueListenableBuilder<int>(
+                  valueListenable: remaining,
+                  builder: (context, value, child) {
+                    final progress = value / originalDuration;
+                    Duration format(int sec) => Duration(seconds: sec);
+                    final minutes = format(value).inMinutes;
+                    final secs = format(value).inSeconds % 60;
 
-                  Center(
-                    child: Column(
+                    final timeColor = value <= 0
+                        ? AppTheme.success // Green when finished
+                        : value <= 10
+                            ? AppTheme.error // Red when almost done
+                            : AppTheme.textPrimary; // White normally
+
+                    return Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
                           value <= 0 ? 'Time\'s Up!' : 'Rest Time',
-                          style: AppTheme.headlineMedium
-                              .copyWith(color: timeColor),
+                          style: AppTheme.headlineMedium.copyWith(color: timeColor),
                         ),
                         SizedBox(height: 24),
 
@@ -125,14 +120,13 @@ class RestTimerPage extends StatelessWidget {
                           ),
                         ),
                         SizedBox(height: 40),
-                        
+
                         if (value <= 0)
                           Column(
                             children: [
                               Text(
                                 'Ready to continue?',
-                                style: AppTheme.bodyMedium
-                                    .copyWith(color: AppTheme.textSecondary),
+                                style: AppTheme.bodyMedium.copyWith(color: AppTheme.textSecondary),
                               ),
                               SizedBox(height: 16),
                               ElevatedButton.icon(
@@ -152,8 +146,7 @@ class RestTimerPage extends StatelessWidget {
                                 },
                                 icon: Icon(Icons.check_circle),
                                 label: Text('Continue Workout',
-                                    style: AppTheme.labelLarge
-                                        .copyWith(color: Colors.white)),
+                                    style: AppTheme.labelLarge.copyWith(color: Colors.white)),
                               ),
                             ],
                           )
@@ -181,7 +174,7 @@ class RestTimerPage extends StatelessWidget {
                               ),
                             ],
                           ),
-                          
+
                         SizedBox(height: 32),
                         if (value > 0)
                           TextButton.icon(
@@ -200,12 +193,12 @@ class RestTimerPage extends StatelessWidget {
                             label: Text('Skip Rest'),
                           ),
                       ],
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

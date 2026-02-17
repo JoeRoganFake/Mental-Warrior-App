@@ -478,12 +478,7 @@ class _WorkoutCompletionPageState extends State<WorkoutCompletionPage>
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.share, color: AppTheme.textPrimary),
-            onPressed: () {
-              // TODO: Implement sharing functionality
-            },
-          ),
+          
         ],
       ),
       body: SafeArea(

@@ -497,58 +497,64 @@ class MeditationPageState extends State<MeditationPage>
     showDialog<void>(
       context: context,
       builder: (context) {
-        return Dialog(
-          backgroundColor: AppTheme.surface,
-          shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Select Ambient',
-                  style: AppTheme.headlineSmall.copyWith(
-                      color: AppTheme.accent, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-                ...['Rain', 'Waves', 'Forest', 'Campfire', 'Drone', 'None']
-                    .map((option) {
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () async {
-                          // Play a short preview and set selection
-                          final picked = option == 'None' ? null : option;
-                          setState(() => selectedAmbient = picked);
-                          await _saveAmbient(picked);
-                          _playAmbientPreview(option);
-                          Navigator.pop(context);
-                        },
-                        borderRadius: AppTheme.borderRadiusMd,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 12, horizontal: 8),
-                          decoration: BoxDecoration(
-                            color: AppTheme.surfaceLight,
-                            borderRadius: AppTheme.borderRadiusMd,
-                            border: Border.all(
-                                color: AppTheme.surfaceBorder, width: 1),
-                          ),
-                          child: Center(
-                              child: Text(option,
-                                  style: AppTheme.bodyMedium
-                                      .copyWith(color: AppTheme.textPrimary))),
-                        ),
-                      ),
+        return Center(
+          child: SingleChildScrollView(
+            child: Dialog(
+              backgroundColor: AppTheme.surface,
+              shape:
+                  RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Select Ambient',
+                      style: AppTheme.headlineSmall.copyWith(
+                          color: AppTheme.accent, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
                     ),
-                  );
-                }).toList(),
-                const SizedBox(height: 12),
-              ],
+                    const SizedBox(height: 12),
+                    ...['Rain', 'Waves', 'Forest', 'Campfire', 'Drone', 'None']
+                        .map((option) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () async {
+                              // Play a short preview and set selection
+                              final picked = option == 'None' ? null : option;
+                              setState(() => selectedAmbient = picked);
+                              await _saveAmbient(picked);
+                              _playAmbientPreview(option);
+                              Navigator.pop(context);
+                            },
+                            borderRadius: AppTheme.borderRadiusMd,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 12, horizontal: 8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.surfaceLight,
+                                borderRadius: AppTheme.borderRadiusMd,
+                                border: Border.all(
+                                    color: AppTheme.surfaceBorder, width: 1),
+                              ),
+                              child: Center(
+                                  child: Text(option,
+                                      style: AppTheme.bodyMedium.copyWith(
+                                          color: AppTheme.textPrimary))),
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
             ),
           ),
         );
