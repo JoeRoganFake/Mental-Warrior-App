@@ -28,7 +28,11 @@ class ExerciseBrowsePage extends StatefulWidget {
   ExerciseBrowsePageState createState() => ExerciseBrowsePageState();
 }
 
-class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
+class ExerciseBrowsePageState extends State<ExerciseBrowsePage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _selectedBodyPart = 'All';
@@ -46,9 +50,9 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
   bool _isLoadingExercises = false;
 
   // Pagination for better performance
-  static const int _itemsPerPage = 50;
+  static const int _itemsPerPage = 20;
   int _displayCount =
-      50; // Helper function to clean exercise names from markers
+      20; // Helper function to clean exercise names from markers
   String _cleanExerciseName(String name) {
     return name
         .replaceAll(RegExp(r'##API_ID:[^#]+##'), '')
@@ -92,10 +96,13 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
   
   void _onScroll() {
     if (widget.scrollController == null) return;
+    if (!_hasMoreItems) return;
 
     final controller = widget.scrollController!;
-    if (controller.position.pixels >=
-        controller.position.maxScrollExtent - 500) {
+    // Only trigger if there's actually scrollable content and we're near the bottom
+    if (controller.position.maxScrollExtent > 0 &&
+        controller.position.pixels >=
+            controller.position.maxScrollExtent - 200) {
       _loadMoreItems();
     }
   }
@@ -286,6 +293,7 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
   bool get _hasMoreItems => _filteredExercises.length > _displayCount;
 
   void _loadMoreItems() {
+    if (!_hasMoreItems) return;
     setState(() {
       _displayCount += _itemsPerPage;
     });
@@ -537,8 +545,10 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     final filteredExercises = _filteredExercises;
-    final displayedExercises = _displayedExercises;
+    final displayedExercises = filteredExercises.take(_displayCount).toList();
+    final hasMore = filteredExercises.length > _displayCount;
 
     final bodyContent = CustomScrollView(
       controller: widget.scrollController,
@@ -771,23 +781,45 @@ class ExerciseBrowsePageState extends State<ExerciseBrowsePage> {
             ),
           ),
 
-        // Loading indicator for pagination
-        if (_hasMoreItems && displayedExercises.isNotEmpty)
+        // Load more button for pagination
+        if (hasMore && displayedExercises.isNotEmpty)
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppTheme.accent),
+                child: TextButton(
+                  onPressed: _loadMoreItems,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: BorderSide(
+                        color: AppTheme.accent.withOpacity(0.3),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.expand_more, color: AppTheme.accent, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Load More (${filteredExercises.length - _displayCount} remaining)',
+                        style: AppTheme.bodyMedium.copyWith(
+                          color: AppTheme.accent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
           ),
+
+        // Bottom spacing for FAB
+        if (!hasMore && displayedExercises.isNotEmpty)
+          const SliverToBoxAdapter(child: SizedBox(height: 80)),
       ],
     );
 

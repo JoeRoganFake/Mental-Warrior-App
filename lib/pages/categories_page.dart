@@ -183,7 +183,9 @@ class _CategoriesPageState extends State<CategoriesPage>
 
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
       SnackBar(
         content: Text(message,
             style: AppTheme.bodyMedium.copyWith(color: Colors.white)),
@@ -910,7 +912,9 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
       // Revert optimistic update on error
       await _loadTasks();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Error completing task: ${e.toString()}'),
             backgroundColor: Colors.red,
@@ -1580,7 +1584,9 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
           
           // Show success message
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+            final messenger = ScaffoldMessenger.of(context);
+            messenger.hideCurrentSnackBar();
+            messenger.showSnackBar(
               SnackBar(
                 content: Text('Task "${task.label}" deleted'),
                 duration: const Duration(seconds: 2),
@@ -1592,7 +1598,9 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
           // Revert on error
           await _loadCompletedTasks();
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+            final messenger = ScaffoldMessenger.of(context);
+            messenger.hideCurrentSnackBar();
+            messenger.showSnackBar(
               SnackBar(
                 content: Text('Error deleting task: ${e.toString()}'),
                 backgroundColor: Colors.red,
@@ -1658,7 +1666,9 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
       await _loadDataAsync();
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Task "${task.label}" restored'),
             duration: const Duration(seconds: 2),
@@ -1671,7 +1681,9 @@ class _OptimizedCategoryTasksViewState extends State<OptimizedCategoryTasksView>
       await _loadCompletedTasks();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
           SnackBar(
             content: Text('Error restoring task: ${e.toString()}'),
             backgroundColor: Colors.red,

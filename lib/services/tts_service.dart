@@ -18,7 +18,8 @@ class TTSService {
     );
 
     final cacheDir = await AudioCacheService.getAudioCacheDir();
-    final file = File('${cacheDir.path}/$hash.opus');
+final file = File('${cacheDir.path}/$hash.mp3');
+
 
     if (await file.exists()) {
       return file;
@@ -44,7 +45,7 @@ Future<List<int>> _generateAudio(String text) async {
     },
     body: jsonEncode({
       'text': trimmedText,
-      'model_id': 'eleven_monolingual_v1',
+        'model_id': 'eleven_turbo_v2',
       'voice_settings': {'stability': 0.8, 'similarity_boost': 0.4}
     }),
   );

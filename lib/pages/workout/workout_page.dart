@@ -10,7 +10,6 @@ import 'package:mental_warior/pages/workout/workout_details_page.dart';
 import 'package:mental_warior/pages/workout/exercise_browse_page.dart';
 import 'package:mental_warior/pages/workout/template_editor_page.dart';
 import 'package:mental_warior/pages/workout/body_measurements_page.dart';
-import 'package:mental_warior/pages/workout/workout_settings_page.dart';
 import 'package:mental_warior/pages/workout/exercise_detail_page.dart';
 import 'package:mental_warior/pages/workout/custom_exercise_detail_page.dart';
 import 'package:mental_warior/services/database_services.dart';
@@ -66,6 +65,10 @@ class WorkoutPageState extends State<WorkoutPage>
     // Aggressive throttling to prevent UI lag
     if (_scrollThrottleTimer?.isActive ?? false) return;
 
+    // Skip parent setState for exercises & measurements tabs
+    // Their scroll doesn't affect the parent header gradient
+    if (_activeTabIndex == 2 || _activeTabIndex == 3) return;
+
     setState(() {
       // Update scroll offset based on active tab
       switch (_activeTabIndex) {
@@ -74,12 +77,6 @@ class WorkoutPageState extends State<WorkoutPage>
           break;
         case 1:
           _scrollOffset = _historyScrollController.offset;
-          break;
-        case 2:
-          _scrollOffset = _exerciseScrollController.offset;
-          break;
-        case 3:
-          _scrollOffset = _measurementScrollController.offset;
           break;
       }
     });
@@ -976,19 +973,6 @@ class WorkoutPageState extends State<WorkoutPage>
               Text(
                 'Workouts',
                 style: AppTheme.displayMedium,
-              ),
-              IconButton(
-                icon: Icon(Icons.settings_outlined,
-                    size: 24, color: AppTheme.accent),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const WorkoutSettingsPage(),
-                    ),
-                  );
-                },
-                tooltip: 'Settings',
               ),
             ],
           ),

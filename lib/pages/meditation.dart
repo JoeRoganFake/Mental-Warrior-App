@@ -4,7 +4,9 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import 'package:mental_warior/pages/meditation_coundown.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:mental_warior/utils/app_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MeditationPage extends StatefulWidget {
   const MeditationPage({super.key});
@@ -16,6 +18,9 @@ class MeditationPage extends StatefulWidget {
 class MeditationPageState extends State<MeditationPage>
     with SingleTickerProviderStateMixin {
   String? selectedMode;
+  String? selectedAmbient;
+  final AudioPlayer _ambientPreviewPlayer = AudioPlayer();
+  Timer? _previewStopTimer;
   final List<int> durations = [5, 10, 15, 20, 25, 30, 45, 60];
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -32,6 +37,7 @@ class MeditationPageState extends State<MeditationPage>
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
     _animationController.forward();
+    _loadSavedAmbient();
   }
 
   @override
@@ -44,6 +50,11 @@ class MeditationPageState extends State<MeditationPage>
   @override
   void dispose() {
     _animationController.dispose();
+    _previewStopTimer?.cancel();
+    try {
+      _ambientPreviewPlayer.stop();
+      _ambientPreviewPlayer.dispose();
+    } catch (_) {}
     super.dispose();
   }
 
@@ -116,6 +127,48 @@ class MeditationPageState extends State<MeditationPage>
                               AppTheme.success),
                         ],
                       )
+                      ,
+                      const SizedBox(height: 16),
+                      Center(
+                        child: GestureDetector(
+                          onTap: _showAmbientSelection,
+                          child: Container(
+                            width: 310,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              borderRadius: AppTheme.borderRadiusMd,
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  AppTheme.accentDark.withOpacity(0.02),
+                                  AppTheme.accentDark.withOpacity(0.005),
+                                ],
+                              ),
+                              border: Border.all(
+                                color: AppTheme.accent.withOpacity(0.08),
+                                width: 1.5,
+                              ),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.music_note, color: AppTheme.accent),
+                                const SizedBox(width: 12),
+                                Text(
+                                  selectedAmbient == null
+                                      ? 'Choose Ambient'
+                                      : 'Ambient: $selectedAmbient',
+                                  style: AppTheme.bodyMedium
+                                      .copyWith(color: AppTheme.accent),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -440,12 +493,131 @@ class MeditationPageState extends State<MeditationPage>
     );
   }
 
+  void _showAmbientSelection() {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: AppTheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: AppTheme.borderRadiusLg),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Select Ambient',
+                  style: AppTheme.headlineSmall.copyWith(
+                      color: AppTheme.accent, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                ...['Rain', 'Waves', 'Forest', 'Campfire', 'Drone', 'None']
+                    .map((option) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () async {
+                          // Play a short preview and set selection
+                          final picked = option == 'None' ? null : option;
+                          setState(() => selectedAmbient = picked);
+                          await _saveAmbient(picked);
+                          _playAmbientPreview(option);
+                          Navigator.pop(context);
+                        },
+                        borderRadius: AppTheme.borderRadiusMd,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 12, horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surfaceLight,
+                            borderRadius: AppTheme.borderRadiusMd,
+                            border: Border.all(
+                                color: AppTheme.surfaceBorder, width: 1),
+                          ),
+                          child: Center(
+                              child: Text(option,
+                                  style: AppTheme.bodyMedium
+                                      .copyWith(color: AppTheme.textPrimary))),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+                const SizedBox(height: 12),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _loadSavedAmbient() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString('selected_ambient');
+    if (saved != null && mounted) {
+      setState(() => selectedAmbient = saved);
+    }
+  }
+
+  Future<void> _saveAmbient(String? ambient) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (ambient == null) {
+      await prefs.remove('selected_ambient');
+    } else {
+      await prefs.setString('selected_ambient', ambient);
+    }
+  }
+
+  void _playAmbientPreview(String option) async {
+    // Stop any existing preview
+    _previewStopTimer?.cancel();
+    try {
+      await _ambientPreviewPlayer.stop();
+    } catch (_) {}
+
+    if (option == 'None') return;
+
+    // Map option -> asset path (ensure these exist in your assets)
+    final map = {
+      'Rain': 'audio/ambient/rain_ambient.mp3',
+      'Waves': 'audio/ambient/waves_ambient.mp3',
+      'Forest': 'audio/ambient/forest_ambient.mp3',
+      'Campfire': 'audio/ambient/campfire_ambient.mp3',
+      'Drone': 'audio/ambient/drone_ambient.mp3',
+    };
+
+    final path = map[option];
+    if (path == null) return;
+
+    try {
+      await _ambientPreviewPlayer.play(AssetSource(path), volume: 1.0);
+    } catch (e) {
+      print('⚠️ Ambient preview play error: $e');
+      return;
+    }
+
+    // Stop preview after ~5 seconds
+    _previewStopTimer = Timer(Duration(seconds: 5), () async {
+      try {
+        await _ambientPreviewPlayer.stop();
+      } catch (_) {}
+    });
+  }
+
   void _startMeditation(int minutes) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            MeditationCountdownScreen(duration: minutes, mode: selectedMode!),
+        builder: (context) => MeditationCountdownScreen(
+          duration: minutes,
+          mode: selectedMode!,
+          ambient: selectedAmbient,
+        ),
       ),
     );
   }

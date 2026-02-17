@@ -8,6 +8,7 @@ import 'package:mental_warior/pages/home.dart';
 import 'package:mental_warior/services/database_services.dart';
 import 'package:mental_warior/models/habits.dart';
 import 'package:mental_warior/utils/app_theme.dart';
+import 'package:mental_warior/services/meditation_engine.dart';
 import 'package:mental_warior/widgets/level_up_animation.dart';
 import 'package:mental_warior/widgets/xp_gain_bubble.dart';
 
@@ -15,11 +16,13 @@ class MeditationCountdownScreen extends StatefulWidget {
   static MeditationCountdownScreenState? currentState;
   final int duration;
   final String mode;
+  final String? ambient;
 
   const MeditationCountdownScreen({
     super.key,
     required this.duration,
     required this.mode,
+    this.ambient,
   });
 
   @override
@@ -32,12 +35,14 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
   late int remainingSeconds;
   Timer? uiTimer;
   final AudioPlayer _audioPlayer = AudioPlayer();
+  final AudioPlayer _ambientPlayer = AudioPlayer();
   final habits = HabitService();
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
   bool isPaused = false;
   bool isTerminateDialogOpen = false;
   bool _alarmPlayed = false;
+  MeditationEngine? _meditationEngine;
   late AnimationController _progressController;
   late Animation<double> _progressAnimation;
 
@@ -68,6 +73,19 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
       _startUITimer();
       _initializeNotifications();
       _progressController.forward(); // Start the smooth animation
+
+      // Start guided meditation engine if in Guided mode
+      if (widget.mode.toLowerCase() == 'guided') {
+        _meditationEngine = MeditationEngine();
+        _meditationEngine!
+            .startMeditation(Duration(minutes: widget.duration))
+            .catchError((e) {
+          print('⚠️ MeditationEngine error: $e');
+        });
+      }
+
+      // Start ambient audio if selected
+      _startAmbientAudio();
     });
   }
 
@@ -155,7 +173,11 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
     _progressController.dispose();
     stopForegroundTask();
     WidgetsBinding.instance.removeObserver(this);
+    _meditationEngine?.stopMeditation();
+    _meditationEngine?.dispose();
+    _stopAmbientAudio();
     _audioPlayer.dispose();
+    _ambientPlayer.dispose();
     super.dispose();
   }
 
@@ -195,6 +217,10 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
   void pauseTimer() async {
     await FlutterForegroundTask.saveData(key: 'isPaused', value: true);
     _progressController.stop(); // Pause the animation
+    _meditationEngine?.pauseMeditation();
+    try {
+      await _ambientPlayer.pause();
+    } catch (_) {}
     setState(() {
       isPaused = true;
     });
@@ -203,6 +229,10 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
   void resumeTimer() async {
     await FlutterForegroundTask.saveData(key: 'isPaused', value: false);
     _progressController.forward(); // Resume the animation
+    _meditationEngine?.resumeMeditation();
+    try {
+      await _ambientPlayer.resume();
+    } catch (_) {}
     setState(() {
       isPaused = false;
     });
@@ -210,6 +240,8 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
 
   void terminateMeditation() {
     if (!mounted) return;
+    _meditationEngine?.stopMeditation();
+    _stopAmbientAudio();
     pauseTimer();
     Navigator.pushAndRemoveUntil(
       context,
@@ -240,7 +272,51 @@ class MeditationCountdownScreenState extends State<MeditationCountdownScreen>
     });
   }
 
+  Future<void> _startAmbientAudio() async {
+    if (widget.ambient == null) return;
+
+    final ambientMap = {
+      'Rain': 'audio/ambient/rain_ambient.mp3',
+      'Waves': 'audio/ambient/waves_ambient.mp3',
+      'Forest': 'audio/ambient/forest_ambient.mp3',
+      'Campfire': 'audio/ambient/campfire_ambient.mp3',
+      'Drone': 'audio/ambient/drone_ambient.mp3',
+    };
+
+    final path = ambientMap[widget.ambient];
+    if (path == null) return;
+
+    try {
+      // Set audio context to allow it to play alongside other audio (TTS)
+      await _ambientPlayer.setAudioContext(
+        AudioContext(
+          android: AudioContextAndroid(
+            isSpeakerphoneOn: false,
+            stayAwake: false,
+            contentType: AndroidContentType.music,
+            usageType: AndroidUsageType.media,
+            audioFocus: AndroidAudioFocus.none, // Don't request focus - allow TTS to play over it
+          ),
+        ),
+      );
+      await _ambientPlayer.setReleaseMode(ReleaseMode.loop);
+      await _ambientPlayer.play(AssetSource(path), volume: 0.3);
+      print('🎵 Started ambient: ${widget.ambient}');
+    } catch (e) {
+      print('⚠️ Error starting ambient audio: $e');
+    }
+  }
+
+  void _stopAmbientAudio() {
+    try {
+      _ambientPlayer.stop();
+    } catch (_) {}
+  }
+
   void completeMeditation() async {
+    // Stop ambient audio
+    _stopAmbientAudio();
+
     // Get all habits to check available labels
     final allHabits = await habits.getHabits();
     print(

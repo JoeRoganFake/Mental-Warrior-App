@@ -4325,13 +4325,13 @@ class XPService {
   final String _lastUpdatedColumnName = "lastUpdated";
 
   // XP reward amounts for different activities
-  static const int XP_TASK_COMPLETE = 20;
-  static const int XP_HABIT_COMPLETE = 30;
+  static const int XP_TASK_COMPLETE = 30; //30
+  static const int XP_HABIT_COMPLETE = 25;
   static const int XP_MEDITATION_MINUTE = 5;
   static const int XP_WORKOUT_COMPLETE = 50;
-  static const int XP_GOAL_COMPLETE = 100;
+  static const int XP_GOAL_COMPLETE = 250; //250
   static const int XP_BOOK_COMPLETE = 150;
-  static const int XP_PR_BONUS = 10; // Bonus XP for each personal record
+  static const int XP_PR_BONUS = 25; // Bonus XP for each personal record
 
   void createXPTable(Database db) async {
     await db.execute('''
