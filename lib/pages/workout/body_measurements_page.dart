@@ -17,6 +17,21 @@ class BodyMeasurementsPage extends StatefulWidget {
 }
 
 class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
+  // Helper to map icon int to a constant IconData for tree shaking
+  IconData _iconForMuscleType(int iconCode) {
+    // Add mappings for all used icons in MuscleType definitions
+    switch (iconCode) {
+      case 0xe3af: // Icons.straighten.codePoint
+        return Icons.straighten;
+      case 0xe3c9: // Icons.fitness_center.codePoint
+        return Icons.fitness_center;
+      case 0xe91d: // Icons.accessibility.codePoint
+        return Icons.accessibility;
+      // Add more mappings as needed for your app's icons
+      default:
+        return Icons.straighten;
+    }
+  }
   final MeasurementService _measurementService = MeasurementService();
   final SettingsService _settingsService = SettingsService();
   Map<String, BodyMeasurement> _latestMeasurements = {};
@@ -514,8 +529,7 @@ class _BodyMeasurementsPageState extends State<BodyMeasurementsPage> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
-                              IconData(muscleType.icon,
-                                  fontFamily: 'MaterialIcons'),
+                              _iconForMuscleType(muscleType.icon),
                               color: _primaryColor,
                               size: 24,
                             ),
@@ -923,6 +937,19 @@ class MeasurementHistoryPage extends StatefulWidget {
 }
 
 class _MeasurementHistoryPageState extends State<MeasurementHistoryPage> {
+  // Helper to map icon int to a constant IconData for tree shaking
+  IconData _iconForMuscleType(int iconCode) {
+    switch (iconCode) {
+      case 0xe3af: // Icons.straighten.codePoint
+        return Icons.straighten;
+      case 0xe3c9: // Icons.fitness_center.codePoint
+        return Icons.fitness_center;
+      case 0xe91d: // Icons.accessibility.codePoint
+        return Icons.accessibility;
+      default:
+        return Icons.straighten;
+    }
+  }
   final MeasurementService _measurementService = MeasurementService();
   final SettingsService _settingsService = SettingsService();
   List<BodyMeasurement> _measurements = [];
@@ -1415,7 +1442,7 @@ class _MeasurementHistoryPageState extends State<MeasurementHistoryPage> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
-                              IconData(widget.muscleType.icon, fontFamily: 'MaterialIcons'),
+                              _iconForMuscleType(widget.muscleType.icon),
                               color: _primaryColor,
                               size: 24,
                         

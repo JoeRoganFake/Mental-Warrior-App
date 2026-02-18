@@ -1,0 +1,2 @@
+C:/app/aplications/mental_warior/android/app/.cxx/RelWithDebInfo/23q5m4o3/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/app/aplications/mental_warior/android/app/.cxx/RelWithDebInfo/23q5m4o3/armeabi-v7a/CMakeFiles/rebuild_cache.dir

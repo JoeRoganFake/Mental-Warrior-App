@@ -3111,10 +3111,13 @@ class _PlateBarCustomizationPageImplState
       itemBuilder: (context, index) {
         final bar = _bars[index];
         final isNoBar = bar.name.trim().toLowerCase() == 'no bar';
-        final icon = IconData(
-          _barIconCodePointFor(name: bar.name, shape: bar.shape),
-          fontFamily: 'MaterialIcons',
-        );
+        // Use a constant icon for tree shaking
+        final IconData icon = isNoBar
+            ? Icons.not_interested
+            : (bar.name.trim().toLowerCase() == 'dumbbell' ||
+                    bar.shape == 'dumbbell')
+                ? Icons.fitness_center
+                : Icons.fitness_center;
         return Card(
           color: AppTheme.surface,
           elevation: 0,

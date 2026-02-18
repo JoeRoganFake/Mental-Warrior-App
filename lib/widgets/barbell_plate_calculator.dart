@@ -1587,12 +1587,25 @@ Future<void> showBarbellPlateViewer({
           .toList();
     }
 
+    IconData _iconForBarCodePoint(int codePoint) {
+      switch (codePoint) {
+        case 0xe3af: // Icons.straighten.codePoint
+          return Icons.straighten;
+        case 0xe3c9: // Icons.fitness_center.codePoint
+          return Icons.fitness_center;
+        case 0xe92d: // Icons.not_interested.codePoint
+          return Icons.not_interested;
+        default:
+          return Icons.fitness_center;
+      }
+    }
+
     if (bars.isNotEmpty) {
       customBars = bars
           .map((b) => BarType(
                 name: b.name,
                 weight: b.weight,
-                icon: IconData(b.iconCodePoint, fontFamily: 'MaterialIcons'),
+                icon: _iconForBarCodePoint(b.iconCodePoint),
                 shape: b.shape,
               ))
           .toList();
