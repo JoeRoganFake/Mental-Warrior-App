@@ -5,6 +5,15 @@ allprojects {
     }
 }
 
+// Force byte-buddy to a version compatible with Java 21 or lower
+subprojects {
+    configurations.all {
+        resolutionStrategy {
+            force 'net.bytebuddy:byte-buddy:1.12.22'
+        }
+    }
+}
+
 rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"

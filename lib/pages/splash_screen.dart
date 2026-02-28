@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:mental_warior/services/database_services.dart';
-import 'package:mental_warior/utils/app_theme.dart';
+import 'package:mental_warior/services/user_preferences.dart';
+import 'username_input_screen.dart';
+
 import 'home.dart';
 import '../services/background_task_manager.dart';
 
@@ -13,44 +16,72 @@ class SplashScreen extends StatefulWidget {
 }
 
 class SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
+    with TickerProviderStateMixin {
+  late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
+  late AnimationController _logoFadeController;
+  late Animation<double> _logoFadeAnimation;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
 
-    // Setup animation for the logo
-    _animationController = AnimationController(
+    _fadeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 900),
     );
-
     _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOutCubic,
+      parent: _fadeController,
+      curve: Curves.easeIn,
+    );
+    _fadeController.forward();
+
+    _logoFadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _logoFadeAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _logoFadeController, curve: Curves.easeInOut),
     );
 
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Curves.easeOutCubic,
-      ),
-    );
+    _handleStartup();
+  }
 
-    _animationController.forward();
+  Future<void> _handleStartup() async {
+    final startTime = DateTime.now();
+    await _preloadData();
+    final elapsed = DateTime.now().difference(startTime);
+    final minDuration = const Duration(seconds: 2);
+    final remaining = minDuration - elapsed;
+    await Future.delayed(remaining > Duration.zero ? remaining : Duration.zero);
 
-    // Preload all necessary data
-    _preloadData().then((_) {
-      setState(() {
-        _isLoading = false;
-      });
-
-      // Navigate to home page after data is loaded
-      Timer(const Duration(milliseconds: 600), () {
+    final username = await UserPreferences.getUsername();
+    if (username == null || username.isEmpty) {
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => UsernameInputScreen(
+              onSubmit: (name) async {
+                await UserPreferences.setUsername(name);
+                Navigator.of(context).pushReplacement(
+                  PageRouteBuilder(
+                    pageBuilder: (context, animation, secondaryAnimation) =>
+                        HomePage(),
+                    transitionsBuilder:
+                        (context, animation, secondaryAnimation, child) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                    transitionDuration: const Duration(milliseconds: 400),
+                  ),
+                );
+              },
+            ),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
             pageBuilder: (context, animation, secondaryAnimation) => HomePage(),
@@ -61,8 +92,8 @@ class SplashScreenState extends State<SplashScreen>
             transitionDuration: const Duration(milliseconds: 400),
           ),
         );
-      });
-    });
+      }
+    }
   }
 
   Future<void> _preloadData() async {
@@ -88,97 +119,104 @@ class SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _fadeController.dispose();
+    _logoFadeController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.background,
-      body: Container(
-        decoration: AppTheme.gradientBackground(),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Logo/Icon with glow effect
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: ScaleTransition(
-                    scale: _scaleAnimation,
-                    child: Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        gradient: AppTheme.accentGradient,
-                        borderRadius: AppTheme.borderRadiusXl,
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppTheme.accent.withOpacity(0.4),
-                            blurRadius: 30,
-                            spreadRadius: 5,
+      backgroundColor: Colors.black,
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Fading logo animation with glare behind it
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: AnimatedBuilder(
+                  animation: _logoFadeAnimation,
+                  builder: (context, child) {
+                    return Opacity(
+                      opacity: _isLoading ? _logoFadeAnimation.value : 1.0,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Glare (glow effect)
+                          Container(
+                            width: 200,
+                            height: 200,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.white.withOpacity(0.18),
+                                  blurRadius: 60,
+                                  spreadRadius: 30,
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Logo
+                          Container(
+                            width: 140,
+                            height: 140,
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(32),
+                            ),
+                            child: Center(
+                              child: Image.asset(
+                                'assets/icons/mv_logo.png',
+                                width: 110,
+                                height: 110,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.psychology_outlined,
-                        size: 50,
-                        color: Colors.white,
-                      ),
-                    ),
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 38),
+
+              // App name with fade-in
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: Text(
+                  "Mental Warrior",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 32,
+                    letterSpacing: 1.2,
                   ),
                 ),
+              ),
 
-                const SizedBox(height: 32),
+              const SizedBox(height: 10),
 
-                // App name
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: Text(
-                    "Mental Warrior",
-                    textAlign: TextAlign.center,
-                    style: AppTheme.displayMedium.copyWith(
-                      letterSpacing: 1,
-                    ),
+              // Tagline with fade-in
+              FadeTransition(
+                opacity: _fadeAnimation,
+                child: Text(
+                  "Build discipline. Grow stronger.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontStyle: FontStyle.italic,
+                    fontSize: 16,
                   ),
                 ),
-
-                const SizedBox(height: 8),
-
-                // Tagline
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: Text(
-                    "Build discipline. Grow stronger.",
-                    textAlign: TextAlign.center,
-                    style: AppTheme.bodyMedium.copyWith(
-                      color: AppTheme.textTertiary,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 48),
-
-                // Loading indicator
-                if (_isLoading)
-                  FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppTheme.accent.withOpacity(0.8),
-                        ),
-                        strokeWidth: 3,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
